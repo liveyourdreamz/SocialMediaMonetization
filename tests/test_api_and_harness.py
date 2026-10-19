@@ -147,3 +147,13 @@ def test_harness_scores_exact_and_non_miss_separately():
     assert "non-miss" in red.summary() and "rule coverage" in red.summary()
     # a clear scorer gets the five clear MFK items and nothing else
     assert mfk.exact == 5 and mfk.blocked == 0
+
+
+def test_cli_demo_post_and_canary_seed():
+    from cap.cli import _demo_post
+
+    post = _demo_post()
+    assert post.status == PostStatus.AWAITING_APPROVAL and post.flags.canary is False
+    canary = _demo_post(canary=True)
+    assert canary.flags.canary and canary.flags.planted_fault is not None
+    assert canary.flags.canary_fault_type == canary.flags.planted_fault.type
