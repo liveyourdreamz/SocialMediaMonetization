@@ -22,13 +22,12 @@ from cap.agents import AgentBlockedError, adapt, critique, draft
 from cap.config import get_settings
 from cap.gates import (
     InMemoryHistory,
-    Source,
     check_disclosure,
     check_ethics,
     check_facts,
     check_originality,
 )
-from cap.models import ModelClient
+from cap.models import ModelClient, SourceDoc
 from cap.schema.post_record import Platform, PostRecord, PostStatus
 
 
@@ -65,7 +64,7 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
             record = draft(
                 record,
                 deps.client,
-                state.get("sources", []),
+                _sources(state),
                 deps.character_blocks.get(record.channel_id.value, ""),
             )
         except AgentBlockedError as e:
@@ -85,7 +84,7 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
                 record = draft(
                     record,
                     deps.client,
-                    state.get("sources", []),
+                    _sources(state),
                     deps.character_blocks.get(record.channel_id.value, ""),
                 )
             except AgentBlockedError as e:
@@ -103,21 +102,13 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
     def n_gates(state: PipelineState) -> PipelineState:
         record = _rec(state)
         record.status = PostStatus.GATED
-        sources = [
-            Source(
-                url=s["url"],
-                body=s["body"],
-                fetched_at=s.get("fetched_at", ""),
-                page_date=s.get("page_date"),
-            )
-            for s in state.get("sources", [])
-        ]
+        sources = _sources(state)
         record.gates.originality = check_originality(
             record, deps.history, deps.anchor_elements.get(record.channel_id.value, [])
         )
         record.gates.ethics = check_ethics(record, deps.client)
         record.gates.disclosure = check_disclosure(record, deps.client)
-        facts, _checks, injection = check_facts(record, deps.client, sources)
+        facts, injection = check_facts(record, deps.client, sources)
         record.gates.facts = facts
         if injection:
             record.flags.injection_suspected = True
@@ -161,6 +152,18 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
     g.add_conditional_edges("gates", route_after, {END: END, "next": "render"})
     g.add_edge("render", END)
     return g
+
+
+def _sources(state: PipelineState) -> list[SourceDoc]:
+    return [
+        SourceDoc(
+            url=s["url"],
+            body=s["body"],
+            fetched_at=s.get("fetched_at", ""),
+            page_date=s.get("page_date"),
+        )
+        for s in state.get("sources", [])
+    ]
 
 
 def _park(record: PostRecord, reason: str) -> PipelineState:

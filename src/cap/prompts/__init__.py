@@ -47,9 +47,9 @@ SPECS: dict[tuple[str, str], PromptSpec] = {
     ("P7", "default"): PromptSpec("P7", "default", "P7.xml", HAIKU, "low"),
     ("P8", "default"): PromptSpec("P8", "default", "P8.xml", HAIKU, "low"),
     ("P9", "default"): PromptSpec("P9", "default", "P9.xml", HAIKU, "high"),
-    ("P10", "A"): PromptSpec("P10", "A", "P10_callAB.xml", SONNET, "high", THINK_LINE),
-    ("P10", "B"): PromptSpec("P10", "B", "P10_callAB.xml", SONNET, "high", THINK_LINE),
-    ("P10", "C"): PromptSpec("P10", "C", "P10_callC.xml", HAIKU, "high"),
+    ("P10", "A"): PromptSpec("P10", "A", "P10_1.xml", SONNET, "high", THINK_LINE),
+    ("P10", "B"): PromptSpec("P10", "B", "P10_1.xml", SONNET, "high", THINK_LINE),
+    ("P10", "C"): PromptSpec("P10", "C", "P10_2.xml", HAIKU, "high"),
     ("P11", "default"): PromptSpec("P11", "default", "P11.xml", SONNET, "high"),
     ("P12", "default"): PromptSpec("P12", "default", "P12.xml", HAIKU, "low"),
     ("P13", "default"): PromptSpec("P13", "default", "P13.xml", SONNET, "high"),
@@ -86,21 +86,28 @@ def shared_blocks(nonce: str, which: tuple[str, ...] = SHARED_ALL) -> str:
 
 
 def system_prompt(spec: PromptSpec, nonce: str) -> str:
+    """Shared blocks, then the prompt text. The closing line is added by the client
+    after the static data blocks so it stays last (Pack section 1)."""
     body = _read(spec.file)
     which = SHARED_BY_CALL.get((spec.prompt_id, spec.call), SHARED_ALL)
-    parts = [shared_blocks(nonce, which), body]
-    if spec.closing_line:
-        parts.append(spec.closing_line)
-    return "\n\n".join(parts)
+    return "\n\n".join([shared_blocks(nonce, which), body])
+
+
+MAX_UNTRUSTED_CHARS = 200_000  # a fetcher that exceeds this truncates and says so
 
 
 def untrusted(text: str, nonce: str) -> str:
     """Wrap text that came from outside the pipeline (Prompt Pack section 2).
 
-    The body is JSON-encoded, with angle brackets escaped as \\u003c and \\u003e so
-    the encoded text can never contain a literal tag; only a tag carrying this run's
-    nonce is a real boundary."""
-    encoded = json.dumps(text).replace("<", "\\u003c").replace(">", "\\u003e")
+    The body is JSON-encoded once (non-ASCII preserved, so Arabic sources cost no
+    extra tokens), with angle brackets escaped as \\u003c and \\u003e so the encoded
+    text can never contain a literal tag; only a tag carrying this run's nonce is a
+    real boundary. Callers do not call this directly: the model client does."""
+    if not isinstance(text, str):
+        raise TypeError("untrusted() takes str only")
+    if len(text) > MAX_UNTRUSTED_CHARS:
+        text = text[:MAX_UNTRUSTED_CHARS] + " [truncated by the pipeline]"
+    encoded = json.dumps(text, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
     return f'<untrusted_text id="{nonce}">{encoded}</untrusted_text>'
 
 

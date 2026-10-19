@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import Field
 
 from cap.models import Envelope
-from cap.schema.post_record import RuleOutcome, Strict, Verdict
+from cap.schema.post_record import FaultType, RuleOutcome, Strict, Verdict
 
 
 class RuleFindingOut(Strict):
@@ -44,6 +44,7 @@ class ClaimOut(Strict):
     text: str
     source_url: str | None = None
     source_quote: str | None = None
+    in_test_log: bool = False
 
 
 class P2Call2Output(Envelope):
@@ -54,7 +55,7 @@ class P2Call2Output(Envelope):
 # ---- P3 Critic --------------------------------------------------------------------
 class IssueOut(Strict):
     rubric_item: str
-    severity: Literal["low", "medium", "high"]
+    severity: Literal["blocker", "major", "minor"]  # P3 instruction 3 depends on these names
     span: str = ""
     instruction: str = ""
 
@@ -109,7 +110,9 @@ class P10CallAOutput(Envelope):
 
 
 class P10VerifyOutput(Envelope):
-    """Calls B and C share this shape."""
+    """Calls B and C share this shape. The Pack names this field `status`, which
+    collides with the envelope's `status`; logged as a Pack 1.1.2 amendment, the
+    field is `claim_status` here and in the prompt text sent to the model."""
 
     claim_status: Literal["supported", "unsupported", "outdated", "missing_source"] = "unsupported"
     supporting_quote: str = ""
@@ -118,7 +121,7 @@ class P10VerifyOutput(Envelope):
 
 # ---- P14 Canary writer ------------------------------------------------------------
 class PlantedFault(Strict):
-    type: str
+    type: FaultType
     span: str
     why_catchable: str = ""
 

@@ -8,134 +8,111 @@ Three calls, all through the model client:
 * Call C (Haiku, effort high, own prompt, no pipeline context): second verifier on the
   same pair. Disagreement with B makes the claim unsupported; agreement adds nothing.
 
+Message order for B and C follows the Pack: the source as a tool result first, then
+the test log and the claim, then the task line (so the model quotes before it judges).
+
 Code checks, not the model: the supporting quote must be an exact substring of the
 source text; an unsupported, outdated or missing-source claim blocks the post; sources
-reach the model only as JSON tool results inside nonce-keyed tags (section 2).
+reach the model only through the client's nonce-keyed wrapper.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 from cap.agents.outputs import P10CallAOutput, P10VerifyOutput
-from cap.models import ModelClient
-from cap.prompts import new_nonce, spec, untrusted
-from cap.schema.post_record import Claim, FactsGate, PostRecord
+from cap.models import ModelClient, SourceDoc
+from cap.prompts import spec
+from cap.schema.post_record import Claim, ClaimCheckResult, ClaimStatus, FactsGate, PostRecord
 
-
-@dataclass
-class Source:
-    url: str
-    body: str
-    fetched_at: str = ""
-    page_date: str | None = None
-    fast_moving_topic: bool = False
-
-
-@dataclass
-class ClaimCheck:
-    claim: Claim
-    status_b: str = "unsupported"
-    status_c: str = "unsupported"
-    quote_b: str = ""
-    quote_c: str = ""
-    final: str = "unsupported"
-    notes: list[str] = field(default_factory=list)
-    injection_suspected: bool = False
-
-
-def _tool_results(sources: list[Source], nonce: str) -> list[dict]:
-    """One JSON object per source, body wrapped in the nonce-keyed tag (section 2)."""
-    return [
-        {
-            "source_url": s.url,
-            "fetched_at": s.fetched_at,
-            "page_date": s.page_date,
-            "body": untrusted(s.body, nonce),
-        }
-        for s in sources
-    ]
+Source = SourceDoc  # the gate's public name for a fetched document
 
 
 def discover_claims(
-    client: ModelClient, record: PostRecord, sources: list[Source]
+    client: ModelClient, record: PostRecord, sources: list[SourceDoc]
 ) -> tuple[list[Claim], list[str], bool]:
-    nonce = new_nonce()
-    user = (
-        f"<script>{record.draft.script}</script>\n"
-        f"<drafter_claims>{[c.model_dump(include={'text', 'source_url'}) for c in record.draft.claims]}</drafter_claims>"
-    )
+    hints = [
+        c.model_dump(include={"text", "source_url", "in_test_log"}) for c in record.draft.claims
+    ]
     res = client.run(
         spec("P10", "A"),
-        user,
+        f"<script>{record.draft.script}</script>",
         P10CallAOutput,
-        tool_results=_tool_results(sources, nonce),
-        nonce=nonce,
+        sources=sources,
+        user_tail=f"<drafter_claims>{hints}</drafter_claims>",
     )
     if res.output is None or res.output.status == "blocked":
-        return list(record.draft.claims), [], True
+        return list(record.draft.claims), [], False
     claims = [Claim(text=c.text, source_url=c.source_url) for c in res.output.claims]
     return claims, res.output.endorsement_wording, res.output.injection_suspected
 
 
+def _normalise(text: str) -> str:
+    return " ".join(text.split())
+
+
 def _verify(
-    client: ModelClient, call: str, claim: Claim, source: Source, nonce: str
-) -> tuple[str, str, bool]:
-    user = f"<claim>{claim.text}</claim>\n<source_url>{source.url}</source_url>"
-    if source.fast_moving_topic:
-        user += "\n<topic_speed>fast_moving</topic_speed>"
+    client: ModelClient, call: str, claim: Claim, source: SourceDoc, test_log: str
+) -> tuple[ClaimStatus, str, bool, bool]:
+    """Returns (status, quote, quote_in_source, injection_suspected)."""
+    tail = f"<test_log>{test_log}</test_log>\n<claim>{claim.text}</claim>\nDoes the source, as written, say this?"
     res = client.run(
         spec("P10", call),
-        user,
+        f"<source_url>{source.url}</source_url>",
         P10VerifyOutput,
-        tool_results=_tool_results([source], nonce),
-        nonce=nonce,
+        sources=[source],
+        user_tail=tail,
     )
     if res.output is None or res.output.status == "blocked":
-        return "unsupported", "", False
+        return "unsupported", "", False, False
     quote = res.output.supporting_quote
-    # exact-substring check in code: a quote that is not in the source is no support
-    if res.output.claim_status == "supported" and (not quote or quote not in source.body):
-        return "unsupported", quote, res.output.injection_suspected
-    return res.output.claim_status, quote, res.output.injection_suspected
+    in_source = bool(quote) and _normalise(quote) in _normalise(source.body)
+    status: ClaimStatus = res.output.claim_status
+    if status == "supported" and not in_source:
+        status = "unsupported"  # a quote that is not in the source is no support
+    return status, quote, in_source, res.output.injection_suspected
 
 
-def check_claim(client: ModelClient, claim: Claim, sources: list[Source]) -> ClaimCheck:
-    cc = ClaimCheck(claim=claim)
+def check_claim(
+    client: ModelClient, claim: Claim, sources: list[SourceDoc], test_log: str = ""
+) -> tuple[ClaimCheckResult, bool]:
+    cc = ClaimCheckResult(claim_text=claim.text, source_url=claim.source_url)
+    injection = False
     candidates = [s for s in sources if claim.source_url and s.url == claim.source_url] or sources
     if not candidates:
         cc.final = "missing_source"
-        cc.notes.append("no sources on the post")
-        return cc
-    nonce = new_nonce()
+        cc.note = "no sources on the post"
+        return cc, injection
     for src in candidates:
-        cc.status_b, cc.quote_b, inj_b = _verify(client, "B", claim, src, nonce)
-        cc.injection_suspected = cc.injection_suspected or inj_b
+        cc.status_b, quote_b, cc.quote_in_source, inj_b = _verify(client, "B", claim, src, test_log)
+        injection = injection or inj_b
         if cc.status_b != "supported":
             continue
-        cc.status_c, cc.quote_c, inj_c = _verify(client, "C", claim, src, nonce)
-        cc.injection_suspected = cc.injection_suspected or inj_c
+        cc.status_c, _quote_c, _in_c, inj_c = _verify(client, "C", claim, src, test_log)
+        injection = injection or inj_c
         if cc.status_c == "supported":
             cc.final = "supported"
-            cc.claim.source_url = src.url
-            cc.claim.source_quote = cc.quote_b
-            return cc
-        cc.notes.append(f"second verifier disagreed on {src.url}: {cc.status_c}")
+            cc.source_url = src.url
+            claim.source_url, claim.source_quote = src.url, quote_b
+            return cc, injection
+        cc.disagreement = True
+        cc.note = f"second verifier disagreed on {src.url}: {cc.status_c}"
     # nothing supported it; report the most specific status seen
     cc.final = cc.status_b if cc.status_b in ("outdated", "missing_source") else "unsupported"
-    return cc
+    return cc, injection
 
 
 def check_facts(
-    record: PostRecord, client: ModelClient, sources: list[Source]
-) -> tuple[FactsGate, list[ClaimCheck], bool]:
+    record: PostRecord, client: ModelClient, sources: list[SourceDoc], test_log: str = ""
+) -> tuple[FactsGate, bool]:
     claims, endorsement_wording, injection = discover_claims(client, record, sources)
-    checks = [check_claim(client, c, sources) for c in claims]
-    for cc in checks:
-        cc.claim.status = cc.final  # type: ignore[assignment]
-        injection = injection or cc.injection_suspected
-    record.draft.claims = [cc.claim for cc in checks]
-    unsupported = [cc.claim.text for cc in checks if cc.final != "supported"]
-    unsupported += [f"endorsement wording: {w}" for w in endorsement_wording]
-    gate = FactsGate(unsupported_claims=unsupported, checked=len(checks), passed=not unsupported)
-    return gate, checks, injection
+    gate = FactsGate(endorsement_wording=endorsement_wording)
+    for claim in claims:
+        cc, inj = check_claim(client, claim, sources, test_log)
+        injection = injection or inj
+        claim.status = cc.final
+        gate.claim_checks.append(cc)
+    record.draft.claims = claims
+    gate.checked = len(claims)
+    gate.unsupported_claims = [cc.claim_text for cc in gate.claim_checks if cc.final != "supported"]
+    gate.unsupported_claims += [f"endorsement wording: {w}" for w in endorsement_wording]
+    gate.passed = not gate.unsupported_claims
+    return gate, injection

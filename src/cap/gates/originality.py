@@ -4,7 +4,7 @@ Compares the post against the channel group's recent history and checks the char
 anchor is present. The similarity backend is pluggable: the Foundation default is a
 deterministic lexical measure so the gate runs without any service; an embedding
 backend replaces it before the week-6 milestone without changing this module's API.
-Thresholds come from settings (code constants, changed only with a signed decision).
+Thresholds come from the rulebook's R-13 params, the one source of truth for them.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from math import sqrt
 from typing import Protocol
 
-from cap.config import get_settings
+from cap.rulebook import load_rulebook
 from cap.schema.post_record import OriginalityGate, PostRecord
 
 _WORD = re.compile(r"[a-z0-9']+")
@@ -84,22 +84,26 @@ def check_originality(
     history: HistoryIndex,
     anchor_elements: list[str],
 ) -> OriginalityGate:
-    s = get_settings()
+    p = load_rulebook().params("R-13")
     text = f"{record.draft.title}\n{record.draft.script}"
     best, nearest = 0.0, None
-    past = history.recent(record.channel_id.value, s.originality_history_days)
+    past = history.recent(record.channel_id.value, int(p["history_days"]))
     for pid, script in past:
         sim = cosine_similarity(text, script)
         if sim > best:
             best, nearest = sim, pid
-    share = skeleton_share(record.draft.script, [p[1] for p in past])
+    share = skeleton_share(record.draft.script, [s for _, s in past])
     lowered = text.lower()
     anchor_present = (
         any(a.lower() in lowered for a in anchor_elements) if anchor_elements else False
     )
+    footage_ok = record.media_manifest.third_party_footage_share <= float(
+        p["third_party_footage_cap"]
+    )
     passed = (
-        best < s.originality_similarity_block
-        and share <= s.originality_skeleton_cap
+        best < float(p["similarity_block"])
+        and share <= float(p["skeleton_cap"])
+        and footage_ok
         and anchor_present
     )
     return OriginalityGate(
@@ -107,5 +111,5 @@ def check_originality(
         nearest_post_id=nearest,
         anchor_present=anchor_present,
         skeleton_share=round(share, 4),
-        passed=passed,
+        **{"pass": passed},
     )

@@ -8,12 +8,14 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-JudgedBy = Literal["code", "judge", "ops"]
+JudgedBy = Literal["code", "judge", "both", "ops"]
 
 
 class Rule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: str
     title: str
     judged_by: JudgedBy
@@ -25,6 +27,8 @@ class Rule(BaseModel):
 
 
 class Rulebook(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     version: str
     severity_order: list[str]
     rules: list[Rule]
@@ -36,13 +40,21 @@ class Rulebook(BaseModel):
         raise KeyError(rule_id)
 
     def judged_by(self, who: JudgedBy) -> list[Rule]:
-        return [r for r in self.rules if r.judged_by == who]
+        """Rules for a given judge. `both` rules are returned for code and for judge."""
+        return [r for r in self.rules if r.judged_by == who or r.judged_by == "both"]
+
+    def params(self, rule_id: str) -> dict[str, float | int | str]:
+        return self.by_id(rule_id).params
 
     def as_prompt_text(self) -> str:
-        """The text the ethics judges receive inside <rulebook>."""
-        lines = [f"Rulebook version {self.version}."]
+        """The block the ethics judges receive, wrapped as the P1 prompt names it. The
+        judge sees only `code` or `judge`: ops rules are shown as code (not theirs),
+        both rules as judge (second net)."""
+        shown = {"code": "code", "ops": "code", "judge": "judge", "both": "judge"}
+        lines = [f'<rulebook version="{self.version}">']
         for r in self.rules:
-            lines.append(f"{r.id} ({r.title}; judged_by: {r.judged_by}): {r.rule}")
+            lines.append(f"{r.id} ({r.title}; judged_by: {shown[r.judged_by]}): {r.rule}")
+        lines.append("</rulebook>")
         return "\n".join(lines)
 
 

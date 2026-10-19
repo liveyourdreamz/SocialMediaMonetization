@@ -1,8 +1,10 @@
 """The shared post record: the data contract every agent reads and writes (PRD 4.1).
 
-Pydantic is the single definition; `export_json_schema()` writes the canonical JSON
-schema that the model prompts validate against (D28). Field names follow the PRD
-exactly so the PRD, the prompts and the code say the same thing.
+Pydantic is the single definition; `export_json_schema()` writes the record's JSON
+schema for the database and the approval app. (The models' own output schemas are the
+Envelope subclasses in cap.agents.outputs, not this file.) Field names follow the PRD;
+the one exception is PRD `pass`, a Python keyword, stored as `passed` with the JSON
+alias `pass` so the record on disk still reads as the PRD does.
 
 Updated for the decisions after PRD v1.0:
 * D33: approval stores a pre-reveal and a post-reveal verdict.
@@ -25,7 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class Strict(BaseModel):
     """Base with additionalProperties=false, as the structured-output rules require."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True, validate_assignment=True)
 
 
 class Channel(StrEnum):
@@ -78,22 +80,41 @@ class Decision(StrEnum):
     ESCALATE = "escalate"
 
 
+class FaultType(StrEnum):
+    """The seven canary fault types (Prompt Pack P14). A catch counts only when the
+    reviewer's reason chip matches the planted type, so the chips use the same values."""
+
+    UNSOURCED_NUMBER = "unsourced_number"
+    MISSING_AD_PREFIX = "missing_ad_prefix"
+    OUT_GROUP_TITLE = "out_group_title"
+    FIRST_PERSON_HUMAN_CLAIM = "first_person_human_claim"
+    SPONSOR_VERDICT = "sponsor_verdict"
+    KIDS_STYLED_VISUAL = "kids_styled_visual"
+    REUSED_COLD_OPEN = "reused_cold_open"
+
+
 # D34 reason chips: the seven fault types, language, other. Fixed list; "other" above
 # 20% of a week's rejects triggers a review of this list, not a free-text field.
 class ReasonCode(StrEnum):
-    FACT = "fact"
-    ETHICS = "ethics"
-    DISCLOSURE = "disclosure"
-    ORIGINALITY = "originality"
-    TITLE_MISMATCH = "title_mismatch"
-    CHARACTER_BREAK = "character_break"
-    SPONSOR = "sponsor"
+    UNSOURCED_NUMBER = "unsourced_number"
+    MISSING_AD_PREFIX = "missing_ad_prefix"
+    OUT_GROUP_TITLE = "out_group_title"
+    FIRST_PERSON_HUMAN_CLAIM = "first_person_human_claim"
+    SPONSOR_VERDICT = "sponsor_verdict"
+    KIDS_STYLED_VISUAL = "kids_styled_visual"
+    REUSED_COLD_OPEN = "reused_cold_open"
     LANGUAGE = "language"
     OTHER = "other"
 
 
+def _pack_version() -> str:
+    from cap.prompts import pack_version
+
+    return pack_version()
+
+
 class Versions(Strict):
-    prompts: str = "1.1.1"
+    prompts: str = Field(default_factory=_pack_version)
     rulebook: str = "1.0"
     anchor_registry: str = "1.0"
 
@@ -108,11 +129,37 @@ class Brief(Strict):
     sponsor_id: str | None = None
 
 
+ClaimStatus = Literal["pending", "supported", "unsupported", "outdated", "missing_source"]
+
+
 class Claim(Strict):
     text: str
     source_url: str | None = None
     source_quote: str | None = None
-    status: Literal["pending", "supported", "unsupported", "outdated", "missing_source"] = "pending"
+    in_test_log: bool = False  # P2 call 2: the claim comes from the pipeline's own test
+    status: ClaimStatus = "pending"
+
+
+class Sponsor(Strict):
+    """The sponsor record P1, P6 and P9 receive. Null on the post when unsponsored."""
+
+    sponsor_id: str
+    name: str
+    permit_status: Literal["none", "applied", "granted"] = "none"
+    nma_category_status: Literal["unknown", "allowed", "restricted"] = "unknown"
+    verdict_allowed: bool = False  # R-10: never a Keep/Recommend/Skip on their product
+
+
+class MediaManifest(Strict):
+    """What the renderer will produce or did produce; the judges read it for R-06."""
+
+    synthetic_elements_present: bool = True  # Patch and Falak are AI characters (D30)
+    real_person_depicted: bool = False
+    real_place_or_event_depicted: bool = False
+    minor_depicted: bool = False
+    crisis_event_depicted: bool = False
+    third_party_footage_share: float = 0.0
+    imagery_roles: list[str] = Field(default_factory=list)  # people in occupational roles (R-14a)
 
 
 class Draft(Strict):
@@ -142,7 +189,7 @@ class OriginalityGate(Strict):
     nearest_post_id: str | None = None
     anchor_present: bool = False
     skeleton_share: float = 0.0
-    passed: bool = False  # PRD calls this `pass`; a Python keyword, so `passed` here
+    passed: bool = Field(default=False, alias="pass")
 
 
 class RuleFinding(Strict):
@@ -152,9 +199,13 @@ class RuleFinding(Strict):
 
 
 class JudgeResult(Strict):
+    """One judge's view of one variant. A and B are the Phase 1 Claude judges; C is the
+    Phase 2 cross-family judge (D32) and the majority-of-three fallback."""
+
     judge: Literal["A", "B", "C"]
-    model: str
-    verdict: Verdict
+    model: str  # the model id the API reported
+    platform: Platform = Platform.YOUTUBE_LONG
+    verdict: Verdict = Verdict.ESCALATE
     rule_findings: list[RuleFinding] = Field(default_factory=list)
     explanation: str = ""
     status: Literal["ok", "blocked", "refused", "timeout"] = "ok"
@@ -174,14 +225,30 @@ class DisclosureGate(Strict):
     paid_promo: bool = False
     made_for_kids: bool = False
     mfk_score: float = 0.0
+    mfk_band: Literal["clear", "doubtful", "likely", "unscored"] = "unscored"
     mfk_factors: list[str] = Field(default_factory=list)
-    passed: bool = False
+    passed: bool = Field(default=False, alias="pass")
+
+
+class ClaimCheckResult(Strict):
+    """P10 per claim: both verifiers' statuses, the quote check and the final status."""
+
+    claim_text: str
+    source_url: str | None = None
+    status_b: ClaimStatus = "pending"
+    status_c: ClaimStatus = "pending"
+    quote_in_source: bool = False
+    disagreement: bool = False
+    final: ClaimStatus = "pending"
+    note: str = ""
 
 
 class FactsGate(Strict):
     unsupported_claims: list[str] = Field(default_factory=list)
     checked: int = 0
-    passed: bool = False
+    claim_checks: list[ClaimCheckResult] = Field(default_factory=list)
+    endorsement_wording: list[str] = Field(default_factory=list)
+    passed: bool = Field(default=False, alias="pass")
 
 
 class Gates(Strict):
@@ -215,6 +282,16 @@ class SpotCheck(Strict):
     is_planted: bool = False  # a canary's planted claim; a wrong tap is logged as a miss
 
 
+class StageOneReview(Strict):
+    """D19: channel C is reviewed by the native Arabic reviewer first; Hemant sees an
+    English summary (P11) plus the reviewer's notes."""
+
+    reviewer: str
+    decision: Decision
+    notes: str = ""
+    time_on_card_s: int = 0
+
+
 class Approval(Strict):
     decision: Decision | None = None
     reason_code: ReasonCode | None = None
@@ -222,11 +299,12 @@ class Approval(Strict):
     time_on_card_s: int = 0
     expected_reading_s: int = 0  # D34: per-card threshold, not a fixed 20 s
     too_fast: bool = False
-    canary: bool = False
     # D33: the verdict recorded before gate outcomes were revealed, and the final one.
     pre_reveal_decision: Decision | None = None
     revised_after_reveal: bool = False
     spot_check: SpotCheck | None = None
+    edits: list[str] = Field(default_factory=list)  # PRD 4.5: reviewer edits as a diff log
+    stage_one: StageOneReview | None = None
     token: str = ""
 
 
@@ -241,14 +319,14 @@ class Metrics(Strict):
     rpm_usd: float = 0.0
     revenue_usd: float = 0.0
     cost_usd: float = 0.0
-    revenue_status: Literal["none", "provisional", "finalised"] = "none"
+    revenue_status: Literal["none", "estimated", "adjusted", "finalised"] = "none"  # P12
 
 
 class Flags(Strict):
     injection_suspected: bool = False
     injection_spans: list[str] = Field(default_factory=list)
     canary: bool = False  # D23: set by code; the publisher refuses, the index skips
-    canary_fault_type: str | None = None
+    canary_fault_type: FaultType | None = None
     gate_blind: bool = True  # D33: gates hidden on the card until a verdict is recorded
 
 
@@ -259,7 +337,9 @@ class PostRecord(Strict):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     versions: Versions = Field(default_factory=Versions)
     brief: Brief = Field(default_factory=Brief)
+    sponsor: Sponsor | None = None
     draft: Draft = Field(default_factory=Draft)
+    media_manifest: MediaManifest = Field(default_factory=MediaManifest)
     human_contribution: HumanContribution = Field(default_factory=HumanContribution)
     variants: list[Variant] = Field(default_factory=list)
     gates: Gates = Field(default_factory=Gates)
@@ -278,7 +358,8 @@ SCHEMA_PATH = Path(__file__).with_name("post_record.schema.json")
 
 
 def export_json_schema(path: Path = SCHEMA_PATH) -> Path:
-    """Write the canonical JSON schema (D28). Run via `cap schema export`."""
-    schema = PostRecord.model_json_schema()
+    """Write the record's JSON schema (by alias, so `pass` appears as in the PRD).
+    Run via `cap schema export`; CI checks the file matches the code."""
+    schema = PostRecord.model_json_schema(by_alias=True)
     path.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
     return path

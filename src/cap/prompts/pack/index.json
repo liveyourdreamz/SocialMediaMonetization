@@ -2,8 +2,8 @@
   "pack_version": "1.1.1",
   "prompts": {
     "P1": {
-      "title": "Ethics judge (gate 8, agent 8)",
-      "agent": null,
+      "title": "Ethics judge",
+      "agent": 8,
       "files": [
         "P1.xml"
       ],
@@ -153,8 +153,8 @@
       "title": "Fact and claim check",
       "agent": 10,
       "files": [
-        "P10_callAB.xml",
-        "P10_callC.xml"
+        "P10_1.xml",
+        "P10_2.xml"
       ],
       "settings": {
         "models": [

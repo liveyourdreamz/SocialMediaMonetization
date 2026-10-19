@@ -16,7 +16,7 @@ from pathlib import Path
 
 OUT = Path(__file__).resolve().parents[1] / "src" / "cap" / "prompts" / "pack"
 
-SECTION_RE = re.compile(r"^## (\d+)\. (P(\d+)) (.+?)(?: \(agent (\d+)[^)]*\))?$", re.M)
+SECTION_RE = re.compile(r"^## (\d+)\. (P(\d+)) (.+?)(?: \((?:[^)]*?, )?agent (\d+)[^)]*\))?$", re.M)
 XML_RE = re.compile(r"```xml\n(.*?)```", re.S)
 
 
@@ -58,7 +58,7 @@ def main(path: str) -> None:
         model_row = next((ln for ln in body.splitlines() if ln.startswith("| Model |")), "")
         files = []
         for j, block in enumerate(blocks):
-            suffix = "" if len(blocks) == 1 else f"_call{'AB' if j == 0 else 'C'}"
+            suffix = "" if len(blocks) == 1 else f"_{j + 1}"  # mapped to calls in SPECS
             fname = f"{pid}{suffix}.xml"
             (OUT / fname).write_text(block.strip() + "\n", encoding="utf-8")
             files.append(fname)

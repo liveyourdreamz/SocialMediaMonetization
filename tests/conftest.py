@@ -47,6 +47,12 @@ def ok(**fields):
     }
 
 
+def source_docs():
+    from cap.models import SourceDoc
+
+    return [SourceDoc(**s) for s in SOURCES]
+
+
 def happy_fixtures() -> dict:
     claims = [
         {

@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from cap.config import get_settings
 from cap.schema.post_record import (
     Decision,
+    FaultType,
     PostRecord,
     PostStatus,
     ReasonCode,
@@ -60,7 +61,7 @@ def pick_spot_check(record: PostRecord, rng: random.Random | None = None) -> Spo
     claims = [c for c in record.draft.claims if c.text]
     if not claims:
         return None
-    if record.flags.canary and record.flags.canary_fault_type == "fact":
+    if record.flags.canary and record.flags.canary_fault_type == FaultType.UNSOURCED_NUMBER:
         planted = [c for c in claims if c.status != "supported"]
         if planted:
             c = rng.choice(planted)
@@ -140,7 +141,6 @@ def record_verdict(
     a.reason_code = reason_code
     a.pre_reveal_decision = decision
     a.decision = decision
-    a.canary = record.flags.canary
     record.flags.gate_blind = False  # D33: reveal now
     record.log(
         f"verdict {decision.value} pre-reveal by {reviewer} in {time_on_card_s}s (too_fast={a.too_fast})"

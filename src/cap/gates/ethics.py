@@ -84,25 +84,20 @@ def hard_rules(record: PostRecord, variant: Variant, rulebook: Rulebook) -> list
     return findings
 
 
-def _judge_user_message(record: PostRecord, variant: Variant, rulebook: Rulebook) -> str:
-    """Only content, manifest, sponsor and rulebook (D26). The variant text is the
-    pipeline's own output, not fetched text, so it is not wrapped as untrusted."""
-    manifest = {
-        "synthetic_elements_present": True,  # Patch and Falak are AI characters (D30)
-        "real_person_depicted": False,
-        "real_place_or_event_depicted": False,
-        "asset_uri": record.asset.uri,
-    }
+def _judge_user_message(record: PostRecord, variant: Variant) -> str:
+    """Only content, manifest and sponsor (D26); the rulebook travels as a static
+    system block. The variant text is the pipeline's own output, not fetched text, so
+    it is not wrapped as untrusted."""
+    sponsor = record.sponsor.model_dump_json() if record.sponsor else "null"
     return (
         f'<variant platform="{variant.platform.value}">\n'
         f"<title>{variant.title}</title>\n"
         f"<script>{variant.script_cut or record.draft.script}</script>\n"
         f"<caption>{variant.caption}</caption>\n"
         f"</variant>\n"
-        f"<media_manifest>{manifest}</media_manifest>\n"
+        f"<media_manifest>{record.media_manifest.model_dump_json()}</media_manifest>\n"
         f"<channel>{record.channel_id.value}</channel>\n"
-        f"<sponsor>{record.brief.sponsor_id or 'null'}</sponsor>\n"
-        f"<rulebook>\n{rulebook.as_prompt_text()}\n</rulebook>"
+        f"<sponsor>{sponsor}</sponsor>"
     )
 
 
@@ -113,27 +108,34 @@ def run_judge(
     client: ModelClient, judge: Judge, record: PostRecord, variant: Variant, rulebook: Rulebook
 ) -> JudgeResult:
     sp = spec("P1", judge)
-    result = client.run(sp, _judge_user_message(record, variant, rulebook), P1Output)
+    result = client.run(
+        sp,
+        _judge_user_message(record, variant),
+        P1Output,
+        static_blocks=[rulebook.as_prompt_text()],
+    )
+    model = result.model or sp.model
     if result.output is None:
         status: Literal["refused", "timeout", "blocked"] = (
-            "refused"
-            if result.stop_reason == "refusal"
-            else ("timeout" if result.stop_reason == "error" else "blocked")
+            "timeout" if result.stop_reason == "error" else "blocked"
         )
         return JudgeResult(
             judge=judge,
-            model=sp.model,
+            model=model,
+            platform=variant.platform,
             verdict=Verdict.ESCALATE,
             status=status,
             explanation=f"no valid output ({result.stop_reason})",
         )
     out = result.output
     if out.status == "blocked":
+        refused = (out.blocked_reason or "").startswith("model_refusal")
         return JudgeResult(
             judge=judge,
-            model=sp.model,
+            model=model,
+            platform=variant.platform,
             verdict=Verdict.ESCALATE,
-            status="blocked",
+            status="refused" if refused else "blocked",
             explanation=out.blocked_reason or "",
         )
     findings = [
@@ -145,7 +147,8 @@ def run_judge(
     verdict = verdict_from_findings(findings)
     return JudgeResult(
         judge=judge,
-        model=sp.model,
+        model=model,
+        platform=variant.platform,
         verdict=verdict,
         rule_findings=findings,
         explanation=out.explanation,

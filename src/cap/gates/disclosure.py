@@ -77,6 +77,7 @@ def check_disclosure(record: PostRecord, client: ModelClient) -> DisclosureGate:
         # fail closed: no score means Hemant decides; the gate does not pass
         gate.made_for_kids = False
         gate.mfk_score = 1.0
+        gate.mfk_band = "unscored"
         gate.mfk_factors = ["p9_unavailable"]
         gate.passed = False
         return gate
@@ -84,6 +85,7 @@ def check_disclosure(record: PostRecord, client: ModelClient) -> DisclosureGate:
     gate.mfk_score = round(mfk_score(factors), 3)
     gate.mfk_factors = [f"{fid}:{out}" for fid, out in factors if out != "absent"]
     band = mfk_band(gate.mfk_score)
+    gate.mfk_band = band  # type: ignore[assignment]
     gate.made_for_kids = band == "likely"
     # Children are excluded as a target audience (D12): likely is a fail, doubtful parks
     # for Hemant, clear passes.

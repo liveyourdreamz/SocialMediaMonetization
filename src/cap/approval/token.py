@@ -18,9 +18,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from cap.config import get_settings
-
-LOCAL_DEFAULT_KEY = "local-dev-only-not-a-secret"
+from cap.config import LOCAL_DEFAULT_KEY, get_settings
 
 
 def sha256_file(path: Path) -> str:

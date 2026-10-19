@@ -7,8 +7,13 @@
 # set to a provisional value here; they change only with a signed decision.
 #
 # judged_by: "code" rules are computed by the gates; "judge" rules are decided by the
-# ethics judges (P1); "ops" rules are operational monitors outside the per-post gate.
-# The judges receive this file verbatim (version-locked) and skip rules marked code.
+# ethics judges (P1); "both" rules run in code first and the judge is a second net;
+# "ops" rules are operational monitors outside the per-post gate. The judges receive
+# the rendered text (version-locked); rules marked code or ops are shown to them as
+# `code` so the P1 prompt's two-way distinction holds.
+#
+# Rule text is counsel's and Hemant's to change. Where this file departs from R3 it
+# says so in a comment with the decision that allows it.
 
 version: "1.0"
 severity_order: [not_triggered, revise, escalate, block]
@@ -30,8 +35,8 @@ rules:
     title: Moral outrage
     judged_by: judge
     rule: >-
-      IF the content is built on moral outrage THEN REVISE. IF the outrage targets a named
-      private individual THEN BLOCK.
+      IF the content uses moral-outrage framing (outrage at a person, group or institution as
+      the hook) THEN REVISE. IF the outrage targets a named private individual THEN BLOCK.
     garp: [G-AM, G-PC]
     lever: red
 
@@ -59,7 +64,7 @@ rules:
 
   - id: R-05
     title: Engagement bait
-    judged_by: judge
+    judged_by: both  # regex over every text field first (Pack section 3); judge as second net
     rule: >-
       IF the text, captions or audio ask for likes, shares, comments, tags or votes as a
       condition or game ("comment YES", "tag 3 friends", "react for...") THEN BLOCK. A neutral
@@ -67,14 +72,22 @@ rules:
     garp: [G-AM, G-RR]
     lever: red
 
-  - id: R-06
-    title: Synthetic media disclosure and limits
-    judged_by: judge
+  - id: R-06a
+    title: Synthetic media disclosure
+    judged_by: code  # gate 9 sets the flag and the on-screen label; not a judgement
     rule: >-
       IF the asset contains realistic AI-generated or altered people, events, places or voices
-      THEN the AI-disclosure flag must be TRUE with an on-screen label at first exposure. IF it
-      depicts a real person saying or doing something they did not, a crisis or emergency event,
-      a minor, or a non-consenting private adult THEN BLOCK.
+      THEN set the platform AI-disclosure flag to TRUE and add an on-screen label at first
+      exposure.
+    garp: [G-ET]
+    lever: red
+
+  - id: R-06b
+    title: Synthetic media limits
+    judged_by: judge
+    rule: >-
+      IF the asset depicts a real person saying or doing something they did not, a crisis or
+      emergency event, a minor, or a non-consenting private adult THEN BLOCK.
     garp: [G-ET, G-PC]
     lever: red
 
@@ -111,17 +124,19 @@ rules:
   - id: R-10
     title: Sponsor and affiliate dark patterns
     judged_by: judge
+    # The sponsor-verdict rule (no Keep/Recommend/Skip on the sponsor's own product) is in
+    # the P1 prompt's interpretations and in the Sponsor record's verdict_allowed, not here,
+    # until counsel adds it to the rule text.
     rule: >-
       IF an affiliate or sponsor call to action contains urgency, scarcity, activity or
       social-proof claims not verified through the merchant feed or API, or confirmshaming,
-      THEN BLOCK. IF a sponsored episode states or implies a Keep, Recommend or Skip verdict on
-      the sponsor's own product THEN BLOCK.
+      THEN BLOCK.
     garp: [G-AM, G-SW]
     lever: red
 
   - id: R-11
     title: Paid-partnership disclosure
-    judged_by: judge
+    judged_by: both  # the platform flag is code; the judge checks the disclosure in the content
     rule: >-
       IF the post contains an affiliate link or sponsored element THEN a disclosure must appear
       at first exposure and the platform's paid-partnership flag must be set; otherwise BLOCK.
@@ -143,19 +158,34 @@ rules:
     calibrate: true
     rule: >-
       IF the semantic or visual similarity to any of the channel's recent posts is at or above
-      the threshold OR third-party footage makes up more than the cap share of the runtime
-      without commentary THEN BLOCK.
-    params: { similarity_block: 0.85, skeleton_cap: 0.30, history_days: 90 }
+      the threshold, OR the structural skeleton reuse exceeds its cap (PRD 4.12), OR
+      third-party footage makes up more than its cap share of the runtime without commentary,
+      THEN BLOCK.
+    params:
+      similarity_block: 0.85
+      skeleton_cap: 0.30
+      third_party_footage_cap: 0.30 # calibrate
+      history_days: 90
     garp: [G-RR, G-MG]
     lever: red
 
-  - id: R-14
-    title: Stereotyped imagery
-    judged_by: ops
+  - id: R-14a
+    title: Stereotyped imagery in this post
+    judged_by: judge
     rule: >-
-      IF generated imagery depicts people in occupational or social roles THEN run the
-      stereotype classifier (flag: REVISE). IF the rolling 30-day representation share deviates
-      from the channel's baseline by more than the threshold THEN ESCALATE to the owner.
+      IF the media manifest lists generated imagery of people in occupational or social roles
+      and the depiction follows a stereotype THEN REVISE.
+    garp: [G-BF]
+    lever: amber
+
+  - id: R-14b
+    title: Representation drift
+    judged_by: ops
+    calibrate: true
+    rule: >-
+      IF the rolling 30-day representation share of generated people deviates from the
+      channel's baseline by more than the threshold THEN ESCALATE to the owner.
+    params: { max_share_deviation_points: 15 }
     garp: [G-BF]
     lever: amber
 
@@ -207,15 +237,18 @@ rules:
     judged_by: ops
     rule: >-
       IF platform strikes, forced labels or viewer complaints exceed thresholds THEN pause the
-      channel. Seeded canaries run on the P14 schedule; a missed canary is a zero-miss event.
+      channel. Seeded canaries run on the P14 schedule; every missed canary is an incident:
+      the session pauses, the miss is logged and the schedule resets (P14, D34).
     garp: [G-MG]
     lever: control
 
   - id: R-20
     title: No override of an ethics failure
     judged_by: code
+    # R3 says "overrides require two people"; with a sole approver (D5) there is no second
+    # person, so the MVP has no override path at all. Revisit if a second approver is added.
     rule: >-
       IF any ethics criterion fails THEN no revenue score, approver note or optimiser output
-      can publish the post. Overrides require two people and are logged.
+      can publish the post. There is no override.
     garp: []
     lever: control

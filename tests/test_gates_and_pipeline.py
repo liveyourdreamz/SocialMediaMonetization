@@ -1,4 +1,4 @@
-from cap.gates import InMemoryHistory, Source, check_ethics, check_facts, check_originality
+from cap.gates import InMemoryHistory, check_ethics, check_facts, check_originality
 from cap.gates.ethics import aggregate, verdict_from_findings
 from cap.models import MockClient
 from cap.pipeline import PipelineDeps, run_post
@@ -12,7 +12,7 @@ from cap.schema.post_record import (
     RuleOutcome,
     Verdict,
 )
-from tests.conftest import SOURCES, ok
+from tests.conftest import SOURCES, ok, source_docs
 
 
 def _deps(client):
@@ -34,11 +34,12 @@ def test_happy_path_reaches_queue(client, record, tmp_path):
     # the judges were called once per variant, isolated (D26): four P1 calls
     p1 = [c for c in client.calls if c.spec.prompt_id == "P1"]
     assert len(p1) == 4 and all("rule_findings" not in c.user for c in p1)
-    # sources only ever reach a model as tool results inside nonce tags
+    # sources only ever reach a model as tool results inside this call's nonce tags
     for c in client.calls:
-        assert SOURCES[0]["body"] not in c.user
-        for tr in c.tool_results:
-            assert tr["body"].startswith('<untrusted_text id="')
+        assert SOURCES[0]["body"] not in c.user and SOURCES[0]["body"] not in c.user_tail
+        for block in c.tool_result_blocks():
+            assert f'<untrusted_text id="{c.nonce}">' in block["text"]
+        assert c.nonce in c.system[0]["text"]  # the same nonce the rule names
 
 
 def test_judge_disagreement_escalates_and_parks(fixtures, record, tmp_path):
@@ -91,7 +92,9 @@ def test_refusal_is_not_retried_and_escalates(fixtures, record):
         def _complete(self, call):
             if call.spec.prompt_id == "P1":
                 calls["n"] += 1
-                return "", "refusal", {}
+                from cap.models import Completion
+
+                return Completion(raw="", stop_reason="refusal", stop_category="policy")
             return super()._complete(call)
 
     record.draft.caption = "Presented by an AI character."  # keep R-07 quiet so judges run
@@ -99,6 +102,7 @@ def test_refusal_is_not_retried_and_escalates(fixtures, record):
     assert gate.verdict == Verdict.ESCALATE
     assert calls["n"] == 2  # one per judge, no retry on refusal
     assert all(j.status == "refused" for j in gate.judges)
+    assert all(j.explanation == "model_refusal:policy" for j in gate.judges)
 
 
 def test_malformed_output_retries_once_then_blocks(fixtures, record):
@@ -108,7 +112,9 @@ def test_malformed_output_retries_once_then_blocks(fixtures, record):
         def _complete(self, call):
             if call.spec.prompt_id == "P9":
                 seen["n"] += 1
-                return "not json", "end_turn", {}
+                from cap.models import Completion
+
+                return Completion(raw="not json", stop_reason="end_turn")
             return super()._complete(call)
 
     from cap.gates import check_disclosure
@@ -130,10 +136,9 @@ def test_fact_quote_must_be_exact_substring(fixtures, record):
         added_claims=[],
         endorsement_wording=[],
     )
-    gate, checks, _ = check_facts(
-        record, client, [Source(url=s["url"], body=s["body"]) for s in SOURCES]
-    )
-    assert not gate.passed and checks[0].final == "unsupported"
+    gate, _ = check_facts(record, client, source_docs())
+    assert not gate.passed and gate.claim_checks[0].final == "unsupported"
+    assert gate.claim_checks[0].quote_in_source is False
 
 
 def test_second_verifier_disagreement_blocks(fixtures, record):
@@ -147,10 +152,9 @@ def test_second_verifier_disagreement_blocks(fixtures, record):
         added_claims=[],
         endorsement_wording=[],
     )
-    gate, checks, _ = check_facts(
-        record, client, [Source(url=s["url"], body=s["body"]) for s in SOURCES]
-    )
-    assert not gate.passed and "second verifier disagreed" in checks[0].notes[0]
+    gate, _ = check_facts(record, client, source_docs())
+    assert not gate.passed and gate.claim_checks[0].disagreement
+    assert "second verifier disagreed" in gate.claim_checks[0].note
 
 
 def test_originality_blocks_near_duplicate_and_skips_canaries():

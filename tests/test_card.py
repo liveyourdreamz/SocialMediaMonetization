@@ -3,7 +3,15 @@ import random
 import pytest
 
 from cap.approval.card import CardError, build_card, finalise, record_verdict
-from cap.schema.post_record import Channel, Claim, Decision, PostRecord, PostStatus, ReasonCode
+from cap.schema.post_record import (
+    Channel,
+    Claim,
+    Decision,
+    FaultType,
+    PostRecord,
+    PostStatus,
+    ReasonCode,
+)
 
 
 def _queued() -> PostRecord:
@@ -77,7 +85,11 @@ def test_reject_needs_reason_chip_and_is_one_step():
     with pytest.raises(CardError):
         record_verdict(r, Decision.REJECT, reviewer="hemant", time_on_card_s=20)
     record_verdict(
-        r, Decision.REJECT, reviewer="hemant", time_on_card_s=20, reason_code=ReasonCode.FACT
+        r,
+        Decision.REJECT,
+        reviewer="hemant",
+        time_on_card_s=20,
+        reason_code=ReasonCode.UNSOURCED_NUMBER,
     )
     assert r.approval.too_fast is True  # 20 s against a per-card threshold, not a fixed 20 s
     finalise(r)
@@ -95,7 +107,7 @@ def test_one_revision_after_reveal():
         opening_line="Opening.",
         spot_check_supported=True,
     )
-    finalise(r, revised_decision=Decision.ESCALATE, reason_code=ReasonCode.ETHICS)
+    finalise(r, revised_decision=Decision.ESCALATE, reason_code=ReasonCode.OUT_GROUP_TITLE)
     assert r.approval.pre_reveal_decision == Decision.APPROVE
     assert r.approval.decision == Decision.ESCALATE
     assert r.approval.revised_after_reveal is True
@@ -104,7 +116,7 @@ def test_one_revision_after_reveal():
 
 def test_canary_missed_is_logged_and_never_approved():
     r = _queued()
-    r.flags.canary, r.flags.canary_fault_type = True, "fact"
+    r.flags.canary, r.flags.canary_fault_type = True, FaultType.UNSOURCED_NUMBER
     r.draft.claims[1].status = "unsupported"
     build_card(r, random.Random(3))
     assert r.approval.spot_check.is_planted

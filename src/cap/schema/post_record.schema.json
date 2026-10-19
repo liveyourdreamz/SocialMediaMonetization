@@ -45,11 +45,6 @@
           "title": "Too Fast",
           "type": "boolean"
         },
-        "canary": {
-          "default": false,
-          "title": "Canary",
-          "type": "boolean"
-        },
         "pre_reveal_decision": {
           "anyOf": [
             {
@@ -70,6 +65,24 @@
           "anyOf": [
             {
               "$ref": "#/$defs/SpotCheck"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "edits": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Edits",
+          "type": "array"
+        },
+        "stage_one": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageOneReview"
             },
             {
               "type": "null"
@@ -200,6 +213,11 @@
           "default": null,
           "title": "Source Quote"
         },
+        "in_test_log": {
+          "default": false,
+          "title": "In Test Log",
+          "type": "boolean"
+        },
         "status": {
           "default": "pending",
           "enum": [
@@ -217,6 +235,84 @@
         "text"
       ],
       "title": "Claim",
+      "type": "object"
+    },
+    "ClaimCheckResult": {
+      "additionalProperties": false,
+      "description": "P10 per claim: both verifiers' statuses, the quote check and the final status.",
+      "properties": {
+        "claim_text": {
+          "title": "Claim Text",
+          "type": "string"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Url"
+        },
+        "status_b": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "supported",
+            "unsupported",
+            "outdated",
+            "missing_source"
+          ],
+          "title": "Status B",
+          "type": "string"
+        },
+        "status_c": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "supported",
+            "unsupported",
+            "outdated",
+            "missing_source"
+          ],
+          "title": "Status C",
+          "type": "string"
+        },
+        "quote_in_source": {
+          "default": false,
+          "title": "Quote In Source",
+          "type": "boolean"
+        },
+        "disagreement": {
+          "default": false,
+          "title": "Disagreement",
+          "type": "boolean"
+        },
+        "final": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "supported",
+            "unsupported",
+            "outdated",
+            "missing_source"
+          ],
+          "title": "Final",
+          "type": "string"
+        },
+        "note": {
+          "default": "",
+          "title": "Note",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_text"
+      ],
+      "title": "ClaimCheckResult",
       "type": "object"
     },
     "Decision": {
@@ -251,6 +347,17 @@
           "title": "Mfk Score",
           "type": "number"
         },
+        "mfk_band": {
+          "default": "unscored",
+          "enum": [
+            "clear",
+            "doubtful",
+            "likely",
+            "unscored"
+          ],
+          "title": "Mfk Band",
+          "type": "string"
+        },
         "mfk_factors": {
           "items": {
             "type": "string"
@@ -258,9 +365,9 @@
           "title": "Mfk Factors",
           "type": "array"
         },
-        "passed": {
+        "pass": {
           "default": false,
-          "title": "Passed",
+          "title": "Pass",
           "type": "boolean"
         }
       },
@@ -362,14 +469,42 @@
           "title": "Checked",
           "type": "integer"
         },
-        "passed": {
+        "claim_checks": {
+          "items": {
+            "$ref": "#/$defs/ClaimCheckResult"
+          },
+          "title": "Claim Checks",
+          "type": "array"
+        },
+        "endorsement_wording": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Endorsement Wording",
+          "type": "array"
+        },
+        "pass": {
           "default": false,
-          "title": "Passed",
+          "title": "Pass",
           "type": "boolean"
         }
       },
       "title": "FactsGate",
       "type": "object"
+    },
+    "FaultType": {
+      "description": "The seven canary fault types (Prompt Pack P14). A catch counts only when the\nreviewer's reason chip matches the planted type, so the chips use the same values.",
+      "enum": [
+        "unsourced_number",
+        "missing_ad_prefix",
+        "out_group_title",
+        "first_person_human_claim",
+        "sponsor_verdict",
+        "kids_styled_visual",
+        "reused_cold_open"
+      ],
+      "title": "FaultType",
+      "type": "string"
     },
     "Flags": {
       "additionalProperties": false,
@@ -394,14 +529,13 @@
         "canary_fault_type": {
           "anyOf": [
             {
-              "type": "string"
+              "$ref": "#/$defs/FaultType"
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Canary Fault Type"
+          "default": null
         },
         "gate_blind": {
           "default": true,
@@ -460,6 +594,7 @@
     },
     "JudgeResult": {
       "additionalProperties": false,
+      "description": "One judge's view of one variant. A and B are the Phase 1 Claude judges; C is the\nPhase 2 cross-family judge (D32) and the majority-of-three fallback.",
       "properties": {
         "judge": {
           "enum": [
@@ -474,8 +609,13 @@
           "title": "Model",
           "type": "string"
         },
+        "platform": {
+          "$ref": "#/$defs/Platform",
+          "default": "youtube_long"
+        },
         "verdict": {
-          "$ref": "#/$defs/Verdict"
+          "$ref": "#/$defs/Verdict",
+          "default": "escalate"
         },
         "rule_findings": {
           "items": {
@@ -503,8 +643,7 @@
       },
       "required": [
         "judge",
-        "model",
-        "verdict"
+        "model"
       ],
       "title": "JudgeResult",
       "type": "object"
@@ -516,6 +655,51 @@
       ],
       "title": "Lane",
       "type": "string"
+    },
+    "MediaManifest": {
+      "additionalProperties": false,
+      "description": "What the renderer will produce or did produce; the judges read it for R-06.",
+      "properties": {
+        "synthetic_elements_present": {
+          "default": true,
+          "title": "Synthetic Elements Present",
+          "type": "boolean"
+        },
+        "real_person_depicted": {
+          "default": false,
+          "title": "Real Person Depicted",
+          "type": "boolean"
+        },
+        "real_place_or_event_depicted": {
+          "default": false,
+          "title": "Real Place Or Event Depicted",
+          "type": "boolean"
+        },
+        "minor_depicted": {
+          "default": false,
+          "title": "Minor Depicted",
+          "type": "boolean"
+        },
+        "crisis_event_depicted": {
+          "default": false,
+          "title": "Crisis Event Depicted",
+          "type": "boolean"
+        },
+        "third_party_footage_share": {
+          "default": 0.0,
+          "title": "Third Party Footage Share",
+          "type": "number"
+        },
+        "imagery_roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Imagery Roles",
+          "type": "array"
+        }
+      },
+      "title": "MediaManifest",
+      "type": "object"
     },
     "Metrics": {
       "additionalProperties": false,
@@ -549,7 +733,8 @@
           "default": "none",
           "enum": [
             "none",
-            "provisional",
+            "estimated",
+            "adjusted",
             "finalised"
           ],
           "title": "Revenue Status",
@@ -589,9 +774,9 @@
           "title": "Skeleton Share",
           "type": "number"
         },
-        "passed": {
+        "pass": {
           "default": false,
-          "title": "Passed",
+          "title": "Pass",
           "type": "boolean"
         }
       },
@@ -653,13 +838,13 @@
     },
     "ReasonCode": {
       "enum": [
-        "fact",
-        "ethics",
-        "disclosure",
-        "originality",
-        "title_mismatch",
-        "character_break",
-        "sponsor",
+        "unsourced_number",
+        "missing_ad_prefix",
+        "out_group_title",
+        "first_person_human_claim",
+        "sponsor_verdict",
+        "kids_styled_visual",
+        "reused_cold_open",
         "language",
         "other"
       ],
@@ -698,6 +883,51 @@
       ],
       "title": "RuleOutcome",
       "type": "string"
+    },
+    "Sponsor": {
+      "additionalProperties": false,
+      "description": "The sponsor record P1, P6 and P9 receive. Null on the post when unsponsored.",
+      "properties": {
+        "sponsor_id": {
+          "title": "Sponsor Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "permit_status": {
+          "default": "none",
+          "enum": [
+            "none",
+            "applied",
+            "granted"
+          ],
+          "title": "Permit Status",
+          "type": "string"
+        },
+        "nma_category_status": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "allowed",
+            "restricted"
+          ],
+          "title": "Nma Category Status",
+          "type": "string"
+        },
+        "verdict_allowed": {
+          "default": false,
+          "title": "Verdict Allowed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sponsor_id",
+        "name"
+      ],
+      "title": "Sponsor",
+      "type": "object"
     },
     "SpotCheck": {
       "additionalProperties": false,
@@ -741,6 +971,35 @@
         "claim_text"
       ],
       "title": "SpotCheck",
+      "type": "object"
+    },
+    "StageOneReview": {
+      "additionalProperties": false,
+      "description": "D19: channel C is reviewed by the native Arabic reviewer first; Hemant sees an\nEnglish summary (P11) plus the reviewer's notes.",
+      "properties": {
+        "reviewer": {
+          "title": "Reviewer",
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/$defs/Decision"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        },
+        "time_on_card_s": {
+          "default": 0,
+          "title": "Time On Card S",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reviewer",
+        "decision"
+      ],
+      "title": "StageOneReview",
       "type": "object"
     },
     "Variant": {
@@ -789,7 +1048,6 @@
       "additionalProperties": false,
       "properties": {
         "prompts": {
-          "default": "1.1.1",
           "title": "Prompts",
           "type": "string"
         },
@@ -832,8 +1090,22 @@
     "brief": {
       "$ref": "#/$defs/Brief"
     },
+    "sponsor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Sponsor"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "draft": {
       "$ref": "#/$defs/Draft"
+    },
+    "media_manifest": {
+      "$ref": "#/$defs/MediaManifest"
     },
     "human_contribution": {
       "$ref": "#/$defs/HumanContribution"
