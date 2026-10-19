@@ -1,8 +1,11 @@
 # Prompt Pack amendments raised by the build
 
-Items the code needed that the Agent Prompt Pack v1.1.1 does not say, or says
-differently. Each becomes a Pack 1.1.2 edit once Hemant agrees; until then the code
-follows the choice recorded here.
+Items the code needed that the Agent Prompt Pack v1.1.1 did not say, or said
+differently. **All fourteen were accepted by Hemant on 19 October 2026** and are now
+section 19 of the Agent Prompt Pack v1.1.2 (PRD decision D36); the prompt text and
+examples in the Pack are corrected where an amendment touched them (A2, A9, A13), and
+the extracted prompts in `src/cap/prompts/pack/` come from v1.1.2. This file stays as
+the build-side record.
 
 | # | Where | What the code does | Why |
 | --- | --- | --- | --- |

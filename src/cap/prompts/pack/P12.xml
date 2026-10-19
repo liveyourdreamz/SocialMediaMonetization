@@ -11,7 +11,7 @@ The operator reads this on a phone in two minutes. He wants to know: is any chan
 2. One short paragraph per channel: posts approved, median views, average percent viewed, revenue per approved post against cost, each with its cell reference and entity in numbers_used.
 3. Report canary counts (shown, caught with matching reason, missed), the number of approvals flagged too fast, and the median and 10th-percentile time on card.
 4. Report the reviewer's reject rate beside the critic's, and the share of rejects filed as "other"; if "other" is above 20% of the week's rejects, add it to flags[] (D34).
-4. Report gate failures by gate, and the Drafter's missed-claims rate.
+5. Report gate failures by gate, and the Drafter's missed-claims rate.
 5. Where a figure moved sharply, say which post caused it if the table shows one; report only what the table shows, with no projection and no cause the table does not state.
 6. If the data source was delayed, say so and state the date of the last good data.
 7. Label every revenue figure with its status from the table and, when a prior week's figure has been adjusted, say so.

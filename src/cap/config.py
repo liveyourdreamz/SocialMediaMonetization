@@ -29,9 +29,9 @@ class Settings(BaseSettings):
     # D5: who may approve. The token issuer and the publisher both check this list.
     approvers: list[str] = Field(default_factory=lambda: ["hemant"])
     arabic_reviewers: list[str] = Field(default_factory=list)  # D19 stage one, channel C
-    # D13: Google Cloud region is still an open decision; the placeholder makes any
-    # deploy fail loudly rather than silently pick a default.
-    gcp_region: str = "TODO-D13"
+    # D13 (decided 19 Oct 2026): europe-west4. Overridable per environment; a deploy
+    # with an empty region fails in the validator below.
+    gcp_region: str = "europe-west4"
     gcp_project: str = ""
 
     database_url: str = "sqlite:///cap-local.db"
@@ -82,8 +82,8 @@ class Settings(BaseSettings):
         key = self.approval_signing_key.get_secret_value()
         if key == LOCAL_DEFAULT_KEY or len(key) < 32:
             raise ValueError("CAP_APPROVAL_SIGNING_KEY must be set (32+ chars) outside local")
-        if self.gcp_region == "TODO-D13":
-            raise ValueError("CAP_GCP_REGION is undecided (D13); set it before deploying")
+        if not self.gcp_region:
+            raise ValueError("CAP_GCP_REGION must be set before deploying (D13)")
         if self.model_backend == ModelBackend.ANTHROPIC and self.anthropic_api_key is None:
             raise ValueError("CAP_ANTHROPIC_API_KEY is required with the anthropic backend")
         if self.dev_reviewer_header:

@@ -152,7 +152,7 @@ def test_settings_guards_outside_local():
     with pytest.raises(ValueError, match="APPROVAL_SIGNING_KEY"):
         Settings(env="prod", _env_file=None)
     with pytest.raises(ValueError, match="D13"):
-        Settings(env="prod", approval_signing_key="x" * 40, _env_file=None)
+        Settings(env="prod", approval_signing_key="x" * 40, gcp_region="", _env_file=None)
     with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
         Settings(
             env="prod",
@@ -169,7 +169,7 @@ def test_settings_guards_outside_local():
             dev_reviewer_header=True,
             _env_file=None,
         )
-    assert Settings(env="local", _env_file=None).gcp_region == "TODO-D13"
+    assert Settings(env="local", _env_file=None).gcp_region == "europe-west4"
 
 
 def test_managed_runtime_is_production_whatever_env_says(monkeypatch):

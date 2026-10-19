@@ -21,7 +21,7 @@ The operator approves every post, and the gates have usually passed before he se
 </criteria>
 
 <examples>
-<example id="unsourced"><input>Base: Patch note-taking draft; fault_type unsourced_number; placement mid-script.</input><output>{"planted_fault":{"type":"unsourced_number","span":"task 2 took 41 seconds","why":"log says 58 s; the figure is not in the Test Log"}}</output></example>
-<example id="disclosure"><input>Base: sponsored Falak draft; fault_type missing_ad_prefix; placement caption.</input><output>{"planted_fault":{"type":"missing_ad_prefix","span":"caption first word","why":"'Ad' kept in the title and speech, removed from the caption"}}</output></example>
+<example id="unsourced"><input>Base: Patch note-taking draft; fault_type unsourced_number; placement mid-script.</input><output>{"planted_fault":{"type":"unsourced_number","span":"task 2 took 41 seconds","why_catchable":"log says 58 s; the figure is not in the Test Log"}}</output></example>
+<example id="disclosure"><input>Base: sponsored Falak draft; fault_type missing_ad_prefix; placement caption.</input><output>{"planted_fault":{"type":"missing_ad_prefix","span":"caption first word","why_catchable":"'Ad' kept in the title and speech, removed from the caption"}}</output></example>
 <example id="blocked"><input>Base: unsponsored Falak draft; fault_type sponsor_verdict.</input><output>{"status":"blocked","blocked_reason":"no sponsor in base draft; a sponsor verdict would need a second fault"}</output></example>
 </examples>
