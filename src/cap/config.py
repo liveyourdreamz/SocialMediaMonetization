@@ -68,6 +68,14 @@ class Settings(BaseSettings):
     )
 
     channels: list[str] = Field(default_factory=lambda: ["A", "B", "C"])
+    channel_characters: dict[str, str] = Field(
+        default_factory=lambda: {"A": "Patch", "B": "Falak", "C": "Falak"}
+    )
+    channel_languages: dict[str, str] = Field(
+        default_factory=lambda: {"A": "en", "B": "en", "C": "ar"}
+    )
+    # The day channels A and B went live; the kill-gate reviews (PRD 8) count from it.
+    pilot_start: str = ""  # ISO date, empty until go-live
 
     @model_validator(mode="after")
     def _production_guards(self) -> Settings:

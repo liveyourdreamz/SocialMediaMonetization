@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Digest · Content Agent Portfolio{% endblock %}
+{% macro pct(x) %}{% if x is none %}—{% else %}{{ (x * 100) | round | int }}%{% endif %}{% endmacro %}
+{% block body %}
+<main class="screen">
+  <header class="stack-sm">
+    <span class="eyebrow">Content Agent Portfolio</span>
+    <h1 style="font-size: 28px; line-height: 32px; font-weight: 600">Digest</h1>
+    <p class="meta" style="font-size: 13px">Week of {{ d.week }} · computed in code from the records; the written note (P12) joins when the model backend is live.</p>
+  </header>
+
+  <div class="grid-2">
+    <div class="card tight tile"><span class="lbl">Approved</span><span class="val">{{ d.approved }}</span><span class="meta">this week</span></div>
+    <div class="card tight tile"><span class="lbl">Rejected</span><span class="val">{{ d.rejected }}{% if d.escalated %} <span style="font-size: 14px; font-weight: 500; color: var(--muted)">+ {{ d.escalated }} escalated</span>{% endif %}</span><span class="meta">your reject rate {{ pct(d.reviewer_reject_rate) }}</span></div>
+    <div class="card tight tile"><span class="lbl">Critic flagged</span><span class="val">{{ pct(d.critic_flag_rate) }}</span><span class="meta">of drafts sent back once</span></div>
+    <div class="card tight tile"><span class="lbl">Reveal agreement</span><span class="val">{{ pct(d.agreement) }}</span><span class="meta">{{ d.revised }} changed after the reveal · review at 200 cards</span></div>
+  </div>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Why you rejected</h2>
+    <div class="card tight stack-sm">
+      {% if d.reasons %}
+      {% for text, n in d.reasons %}<div class="row"><span>{{ text }}</span><span class="tabular">{{ n }}</span></div>{% endfor %}
+      <div class="row meta" style="border-top: var(--hairline) solid var(--line); padding-top: 8px"><span>"Something else" share</span><span class="{{ 'word-signal' if d.other_flag else '' }}">{{ pct(d.other_share) }}{% if d.other_flag %} · above the 20% flag (D34){% endif %}</span></div>
+      {% else %}<span class="muted">No rejections this week.</span>{% endif %}
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Canaries this week</h2>
+    <div class="card tight"><span><span class="word-pass">{{ d.canaries_caught }} caught</span> · {{ d.canaries_missed }} missed</span></div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Proposals from the learning loop</h2>
+    <div class="card tight muted">{% if d.proposals %}{% for p in d.proposals %}<p>{{ p }}</p>{% endfor %}{% else %}None yet. The loop proposes only on allow-listed settings and only once a channel has a month of retention data (D35).{% endif %}</div>
+  </section>
+</main>
+{% endblock %}

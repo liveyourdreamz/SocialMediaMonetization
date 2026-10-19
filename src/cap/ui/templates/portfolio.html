@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Portfolio · Content Agent Portfolio{% endblock %}
+{% block body %}
+<main class="screen">
+  <header class="stack-sm">
+    <div class="row">
+      <span class="eyebrow">Content Agent Portfolio</span>
+      <form method="post" action="/logout"><button class="pill" type="submit" style="cursor: pointer">{{ reviewer.name }}</button></form>
+    </div>
+    <h1 style="font-size: 28px; line-height: 32px; font-weight: 600">Portfolio</h1>
+    <p class="meta" style="font-size: 13px; line-height: 18px">{{ p.month }}{% if p.note %} · <span class="word-signal">{{ p.note }}</span>{% endif %}</p>
+  </header>
+
+  <a href="/queue" class="banner verdict" style="text-decoration: none; flex-direction: row; justify-content: space-between; align-items: center">
+    <span class="stack-sm" style="gap: 2px">
+      <span class="eyebrow">Waiting for you</span>
+      <span style="font-size: 20px; line-height: 26px; font-weight: 600">{{ p.queue_count }} post{{ '' if p.queue_count == 1 else 's' }}{% if p.queue_count %} · about {{ p.queue_minutes }} min{% endif %}</span>
+      <span class="facts">{% if p.queue_count %}oldest {{ p.queue_oldest_days }} day{{ '' if p.queue_oldest_days == 1 else 's' }} · generation pauses at 3{% else %}nothing waiting · generation pauses after 72 h idle{% endif %}</span>
+    </span>
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+  </a>
+
+  <div class="grid-2">
+    {% for f in p.figures %}
+    <div class="card tight tile"><span class="lbl">{{ f.label }}</span><span class="val{% if f.value | length > 8 %} sm{% endif %}">{{ f.value }}</span><span class="meta">{{ f.meta }}</span></div>
+    {% endfor %}
+  </div>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Channels</h2>
+    {% for c in p.channels %}
+    <div class="card stack">
+      <div class="row">
+        <span class="tag">{{ c.label.replace(' · عربي', '') }}{% if c.rtl %} · <span class="ar" lang="ar">عربي</span>{% endif %}</span>
+        <span class="meta" style="font-size: 13px">{{ c.status }}</span>
+      </div>
+      {% if c.rows %}
+      <div class="kv">{% for k, v in c.rows %}<span>{{ k }}</span><span>{{ v }}</span>{% endfor %}</div>
+      {% endif %}
+      {% if c.progress is not none %}
+      <div class="progress" role="img" aria-label="{{ c.progress_text }}"><div style="width: {{ (c.progress * 100) | round }}%"></div></div>
+      <span class="meta">{{ c.progress_text }}</span>
+      {% endif %}
+      {% if c.note %}<span class="muted" style="font-size: 14px; line-height: 20px">{{ c.note }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Next kill gate</h2>
+    <div class="card stack-sm">
+      <span style="font-size: 17px; font-weight: 600">{{ p.gate_title }}</span>
+      <span style="font-size: 14px; line-height: 20px">{{ p.gate_body }}</span>
+      <span class="meta">{{ p.gate_meta }}</span>
+    </div>
+  </section>
+
+  <p class="meta" style="border-top: var(--hairline) solid var(--line); padding-top: 12px; line-height: 18px">Sources: {{ p.sources }}.</p>
+</main>
+{% endblock %}

@@ -33,3 +33,11 @@ def disclosure_block() -> str:
         "Disclosure fields are never shortened, moved or rephrased for any platform.\n"
         "</disclosure_fields>"
     )
+
+
+# YouTube Partner Program bar from 1 February 2027 (R2; channels going live in week 9
+# join under it). The Portfolio screen measures progress against these.
+YPP_SUBSCRIBERS = 1_000
+YPP_WATCH_HOURS_12MO = 8_000
+YPP_SHORTS_VIEWS_90D = 20_000_000
+YPP_BAR_DATE = "2027-02-01"

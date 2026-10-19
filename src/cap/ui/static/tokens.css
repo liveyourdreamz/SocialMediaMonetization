@@ -1,0 +1,97 @@
+/* Proof — generated from tokens.json; do not edit */
+:root, [data-theme="light"] {
+  --ground: #f6f4ef;
+  --surface: #ffffff;
+  --surface-sunken: #edeae2;
+  --ink: #1b1a17;
+  --on-ink: #f6f4ef;
+  --muted: #5c5955;
+  --line: #ddd9d0;
+  --line-strong: #1b1a17;
+  --accent: #1f5f73;
+  --on-accent: #f6f4ef;
+  --pass: #2e6b3f;
+  --on-pass: #ffffff;
+  --signal: #b4540a;
+  --on-signal: #ffffff;
+  --dim: #8e8a82;
+  --focus: #1f5f73;
+}
+[data-theme="dark"] {
+  --ground: #141311;
+  --surface: #1e1c19;
+  --surface-sunken: #0d0c0b;
+  --ink: #f1ede5;
+  --on-ink: #141311;
+  --muted: #a8a39a;
+  --line: #33302b;
+  --line-strong: #f1ede5;
+  --accent: #7fb8c9;
+  --on-accent: #141311;
+  --pass: #6dba7e;
+  --on-pass: #141311;
+  --signal: #e08a3c;
+  --on-signal: #141311;
+  --dim: #4a463f;
+  --focus: #7fb8c9;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #141311;
+    --surface: #1e1c19;
+    --surface-sunken: #0d0c0b;
+    --ink: #f1ede5;
+    --on-ink: #141311;
+    --muted: #a8a39a;
+    --line: #33302b;
+    --line-strong: #f1ede5;
+    --accent: #7fb8c9;
+    --on-accent: #141311;
+    --pass: #6dba7e;
+    --on-pass: #141311;
+    --signal: #e08a3c;
+    --on-signal: #141311;
+    --dim: #4a463f;
+    --focus: #7fb8c9;
+    color-scheme: dark;
+  }
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-sheet: 20px;
+  --radius-pill: 999px;
+  --hairline: 1px;
+  --stroke: 1.5px;
+  --quote-bar: 3px;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-read: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-ui-ar: "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
+  --font-read-ar: "Noto Naskh Arabic", "Source Serif 4", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+.label { font-family: var(--font-ui); font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.meta { font-family: var(--font-ui); font-size: 13px; line-height: 18px; font-weight: 400; }
+.ui { font-family: var(--font-ui); font-size: 15px; line-height: 22px; font-weight: 400; }
+.ui-strong { font-family: var(--font-ui); font-size: 15px; line-height: 22px; font-weight: 600; }
+.button { font-family: var(--font-ui); font-size: 16px; line-height: 20px; font-weight: 600; }
+.heading { font-family: var(--font-ui); font-size: 22px; line-height: 28px; font-weight: 600; }
+.display { font-family: var(--font-ui); font-size: 28px; line-height: 32px; font-weight: 600; }
+.title { font-family: var(--font-read); font-size: 26px; line-height: 31px; font-weight: 600; }
+.title-sm { font-family: var(--font-read); font-size: 19px; line-height: 24px; font-weight: 400; }
+.script { font-family: var(--font-read); font-size: 17px; line-height: 26px; font-weight: 400; }
+.quote { font-family: var(--font-read); font-size: 16px; line-height: 22px; font-weight: 400; }
+.ui-ar { font-family: var(--font-ui-ar); font-size: 16px; line-height: 26px; font-weight: 400; }
+.title-ar { font-family: var(--font-read-ar); font-size: 26px; line-height: 40px; font-weight: 600; }
+.script-ar { font-family: var(--font-read-ar); font-size: 18px; line-height: 32px; font-weight: 400; }
+.id { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 400; }

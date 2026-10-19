@@ -25,6 +25,8 @@ jobs:
         run: .venv/bin/pytest --cov=cap --cov-report=term-missing
       - name: Prompts match the registry
         run: .venv/bin/python -m cap.cli prompts check
+      - name: Design tokens are current (design/proof/tokens.json -> tokens.css)
+        run: .venv/bin/python -m cap.cli tokens check
       - name: Schema is current
         run: |
           .venv/bin/python -m cap.cli schema export

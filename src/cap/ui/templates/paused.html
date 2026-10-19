@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Queue paused · Content Agent Portfolio{% endblock %}
+{% block body %}
+<div class="hero">
+  <span class="eyebrow">{{ 'Queue paused' if paused else 'Canary record' }}</span>
+  <h1>{% if paused %}That one was a canary, and it got through.{% else %}The queue is open.{% endif %}</h1>
+  <p style="font-size: 14px; line-height: 20px; opacity: .92">{% if paused %}Nothing has published. The queue stays locked until you have read this and reopened it.{% else %}Every miss is kept here so the record is never tidied away.{% endif %}</p>
+</div>
+<main class="screen no-tabs" style="padding-top: var(--space-5)">
+  {% if last %}
+  <section class="card stack">
+    <div class="stack-sm" style="gap: 4px">
+      <span class="eyebrow" style="font-size: 11px">The post</span>
+      <span class="read" style="font-size: 18px; font-weight: 600; line-height: 1.25">{{ last.draft.title }}</span>
+    </div>
+    <div class="kv">
+      <span>Planted fault</span><span>{{ planted or last.flags.canary_fault_type }}</span>
+      <span>Where</span><span>"{{ last.flags.planted_fault.span if last.flags.planted_fault else '' }}"</span>
+      <span>You said</span><span>{{ last.approval.pre_reveal_decision.value | capitalize if last.approval.pre_reveal_decision else '' }}{% if last_reason %}, {{ last_reason | lower }}{% endif %}</span>
+      <span>Time on card</span><span>{{ last.approval.time_on_card_s | minutes }}</span>
+    </div>
+    <p class="muted" style="font-size: 14px; line-height: 20px">A reject with the wrong reason counts as a miss: it means the fault itself was not seen. That is the rule the research argued for, and the one you signed (P14).</p>
+  </section>
+  {% endif %}
+
+  <section class="stack-sm">
+    <h2 style="font-size: 15px; font-weight: 600">Your record</h2>
+    <div style="display: flex; gap: 8px">
+      <div class="card tight tile" style="flex: 1"><span class="val">{{ caught }}</span><span class="meta">canaries caught</span></div>
+      <div class="card tight tile" style="flex: 1"><span class="val" style="color: var(--signal)">{{ missed }}</span><span class="meta">missed</span></div>
+      <div class="card tight tile" style="flex: 1"><span class="val">{{ rate }}</span><span class="meta">rate now</span></div>
+    </div>
+  </section>
+
+  {% if paused and reviewer.is_approver %}
+  <form method="post" action="/paused/reopen" class="stack-sm">
+    <button class="btn primary" type="submit">I have read this, reopen the queue</button>
+    <a class="btn quiet" href="/operator">Open the operator screen</a>
+  </form>
+  {% elif paused %}
+  <p class="muted">Only an approver can reopen the queue.</p>
+  {% else %}
+  <a class="btn quiet" href="/queue">Back to the queue</a>
+  {% endif %}
+</main>
+{% endblock %}

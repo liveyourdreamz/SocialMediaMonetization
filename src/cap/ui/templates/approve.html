@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Approve · {{ card.title }}{% endblock %}
+{% set revising = record.approval.pre_reveal_decision is not none %}
+{% block body %}
+<main class="screen no-tabs">
+  <div class="row" style="font-size: 14px">
+    <a href="/posts/{{ card.post_id }}" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 500"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Back to the card</a>
+    <span class="muted">on the card <span class="tabular" data-clock="{{ on_card }}">{{ on_card_text }}</span></span>
+  </div>
+
+  <div class="stack-sm">
+    <h1 style="font-size: 24px; line-height: 1.2; font-weight: 600">Two things before it goes out</h1>
+    <p class="muted" style="font-size: 14px; line-height: 20px">Approving costs more than rejecting on purpose. Both are checked by the server, not just this screen.</p>
+  </div>
+
+  {% if error %}<div class="error" role="alert"><strong>Not recorded.</strong> {{ error }}</div>{% endif %}
+
+  <form method="post" action="/posts/{{ card.post_id }}/{{ 'finalise' if revising else 'verdict' }}" class="stack" style="gap: var(--space-6)" data-approve-form data-needs-spot="{{ '1' if card.spot_check_claim else '0' }}">
+    <input type="hidden" name="{{ 'revised_decision' if revising else 'decision' }}" value="approve">
+
+    <section class="card stack">
+      <div style="display: flex; align-items: center; gap: 10px"><span class="step">1</span><h2 style="font-size: 16px; font-weight: 600">Write the opening line {{ settings.channel_characters.get(record.channel_id.value, '') }} says</h2></div>
+      <p class="muted" style="font-size: 14px; line-height: 20px">Your words, first thing the viewer hears. This is the human contribution on every post.</p>
+      <div class="field">
+        <label for="opening_line">Opening line</label>
+        <textarea class="input" id="opening_line" name="opening_line" rows="3" maxlength="160" required>{{ record.human_contribution.text }}</textarea>
+        <div class="row meta"><span>Replaces the drafter's first sentence</span><span data-count>0 / 160</span></div>
+      </div>
+    </section>
+
+    {% if card.spot_check_claim %}
+    <section class="card stack">
+      <div style="display: flex; align-items: center; gap: 10px"><span class="step">2</span><h2 style="font-size: 16px; font-weight: 600">Check one claim against its source</h2></div>
+      <p class="muted" style="font-size: 14px; line-height: 20px">Picked at random when the card was queued. Read the quote, not the claim.</p>
+      <div class="stack-sm" {% if content_rtl %}dir="rtl" lang="ar"{% endif %}>
+        <div><span class="tile lbl eyebrow" style="font-size: 11px; display: block; margin-bottom: 4px">The claim</span><span style="font-size: 16px; line-height: 22px">{{ card.spot_check_claim }}</span></div>
+        <div><span class="eyebrow" style="font-size: 11px; display: block; margin-bottom: 4px">The source says</span>
+          {% if card.spot_check_quote %}<div class="quote">"{{ card.spot_check_quote }}"</div>{% else %}<div class="quote muted">No quote was recorded for this claim.</div>{% endif %}
+        </div>
+      </div>
+      <fieldset class="stack-sm" style="border: 0; padding: 0; margin: 0">
+        <legend style="font-weight: 500; padding: 0; margin-bottom: 8px">Does the quote support the claim?</legend>
+        <div style="display: flex; gap: 10px">
+          <label class="chip" style="flex: 1"><input type="radio" name="spot_check_supported" value="yes" required><span style="width: 100%; justify-content: center; min-height: 48px; border-radius: var(--radius-md)">Yes, it does</span></label>
+          <label class="chip" style="flex: 1"><input type="radio" name="spot_check_supported" value="no"><span style="width: 100%; justify-content: center; min-height: 48px; border-radius: var(--radius-md)">No, it does not</span></label>
+        </div>
+        <span class="meta">"No" is recorded with the approval and counts against the fact gate; if you doubt the post, reject it instead.</span>
+      </fieldset>
+    </section>
+    {% endif %}
+
+    <div class="stack-sm">
+      <button class="btn primary" type="submit" data-approve-submit disabled>Approve</button>
+      <p class="meta" style="text-align: center">On the card <span class="tabular">{{ on_card_text }}</span> · expected {{ expected_text }}</p>
+    </div>
+  </form>
+</main>
+{% endblock %}

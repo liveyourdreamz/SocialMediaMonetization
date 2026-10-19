@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Sign in · Content Agent Portfolio{% endblock %}
+{% block body %}
+<main class="screen no-tabs">
+  <div class="stack-sm">
+    <span class="eyebrow">Content Agent Portfolio</span>
+    <h1 style="font-size: 28px; line-height: 32px; font-weight: 600">Sign in</h1>
+    <p class="muted">Local stand-in for Google sign-in. Only names on the approver or Arabic-reviewer lists get in.</p>
+  </div>
+  {% if error %}<div class="error"><strong>Refused.</strong> {{ error }}</div>{% endif %}
+  <form method="get" action="/login" class="stack">
+    <div class="field">
+      <label for="name">Reviewer</label>
+      <input class="input" id="name" name="name" value="{{ name }}" autocomplete="username" required>
+    </div>
+    <button class="btn primary" type="submit">Continue</button>
+    <p class="meta">Approvers: {{ settings.approvers | join(', ') }}{% if settings.arabic_reviewers %} · Arabic reviewers: {{ settings.arabic_reviewers | join(', ') }}{% endif %}</p>
+  </form>
+</main>
+{% endblock %}

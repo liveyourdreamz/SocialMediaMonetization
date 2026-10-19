@@ -5,8 +5,9 @@ cap rulebook show          print the judge-facing rulebook text
 cap prompts check          verify the extracted prompts match the registry
 cap harness run [--runs N] run the regression sets (mock backend unless configured)
 cap demo                   run one fake Patch episode through the pipeline (mock)
-cap serve [--port 8000]    run the approval queue locally with the demo post queued
-                           (sets CAP_DEV_REVIEWER_HEADER; send X-Reviewer: hemant)
+cap serve [--demo]         run the app locally (Portfolio, queue, card, digest, operator)
+                           with demo posts queued; sign in at /login?name=hemant
+cap tokens build|check     compile design/proof/tokens.json to the app's tokens.css
 """
 
 from __future__ import annotations
@@ -31,6 +32,13 @@ def main(argv: list[str] | None = None) -> int:
     sv = sub.add_parser("serve")
     sv.add_argument("--port", type=int, default=8000)
     sv.add_argument("--canary", action="store_true", help="queue a canary too (planted fault)")
+    sv.add_argument(
+        "--demo",
+        action="store_true",
+        help="three channels, a canary, example analytics, an Arabic reviewer",
+    )
+    t = sub.add_parser("tokens")
+    t.add_argument("action", choices=["build", "check"])
     args = p.parse_args(argv)
 
     if args.cmd == "schema":
@@ -50,6 +58,19 @@ def main(argv: list[str] | None = None) -> int:
             assert "{nonce}" not in text, key
             assert "<role>" in text, key
         print(f"{len(SPECS)} prompt calls load from pack v{pack_version()}")
+    elif args.cmd == "tokens":
+        from cap.ui.tokens import TOKENS_CSS, build, is_current
+
+        if args.action == "build":
+            build()
+            print(f"wrote {TOKENS_CSS}")
+        else:
+            print(
+                "tokens.css is current"
+                if is_current()
+                else "tokens.css is STALE: run `cap tokens build`"
+            )
+            return 0 if is_current() else 1
     elif args.cmd == "harness":
         from cap.harness import run_all
         from cap.models import get_client
@@ -57,7 +78,9 @@ def main(argv: list[str] | None = None) -> int:
         for rep in run_all(get_client(), runs=args.runs):
             print(rep.summary())
     elif args.cmd == "demo":
-        out = _demo_post()
+        from cap.demo.seed import demo_post
+
+        out = demo_post()
         print(f"{out.post_id} -> {out.status.value}")
         for line in out.history:
             print("  ", line)
@@ -65,6 +88,9 @@ def main(argv: list[str] | None = None) -> int:
         import os
 
         os.environ.setdefault("CAP_DEV_REVIEWER_HEADER", "true")
+        if args.demo:
+            os.environ.setdefault("CAP_ARABIC_REVIEWERS", '["layla"]')
+            os.environ.setdefault("CAP_PILOT_START", "2026-09-08")
         from cap.config import get_settings
 
         get_settings.cache_clear()
@@ -74,51 +100,20 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
 
         from cap.approval.app import Store, create_app
+        from cap.demo.seed import seed_store
 
         store = Store()
-        post = _demo_post()
-        store.put(post)
-        print(f"queued demo post {post.post_id}")
-        if args.canary:
-            canary = _demo_post(canary=True)
-            store.put(canary)
+        seed_store(store, demo=args.demo, canary=args.canary or args.demo)
+        for rec in store.queue():
             print(
-                f"queued canary {canary.post_id} (planted fault: {canary.flags.canary_fault_type})"
+                f"queued {rec.channel_id.value} {rec.post_id} {'(canary)' if rec.flags.canary else ''}"
             )
-        print(f"open http://127.0.0.1:{args.port}/docs and send header X-Reviewer: hemant")
+        print(
+            f"open http://127.0.0.1:{args.port}/login?name=hemant"
+            + ("  (or ?name=layla for channel C)" if args.demo else "")
+        )
         uvicorn.run(create_app(store), host="127.0.0.1", port=args.port)
     return 0
-
-
-def _demo_post(canary: bool = False):  # type: ignore[no-untyped-def]
-    from cap.demo import CHARACTER_BLOCK, SOURCES, TEST_LOG, happy_fixtures
-    from cap.models import MockClient
-    from cap.pipeline import PipelineDeps, run_post
-    from cap.schema.post_record import Brief, Channel, FaultType, PlantedFault, PostRecord
-
-    rec = PostRecord(
-        channel_id=Channel.A,
-        brief=Brief(topic="Notely 7-day test", anchor_elements=["test log"]),
-    )
-    deps = PipelineDeps(
-        client=MockClient(happy_fixtures()),
-        anchor_elements={"A": ["test log"]},
-        character_blocks={"A": CHARACTER_BLOCK},
-        test_logs={rec.post_id: TEST_LOG},
-    )
-    out = run_post(rec, SOURCES, deps)
-    if canary:
-        # A hand-planted fault for the local walkthrough; the real canary writer (P14)
-        # plants it before the gates. The reviewer must reject with the matching chip.
-        out.draft.title = "Why THEIR note apps keep failing (and ours do not)"
-        out.flags.canary = True
-        out.flags.canary_fault_type = FaultType.OUT_GROUP_TITLE
-        out.flags.planted_fault = PlantedFault(
-            type=FaultType.OUT_GROUP_TITLE,
-            span="THEIR note apps",
-            why_catchable="the title sides against an out-group",
-        )
-    return out
 
 
 if __name__ == "__main__":

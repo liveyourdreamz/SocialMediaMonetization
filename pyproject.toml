@@ -17,6 +17,7 @@ dependencies = [
     "pyyaml>=6.0",
     "itsdangerous>=2.2",
     "python-multipart>=0.0.12",
+    "jinja2>=3.1.6",
 ]
 
 [project.optional-dependencies]
@@ -45,7 +46,7 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "W"]
-ignore = ["E501"]
+ignore = ["E501", "B008"]  # B008: FastAPI's Depends()/Form() in defaults is the framework's idiom
 
 [tool.mypy]
 python_version = "3.12"

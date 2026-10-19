@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Operator · Content Agent Portfolio{% endblock %}
+{% block body %}
+<main class="screen">
+  <header class="stack-sm">
+    <span class="eyebrow">Content Agent Portfolio</span>
+    <h1 style="font-size: 28px; line-height: 32px; font-weight: 600">Operator</h1>
+    <p class="meta" style="font-size: 13px">Rarely. Settings come from the environment and Secret Manager; nothing secret is shown or entered here.</p>
+  </header>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Queue state</h2>
+    <div class="card tight stack-sm">
+      {% if paused %}
+      <span class="word-signal">Paused: {{ queue_state.paused_reason }}</span>
+      <form method="post" action="/paused/reopen"><button class="btn secondary sm" type="submit">Reopen the queue</button></form>
+      {% else %}<span class="word-pass">Open</span>{% endif %}
+      <span class="meta">Environment {{ settings.env }} · region {{ settings.gcp_region }} · model backend {{ settings.model_backend.value }}</span>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">People</h2>
+    <div class="card tight kv">
+      <span>Approvers</span><span>{{ settings.approvers | join(', ') }}</span>
+      <span>Arabic reviewers</span><span>{{ settings.arabic_reviewers | join(', ') if settings.arabic_reviewers else 'none yet (channel C cannot approve until one is named)' }}</span>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Channels and cadence</h2>
+    <div class="card tight kv">
+      {% for ch in settings.channels %}<span>{{ ch }} · {{ settings.channel_characters.get(ch, '') }}</span><span>{{ settings.channel_languages.get(ch, 'en') }} · {{ settings.longform_per_channel_per_month }} long-form, {{ settings.shorts_cap_per_channel_per_month }} Shorts a month</span>{% endfor %}
+      <span>Idle pause</span><span>{{ settings.queue_idle_pause_hours }} hours</span>
+      <span>Pilot start</span><span>{{ settings.pilot_start or 'not set' }}</span>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Reviewer protections</h2>
+    <div class="card tight kv">
+      <span>Blind-first (D33)</span><span>{{ 'on' if settings.blind_first_enabled else 'off' }} · review at {{ settings.blind_review_point_cards }} cards</span>
+      <span>Canary schedule (P14)</span><span>{% for n, m in settings.canary_schedule %}1 in {{ n }}{% if m %} for {{ m }} cards{% else %} after{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+      <span>"Other" flag (D34)</span><span>above {{ (settings.reject_other_share_flag * 100) | round | int }}% of rejections</span>
+      <span>Approval token TTL</span><span>7 days, bound to the rendered file's hash</span>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Parked posts</h2>
+    <div class="stack-sm">
+      {% if parked %}
+      {% for p, reason in parked %}
+      <div class="card tight stack-sm">
+        <span class="tag">{{ p.channel_id.value }}</span>
+        <span class="read" style="font-size: 17px">{{ p.draft.title or p.brief.topic }}</span>
+        <span class="muted" style="font-size: 13px">{{ reason }}</span>
+        <span class="meta">Deciding a parked post re-runs its gates; that control arrives with the gate re-run loop (week 2).</span>
+      </div>
+      {% endfor %}
+      {% else %}<div class="card tight muted">Nothing parked.</div>{% endif %}
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Audit log</h2>
+    <div class="card tight muted" style="font-size: 13px">Every record carries its own append-only history; the cross-record audit log and retention period are open items (PRD 6).</div>
+  </section>
+</main>
+{% endblock %}

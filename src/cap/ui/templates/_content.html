@@ -1,0 +1,58 @@
+{# The post itself: the same block on the blind card, the reveal and the stage-one card. #}
+<div class="stack-sm" {% if content_rtl %}dir="rtl" lang="ar"{% endif %}>
+  <span class="tag" dir="ltr">{{ channel_label.replace(' · عربي', '') }}{% if content_rtl %} · <span class="ar" lang="ar">عربي</span>{% endif %} · {{ format }}</span>
+  <h1 class="read{% if content_rtl %} read-ar{% endif %}" style="font-size: 26px; line-height: 1.2; font-weight: 600;{% if content_rtl %} line-height: 1.5;{% endif %}">{{ card.title }}</h1>
+</div>
+
+{% if card.thumbnail_text %}
+<div class="banner verdict thumb"><span class="eyebrow">{{ L.thumb }}</span><span class="head">{{ card.thumbnail_text }}</span></div>
+{% endif %}
+
+<section class="stack">
+  <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">{{ L.script }}</h2>
+  <div class="{{ 'cut' if long_script else '' }}" id="script">
+    <div class="script" {% if content_rtl %}lang="ar" dir="rtl"{% endif %}>
+      {% for runs in paragraphs %}<p>{% for kind, text in runs %}{% if kind == 'text' %}{{ text }}{% elif kind == 'line' %}<mark class="line">{{ text }}</mark>{% else %}<mark class="slot">{{ text }}</mark>{% endif %}{% endfor %}</p>{% endfor %}
+    </div>
+  </div>
+  {% if long_script %}<button type="button" class="linkbtn" data-unfold="script">Read the rest ({{ record.draft.script.split() | length }} words)</button>{% endif %}
+</section>
+
+{% if card.on_screen_text %}
+<section class="stack-sm">
+  <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">{{ L.on_screen }}</h2>
+  <div class="chips">{% for t in card.on_screen_text %}<span class="pill">{{ t }}</span>{% endfor %}</div>
+</section>
+{% endif %}
+
+<section class="stack">
+  <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">{{ L.claims }}</h2>
+  <div class="stack-sm">
+    {% for c in card.claims %}
+    <div class="card tight claim" {% if content_rtl %}dir="rtl" lang="ar"{% endif %}>
+      <span>{{ c.text }}</span>
+      {% if c.source_quote %}<span class="src">{% if c.source_url and c.source_url.startswith('testlog://') %}{{ L.test_log }}: {% elif c.source_url %}{{ c.source_url }}: {% endif %}"{{ c.source_quote }}"</span>{% else %}<span class="src">{{ L.no_quote }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="stack">
+  <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">{{ L.media }}</h2>
+  <div class="card tight kv">{% for k, v in media_rows %}<span>{{ k }}</span><span>{{ v }}</span>{% endfor %}</div>
+</section>
+
+<section class="stack">
+  <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">{{ L.caption }}</h2>
+  <p class="card tight" {% if content_rtl %}dir="rtl" lang="ar"{% endif %} style="font-size: 15px; line-height: 1.5">{{ card.caption }}</p>
+</section>
+
+{% if card.stage_one %}
+<section class="stack">
+  <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">{{ L.stage_one }}</h2>
+  <div class="card tight stack-sm">
+    <span><strong>{{ card.stage_one.reviewer }}</strong> · {{ card.stage_one.decision }} · {{ card.stage_one.time_on_card_s | minutes }} on the card</span>
+    {% if card.stage_one.notes %}<span class="muted">{{ card.stage_one.notes }}</span>{% endif %}
+  </div>
+</section>
+{% endif %}
