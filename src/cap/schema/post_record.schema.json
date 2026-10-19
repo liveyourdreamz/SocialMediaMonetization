@@ -1,0 +1,879 @@
+{
+  "$defs": {
+    "Approval": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reason_code": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasonCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reviewer": {
+          "default": "hemant",
+          "title": "Reviewer",
+          "type": "string"
+        },
+        "time_on_card_s": {
+          "default": 0,
+          "title": "Time On Card S",
+          "type": "integer"
+        },
+        "expected_reading_s": {
+          "default": 0,
+          "title": "Expected Reading S",
+          "type": "integer"
+        },
+        "too_fast": {
+          "default": false,
+          "title": "Too Fast",
+          "type": "boolean"
+        },
+        "canary": {
+          "default": false,
+          "title": "Canary",
+          "type": "boolean"
+        },
+        "pre_reveal_decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "revised_after_reveal": {
+          "default": false,
+          "title": "Revised After Reveal",
+          "type": "boolean"
+        },
+        "spot_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpotCheck"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "token": {
+          "default": "",
+          "title": "Token",
+          "type": "string"
+        }
+      },
+      "title": "Approval",
+      "type": "object"
+    },
+    "Asset": {
+      "additionalProperties": false,
+      "properties": {
+        "uri": {
+          "default": "",
+          "title": "Uri",
+          "type": "string"
+        },
+        "sha256": {
+          "default": "",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "c2pa_manifest_uri": {
+          "default": "",
+          "title": "C2Pa Manifest Uri",
+          "type": "string"
+        }
+      },
+      "title": "Asset",
+      "type": "object"
+    },
+    "Brief": {
+      "additionalProperties": false,
+      "properties": {
+        "topic": {
+          "default": "",
+          "title": "Topic",
+          "type": "string"
+        },
+        "format_id": {
+          "default": "",
+          "title": "Format Id",
+          "type": "string"
+        },
+        "anchor_elements": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Anchor Elements",
+          "type": "array"
+        },
+        "claims_allowed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Claims Allowed",
+          "type": "array"
+        },
+        "length_s": {
+          "default": 600,
+          "title": "Length S",
+          "type": "integer"
+        },
+        "lane": {
+          "$ref": "#/$defs/Lane",
+          "default": "low"
+        },
+        "sponsor_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sponsor Id"
+        }
+      },
+      "title": "Brief",
+      "type": "object"
+    },
+    "Channel": {
+      "enum": [
+        "A",
+        "B",
+        "C"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Url"
+        },
+        "source_quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Quote"
+        },
+        "status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "supported",
+            "unsupported",
+            "outdated",
+            "missing_source"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "Decision": {
+      "enum": [
+        "approve",
+        "reject",
+        "escalate"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "DisclosureGate": {
+      "additionalProperties": false,
+      "properties": {
+        "ai_label": {
+          "default": true,
+          "title": "Ai Label",
+          "type": "boolean"
+        },
+        "paid_promo": {
+          "default": false,
+          "title": "Paid Promo",
+          "type": "boolean"
+        },
+        "made_for_kids": {
+          "default": false,
+          "title": "Made For Kids",
+          "type": "boolean"
+        },
+        "mfk_score": {
+          "default": 0.0,
+          "title": "Mfk Score",
+          "type": "number"
+        },
+        "mfk_factors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Mfk Factors",
+          "type": "array"
+        },
+        "passed": {
+          "default": false,
+          "title": "Passed",
+          "type": "boolean"
+        }
+      },
+      "title": "DisclosureGate",
+      "type": "object"
+    },
+    "Draft": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "script": {
+          "default": "",
+          "title": "Script",
+          "type": "string"
+        },
+        "shot_list": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Shot List",
+          "type": "array"
+        },
+        "caption": {
+          "default": "",
+          "title": "Caption",
+          "type": "string"
+        },
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Claims",
+          "type": "array"
+        }
+      },
+      "title": "Draft",
+      "type": "object"
+    },
+    "EthicsGate": {
+      "additionalProperties": false,
+      "properties": {
+        "verdict": {
+          "$ref": "#/$defs/Verdict",
+          "default": "escalate"
+        },
+        "rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rule Ids",
+          "type": "array"
+        },
+        "evidence_spans": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Spans",
+          "type": "array"
+        },
+        "hard_rule_findings": {
+          "items": {
+            "$ref": "#/$defs/RuleFinding"
+          },
+          "title": "Hard Rule Findings",
+          "type": "array"
+        },
+        "judges": {
+          "items": {
+            "$ref": "#/$defs/JudgeResult"
+          },
+          "title": "Judges",
+          "type": "array"
+        },
+        "disagreement": {
+          "default": false,
+          "title": "Disagreement",
+          "type": "boolean"
+        }
+      },
+      "title": "EthicsGate",
+      "type": "object"
+    },
+    "FactsGate": {
+      "additionalProperties": false,
+      "properties": {
+        "unsupported_claims": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unsupported Claims",
+          "type": "array"
+        },
+        "checked": {
+          "default": 0,
+          "title": "Checked",
+          "type": "integer"
+        },
+        "passed": {
+          "default": false,
+          "title": "Passed",
+          "type": "boolean"
+        }
+      },
+      "title": "FactsGate",
+      "type": "object"
+    },
+    "Flags": {
+      "additionalProperties": false,
+      "properties": {
+        "injection_suspected": {
+          "default": false,
+          "title": "Injection Suspected",
+          "type": "boolean"
+        },
+        "injection_spans": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Injection Spans",
+          "type": "array"
+        },
+        "canary": {
+          "default": false,
+          "title": "Canary",
+          "type": "boolean"
+        },
+        "canary_fault_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canary Fault Type"
+        },
+        "gate_blind": {
+          "default": true,
+          "title": "Gate Blind",
+          "type": "boolean"
+        }
+      },
+      "title": "Flags",
+      "type": "object"
+    },
+    "Gates": {
+      "additionalProperties": false,
+      "properties": {
+        "originality": {
+          "$ref": "#/$defs/OriginalityGate"
+        },
+        "ethics": {
+          "$ref": "#/$defs/EthicsGate"
+        },
+        "disclosure": {
+          "$ref": "#/$defs/DisclosureGate"
+        },
+        "facts": {
+          "$ref": "#/$defs/FactsGate"
+        }
+      },
+      "title": "Gates",
+      "type": "object"
+    },
+    "HumanContribution": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "default": "opening_line",
+          "enum": [
+            "opening_line",
+            "commentary",
+            "format_decision"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        },
+        "author": {
+          "default": "hemant",
+          "title": "Author",
+          "type": "string"
+        }
+      },
+      "title": "HumanContribution",
+      "type": "object"
+    },
+    "JudgeResult": {
+      "additionalProperties": false,
+      "properties": {
+        "judge": {
+          "enum": [
+            "A",
+            "B",
+            "C"
+          ],
+          "title": "Judge",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "rule_findings": {
+          "items": {
+            "$ref": "#/$defs/RuleFinding"
+          },
+          "title": "Rule Findings",
+          "type": "array"
+        },
+        "explanation": {
+          "default": "",
+          "title": "Explanation",
+          "type": "string"
+        },
+        "status": {
+          "default": "ok",
+          "enum": [
+            "ok",
+            "blocked",
+            "refused",
+            "timeout"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "judge",
+        "model",
+        "verdict"
+      ],
+      "title": "JudgeResult",
+      "type": "object"
+    },
+    "Lane": {
+      "enum": [
+        "low",
+        "high"
+      ],
+      "title": "Lane",
+      "type": "string"
+    },
+    "Metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "views": {
+          "default": 0,
+          "title": "Views",
+          "type": "integer"
+        },
+        "avg_view_pct": {
+          "default": 0.0,
+          "title": "Avg View Pct",
+          "type": "number"
+        },
+        "rpm_usd": {
+          "default": 0.0,
+          "title": "Rpm Usd",
+          "type": "number"
+        },
+        "revenue_usd": {
+          "default": 0.0,
+          "title": "Revenue Usd",
+          "type": "number"
+        },
+        "cost_usd": {
+          "default": 0.0,
+          "title": "Cost Usd",
+          "type": "number"
+        },
+        "revenue_status": {
+          "default": "none",
+          "enum": [
+            "none",
+            "provisional",
+            "finalised"
+          ],
+          "title": "Revenue Status",
+          "type": "string"
+        }
+      },
+      "title": "Metrics",
+      "type": "object"
+    },
+    "OriginalityGate": {
+      "additionalProperties": false,
+      "properties": {
+        "max_similarity": {
+          "default": 0.0,
+          "title": "Max Similarity",
+          "type": "number"
+        },
+        "nearest_post_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Nearest Post Id"
+        },
+        "anchor_present": {
+          "default": false,
+          "title": "Anchor Present",
+          "type": "boolean"
+        },
+        "skeleton_share": {
+          "default": 0.0,
+          "title": "Skeleton Share",
+          "type": "number"
+        },
+        "passed": {
+          "default": false,
+          "title": "Passed",
+          "type": "boolean"
+        }
+      },
+      "title": "OriginalityGate",
+      "type": "object"
+    },
+    "Platform": {
+      "enum": [
+        "youtube_long",
+        "youtube_short",
+        "facebook",
+        "instagram"
+      ],
+      "title": "Platform",
+      "type": "string"
+    },
+    "PostStatus": {
+      "enum": [
+        "briefed",
+        "drafting",
+        "gated",
+        "rendering",
+        "awaiting_approval",
+        "approved",
+        "published",
+        "rejected",
+        "discarded",
+        "parked"
+      ],
+      "title": "PostStatus",
+      "type": "string"
+    },
+    "Publish": {
+      "additionalProperties": false,
+      "properties": {
+        "platform_post_ids": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Platform Post Ids",
+          "type": "object"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        }
+      },
+      "title": "Publish",
+      "type": "object"
+    },
+    "ReasonCode": {
+      "enum": [
+        "fact",
+        "ethics",
+        "disclosure",
+        "originality",
+        "title_mismatch",
+        "character_break",
+        "sponsor",
+        "language",
+        "other"
+      ],
+      "title": "ReasonCode",
+      "type": "string"
+    },
+    "RuleFinding": {
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/RuleOutcome"
+        },
+        "evidence_span": {
+          "default": "",
+          "title": "Evidence Span",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "outcome"
+      ],
+      "title": "RuleFinding",
+      "type": "object"
+    },
+    "RuleOutcome": {
+      "enum": [
+        "not_triggered",
+        "revise",
+        "escalate",
+        "block"
+      ],
+      "title": "RuleOutcome",
+      "type": "string"
+    },
+    "SpotCheck": {
+      "additionalProperties": false,
+      "description": "D34: one claim chosen at random, shown with its source quote.",
+      "properties": {
+        "claim_text": {
+          "title": "Claim Text",
+          "type": "string"
+        },
+        "reviewer_said_supported": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer Said Supported"
+        },
+        "actually_supported": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actually Supported"
+        },
+        "is_planted": {
+          "default": false,
+          "title": "Is Planted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "claim_text"
+      ],
+      "title": "SpotCheck",
+      "type": "object"
+    },
+    "Variant": {
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "$ref": "#/$defs/Platform"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "caption": {
+          "default": "",
+          "title": "Caption",
+          "type": "string"
+        },
+        "duration_s": {
+          "default": 0,
+          "title": "Duration S",
+          "type": "integer"
+        },
+        "script_cut": {
+          "default": "",
+          "title": "Script Cut",
+          "type": "string"
+        }
+      },
+      "required": [
+        "platform"
+      ],
+      "title": "Variant",
+      "type": "object"
+    },
+    "Verdict": {
+      "enum": [
+        "pass",
+        "fail",
+        "escalate"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    },
+    "Versions": {
+      "additionalProperties": false,
+      "properties": {
+        "prompts": {
+          "default": "1.1.1",
+          "title": "Prompts",
+          "type": "string"
+        },
+        "rulebook": {
+          "default": "1.0",
+          "title": "Rulebook",
+          "type": "string"
+        },
+        "anchor_registry": {
+          "default": "1.0",
+          "title": "Anchor Registry",
+          "type": "string"
+        }
+      },
+      "title": "Versions",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "post_id": {
+      "title": "Post Id",
+      "type": "string"
+    },
+    "channel_id": {
+      "$ref": "#/$defs/Channel"
+    },
+    "status": {
+      "$ref": "#/$defs/PostStatus",
+      "default": "briefed"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "versions": {
+      "$ref": "#/$defs/Versions"
+    },
+    "brief": {
+      "$ref": "#/$defs/Brief"
+    },
+    "draft": {
+      "$ref": "#/$defs/Draft"
+    },
+    "human_contribution": {
+      "$ref": "#/$defs/HumanContribution"
+    },
+    "variants": {
+      "items": {
+        "$ref": "#/$defs/Variant"
+      },
+      "title": "Variants",
+      "type": "array"
+    },
+    "gates": {
+      "$ref": "#/$defs/Gates"
+    },
+    "asset": {
+      "$ref": "#/$defs/Asset"
+    },
+    "approval": {
+      "$ref": "#/$defs/Approval"
+    },
+    "publish": {
+      "$ref": "#/$defs/Publish"
+    },
+    "metrics": {
+      "$ref": "#/$defs/Metrics"
+    },
+    "flags": {
+      "$ref": "#/$defs/Flags"
+    },
+    "history": {
+      "items": {
+        "type": "string"
+      },
+      "title": "History",
+      "type": "array"
+    }
+  },
+  "required": [
+    "channel_id"
+  ],
+  "title": "PostRecord",
+  "type": "object"
+}

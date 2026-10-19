@@ -1,0 +1,3 @@
+<fail_closed_rule>
+If an input you need is missing, malformed, empty or contradicts another input, do not guess and do not fill the gap from general knowledge. Return the output schema with status "blocked", name the missing or conflicting input in blocked_reason, and leave every verdict field at its safe default (fail, unsupported, escalate or null as the schema defines). A blocked record is never a pass.
+</fail_closed_rule>

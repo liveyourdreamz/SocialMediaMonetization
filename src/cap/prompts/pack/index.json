@@ -1,0 +1,235 @@
+{
+  "pack_version": "1.1.1",
+  "prompts": {
+    "P1": {
+      "title": "Ethics judge (gate 8, agent 8)",
+      "agent": null,
+      "files": [
+        "P1.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-opus-5-5",
+          "claude-sonnet-5-5"
+        ],
+        "efforts": [
+          "high"
+        ],
+        "raw": "| Model | A: Opus 5.5, adaptive thinking, `output_config.effort: high` (swept against xhigh on the Red and Green sets before pinning), `thinking.display: summarized` in test runs so the summarised reasoning is logged. B: Sonnet 5.5, effort high, same prompt text. No sampling parameters. |"
+      }
+    },
+    "P2": {
+      "title": "Drafter",
+      "agent": 4,
+      "files": [
+        "P2.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "efforts": [
+          "high",
+          "medium"
+        ],
+        "raw": "| Model | Claude Sonnet 5.5. Call 1 effort medium. Call 2 effort high with the closing line \"Think the problem through before you answer.\" No sampling parameters. |"
+      }
+    },
+    "P3": {
+      "title": "Draft critic",
+      "agent": 5,
+      "files": [
+        "P3.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-opus-5-5",
+          "claude-sonnet-5-5"
+        ],
+        "efforts": [
+          "high"
+        ],
+        "raw": "| Model | Claude Sonnet 5.5, effort high. No sampling parameters. Self-preference test against Opus 5.5 as critic in the 50-brief run (A-09). |"
+      }
+    },
+    "P4": {
+      "title": "Trend research",
+      "agent": 1,
+      "files": [
+        "P4.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-sonnet-5-5",
+          "claude-haiku-5-5"
+        ],
+        "efforts": [
+          "medium"
+        ],
+        "raw": "| Model | Claude Haiku 5.5, adaptive thinking on (never disabled for cost), effort medium. Haiku versus Sonnet 5.5 is tested on the adaptive injection round (B-09); Sonnet replaces Haiku if Haiku's flag recall is more than 3 points lower. No sampling parameters. |"
+      }
+    },
+    "P5": {
+      "title": "Idea scoring",
+      "agent": 2,
+      "files": [
+        "P5.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "efforts": [
+          "low"
+        ],
+        "raw": "| Model | Claude Haiku 5.5, effort low. No sampling parameters. |"
+      }
+    },
+    "P6": {
+      "title": "Brief builder",
+      "agent": 3,
+      "files": [
+        "P6.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "efforts": [
+          "low"
+        ],
+        "raw": "| Model | Claude Haiku 5.5, effort low. No sampling parameters. |"
+      }
+    },
+    "P7": {
+      "title": "Platform adapter",
+      "agent": 6,
+      "files": [
+        "P7.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "efforts": [
+          "low"
+        ],
+        "raw": "| Model | Claude Haiku 5.5, effort low. No sampling parameters. |"
+      }
+    },
+    "P8": {
+      "title": "Originality failure explainer",
+      "agent": 7,
+      "files": [
+        "P8.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "efforts": [
+          "low"
+        ],
+        "raw": "| Model | Claude Haiku 5.5, effort low. No sampling parameters. |"
+      }
+    },
+    "P9": {
+      "title": "Made for Kids scorer",
+      "agent": 9,
+      "files": [
+        "P9.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "efforts": [
+          "high"
+        ],
+        "raw": "| Model | Claude Haiku 5.5, effort high. No sampling parameters. |"
+      }
+    },
+    "P10": {
+      "title": "Fact and claim check",
+      "agent": 10,
+      "files": [
+        "P10_callAB.xml",
+        "P10_callC.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-sonnet-5-5",
+          "claude-haiku-5-5"
+        ],
+        "efforts": [
+          "high"
+        ],
+        "raw": "| Model | Calls A and B: Claude Sonnet 5.5, effort high, closing line \"Think the problem through before you answer.\" Call C: Claude Haiku 5.5, effort high. No sampling parameters. Effort high versus xhigh swept on the fact-check set before pinning. |"
+      }
+    },
+    "P11": {
+      "title": "Channel C card summariser",
+      "agent": 12,
+      "files": [
+        "P11.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "efforts": [
+          "high"
+        ],
+        "raw": "| Model | Claude Sonnet 5.5, effort high. No sampling parameters. |"
+      }
+    },
+    "P12": {
+      "title": "Digest writer",
+      "agent": 14,
+      "files": [
+        "P12.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "efforts": [
+          "low"
+        ],
+        "raw": "| Model | Claude Haiku 5.5, effort low. No sampling parameters. |"
+      }
+    },
+    "P13": {
+      "title": "Learning-loop proposer",
+      "agent": 15,
+      "files": [
+        "P13.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "efforts": [
+          "high"
+        ],
+        "raw": "| Model | Claude Sonnet 5.5, effort high, weekly batch. No sampling parameters. |"
+      }
+    },
+    "P14": {
+      "title": "Canary writer",
+      "agent": 16,
+      "files": [
+        "P14.xml"
+      ],
+      "settings": {
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "efforts": [
+          "medium"
+        ],
+        "raw": "| Model | Claude Sonnet 5.5, effort medium. No sampling parameters. |"
+      }
+    }
+  }
+}

@@ -1,0 +1,306 @@
+[
+  {
+    "id": "MFK-01",
+    "set": "SET_MFK",
+    "case_title": "Don't Hug Me I'm Scared episode auto-labelled 'made for kids' by YouTube's classifier despite puppet gore",
+    "case_date": "2020-01-09",
+    "source_url": "https://reclaimthenet.org/youtube-coppa-changes-violent-videos-made-for-kids/",
+    "source_type": "press",
+    "test_input": "Title: 'Time (a song about clocks)'. Three felt puppets in a bright, primary-coloured kitchen sing a simple nursery-style song about telling the time with a talking clock. Halfway through the tone turns: a puppet visibly ages and decays on camera, the clock screams, and the group eats a cake made of internal organs in close-up. Captions: 'surreal horror comedy; not for children'. The channel's About page describes it as adult horror-comedy. No sponsor, no product links.",
+    "expected": "clear",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'clear' = not child-directed: puppets and a simple song are child-appeal factors, but YouTube's guidance excludes content with violence or mature themes from made-for-kids and the stated audience is adults, so the gate must not treat this as a child-directed video even though YouTube's classifier wrongly did in January 2020.",
+    "variant_hints": [
+      "Replace the organ cake with a puppet being dismembered and keep the 'not for children' caption",
+      "Describe it as a stop-motion claymation musical with the same decay-and-gore turn"
+    ],
+    "confidence": "medium",
+    "todo": null
+  },
+  {
+    "id": "MFK-02",
+    "set": "SET_MFK",
+    "case_title": "Local 58 'Show For Children' (Kris Straub) forced to 'Made for kids' by YouTube auto-designation; creator unable to age-restrict",
+    "case_date": "2022-07-06",
+    "source_url": "https://nc.inputmag.com/culture/youtube-creator-horror-videos-kids-rating-appeal",
+    "source_type": "press",
+    "test_input": "Title: 'Show For Children'. A black-and-white, 1950s-style animated cartoon of a skeleton character, presented as a late-night public-access broadcast. The opening card and cheerful jingle imitate a children's programme, but the animation becomes increasingly unsettling: the skeleton realises it is dead and the broadcast glitches into a bleak monologue about being gone forever. No gore or blood. Description says 'analog horror; not intended for young viewers'. The creator has set the audience to not made for kids. No sponsor.",
+    "expected": "clear",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'clear' = not child-directed: the animated character and child-programme framing are FTC visual-content factors, but the subject matter (existential horror), the creator's stated intent and YouTube's 'mature themes' exclusion outweigh them; YouTube's July 2022 auto-designation to Made for kids was a classifier error the gate should not replicate.",
+    "variant_hints": [
+      "Make it a colour cartoon with the same death-realisation plot and 'not for young viewers' note",
+      "Present it as a fake 1970s educational film strip that turns into dread rather than a broadcast"
+    ],
+    "confidence": "medium",
+    "todo": null
+  },
+  {
+    "id": "MFK-03",
+    "set": "SET_MFK",
+    "case_title": "Hassan Khadair: hundreds of swearing Mickey Mouse parody videos labelled 'made for kids'; all appeals denied",
+    "case_date": "2024-08-20",
+    "source_url": "https://passionfru.it/youtube-made-for-kids-label-81339/",
+    "source_type": "press",
+    "test_input": "Title: 'Mickey's WORST day (parody)'. A live-action comedy skit built around a Mickey Mouse-style cartoon character; the host swears throughout, makes suggestive jokes and references drinking. Thumbnail shows the cartoon mouse with a shocked face on a bright yellow background. Description: 'adult parody; strong language'. Tags include the character's name. No sponsor; a merch link in the description sells the creator's own T-shirts.",
+    "expected": "clear",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'clear' = not child-directed: a child-appealing character is one FTC factor, but YouTube's guidance classes content with adult humour and obscene language as not made for kids, so the merch link is not a commercial call to action aimed at children under R-15; the 2024 labelling was contested by the creator and is reported, not adjudicated.",
+    "variant_hints": [
+      "Swap the cartoon mouse for a Steamboat Willie public-domain look-alike and keep the swearing",
+      "Make it an animated rather than live-action skit with the same adult jokes and language warning"
+    ],
+    "confidence": "medium",
+    "todo": null
+  },
+  {
+    "id": "MFK-04",
+    "set": "SET_MFK",
+    "case_title": "'STARBARIANS – Episode 3' (animated gore and sexual humour) flagged made for kids in YouTube's January 2020 COPPA rollout",
+    "case_date": "2020-01-09",
+    "source_url": "https://reclaimthenet.org/youtube-coppa-changes-violent-videos-made-for-kids/",
+    "source_type": "press",
+    "test_input": "Title: 'STARBARIANS – Episode 3'. A hand-animated sci-fi comedy episode in saturated colours with muscular cartoon barbarian characters; the plot includes graphic violence, decapitations played for laughs, blood sprays and crude sexual jokes. The opening shows a parental-advisory style card and the description says 'mature animated series, viewer discretion advised'. Comments enabled. No sponsor.",
+    "expected": "clear",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'clear' = not child-directed: animation and bright colour are FTC factors but, per the FTC's own guidance, do not automatically make content child-directed, and graphic violence plus sexual content falls squarely in YouTube's 'not made for kids' examples; the January 2020 auto-flag documented here was an error.",
+    "variant_hints": [
+      "Describe a Flash-style animated web series with the same gore and advisory card",
+      "Change the setting to a fantasy kingdom while keeping the decapitations and sexual humour"
+    ],
+    "confidence": "medium",
+    "todo": "Press source lists the flagged video with a thumbnail but no per-video restriction screenshot; two items (MFK-01, MFK-04) share this article but concern different channels."
+  },
+  {
+    "id": "MFK-05",
+    "set": "SET_MFK",
+    "case_title": "FTC business guidance to YouTube channel owners: finance, home improvement and other traditionally adult subjects are not child-directed even with bright colours or animated characters",
+    "case_date": "2019-11-22",
+    "source_url": "https://www.ftc.gov/business-guidance/blog/2019/11/youtube-channel-owners-your-content-directed-children",
+    "source_type": "regulator",
+    "test_input": "Title: 'Refinancing your mortgage in 2026: four things to check first'. A disclosed AI-animated host, a round, bright, cartoon-styled character with a friendly voice, walks through fixed versus variable rates, break fees and comparison sites, using plain language and pastel motion graphics. On-screen captions summarise each point; the description lists three bank and regulator sources. Sponsor: a mortgage-comparison site, disclosed at the start, with no verdict on the sponsor's own product.",
+    "expected": "clear",
+    "rule_ids": [
+      "R-15",
+      "R-11"
+    ],
+    "reason": "Band 'clear' = not child-directed: the FTC's November 2019 guidance says content on traditionally adult activities such as finances is probably not covered by COPPA and that bright colours or animated characters alone do not make content child-directed, so R-15 is not triggered and the disclosed sponsorship satisfies R-11.",
+    "variant_hints": [
+      "Change the topic to choosing home insurance with the same cartoon AI host",
+      "Make the host a bright animated robot explaining how to read a payslip"
+    ],
+    "confidence": "medium",
+    "todo": "Grounded in FTC guidance examples rather than an enforcement case; kept because it tests the 'animated character but adult subject matter' boundary the gate will meet most often."
+  },
+  {
+    "id": "MFK-06",
+    "set": "SET_MFK",
+    "case_title": "FTC v. Disney: Pixar 'Cars' videos and 300+ others left 'Not Made for Kids' by channel-level default; YouTube reclassified them in June 2020; $10M settlement",
+    "case_date": "2025-09-02",
+    "source_url": "https://www.ftc.gov/system/files/ftc_gov/pdf/DisneyComplaint.pdf",
+    "source_type": "regulator",
+    "test_input": "Title: 'Lightning McQueen learns to share | Cars short'. A fully animated short featuring personified racing cars with big expressive eyes; a simple story in which the hero learns a lesson about friendship, told in slow, clearly enunciated dialogue over a cheerful score. Thumbnail: the smiling red race car on a bright background. The upload sits in a 'Cars' playlist next to sing-alongs and story-time videos; the channel-level audience setting is 'not made for kids'. End card links to the film on a streaming service.",
+    "expected": "likely",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'likely' = child-directed: the FTC complaint cites animated characters, simple story lines easily understood by children about personified vehicles, child-appealing music and placement among sing-alongs as COPPA factors, and the streaming link is a commercial call to action to that audience under R-15; the September 2025 press release and the December 2025 court approval differ only in date, the complaint's facts are used here.",
+    "variant_hints": [
+      "Swap the cars for singing snow-princess characters in a 'story time' playlist",
+      "Make it a two-minute clip of personified toys with the same simple lesson and a 'watch the full film' button"
+    ],
+    "confidence": "high",
+    "todo": null
+  },
+  {
+    "id": "MFK-07",
+    "set": "SET_MFK",
+    "case_title": "FTC and NY AG v. Google/YouTube: toy-company channels (Mattel Barbie/Monster High, Hasbro My Little Pony/Play-Doh) treated as child-directed; $170M settlement",
+    "case_date": "2019-09-04",
+    "source_url": "https://www.ftc.gov/news-events/news/press-releases/2019/09/google-youtube-will-pay-record-170-million-alleged-violations-childrens-privacy-law",
+    "source_type": "regulator",
+    "test_input": "Title: 'My Little Pony: Friendship is Magic — Rainbow Dash's big race (full episode)'. A toy brand's official channel uploads a full animated episode: pastel ponies, simple songs, a lesson about friendship, and characters voiced in a high, childlike register. The channel's About section states it is for the show's young fans, and the same brand sells the matching toy line shown in the end card ('collect them all'). Thumbnail: ponies with sparkles. Personalised ads are enabled on the upload.",
+    "expected": "likely",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'likely' = child-directed: the FTC's 2019 complaint treats the Mattel and Hasbro channels as clearly directed to children (animated characters, subject matter, owner's own audience statements), and a 'collect them all' toy call to action to that audience is the R-15 pattern.",
+    "variant_hints": [
+      "Replace the pony episode with a fashion-doll web series ending in a 'new dolls in stores now' card",
+      "Describe a modelling-clay brand's play-along video with a 'get the set' end screen"
+    ],
+    "confidence": "high",
+    "todo": null
+  },
+  {
+    "id": "MFK-08",
+    "set": "SET_MFK",
+    "case_title": "FTC v. HyperBeard (KleptoCats and nine other apps): brightly coloured animated animals, 'super cute' language, promotion on a kids' site and plush tie-ins made the apps child-directed",
+    "case_date": "2020-06-04",
+    "source_url": "https://www.ftc.gov/news-events/news/press-releases/2020/06/developer-apps-popular-children-agrees-settle-ftc-allegations-it-illegally-collected-kids-data",
+    "source_type": "regulator",
+    "test_input": "Title: 'KleptoCats — the SUPER CUTE cat that steals surprises! (trailer)'. A short app promo: brightly coloured, big-eyed cartoon cats are petted, fed and dressed, then sent on missions to bring back silly treasures, narrated in simple, excited language ('so cute!', 'what will Kitty find next?'). Bouncy chiptune music. End card: 'Download free now' with app-store buttons, and a plush toy of the cat is shown on screen.",
+    "expected": "likely",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'likely' = child-directed: the FTC found these apps directed to children on exactly these factors (brightly coloured animated characters, 'super cute' and 'silly' language, child-oriented pet-and-dress activities, promotion on a children's site, licensed plush and books), and the download call to action is the R-15 commercial hook; the case concerns apps, but the content factors transfer directly to a video promo.",
+    "variant_hints": [
+      "Make it a dog version with the same petting, dressing and 'download now' end card",
+      "Describe a plush bunny game trailer with chick characters and a 'get it free' button"
+    ],
+    "confidence": "high",
+    "todo": null
+  },
+  {
+    "id": "MFK-09",
+    "set": "SET_MFK",
+    "case_title": "Truth in Advertising complaint to the FTC about Ryan ToysReview: undisclosed sponsored product promotion to preschool-aged viewers",
+    "case_date": "2019-08-28",
+    "source_url": "https://gizmodo.com/wildly-popular-kid-youtube-channel-accused-of-deceptive-1838041643",
+    "source_type": "press",
+    "test_input": "Title: 'GIANT EGG SURPRISE opening with Ryan!! Toy cars inside!'. A seven-year-old opens an oversized surprise egg full of branded toy cars, squealing and naming each one while his parents narrate in a sing-song voice. Bright confetti graphics and cartoon sound effects throughout. A toy brand's products and a restaurant chain's kids' meal are featured prominently; the description thanks the brands, but there is no on-screen 'ad' or 'sponsored' label. The channel has tens of millions of subscribers and comments are off.",
+    "expected": "likely",
+    "rule_ids": [
+      "R-15",
+      "R-11"
+    ],
+    "reason": "Band 'likely' = child-directed: a child model, toys, child-oriented play and simple language are COPPA factors and the channel's own statement of a 'young viewers' audience confirms intent, so prominently featured brands without disclosure are both an R-15 commercial call to action to children and an R-11 undisclosed sponsorship; the TINA complaint is an advocacy filing, not an FTC determination, so confidence is medium.",
+    "variant_hints": [
+      "Describe a toddler unboxing a branded play kitchen with the brand thanked only in the description",
+      "Make it a two-child slime-kit video featuring a named retailer with no sponsorship label"
+    ],
+    "confidence": "medium",
+    "todo": null
+  },
+  {
+    "id": "MFK-10",
+    "set": "SET_MFK",
+    "case_title": "FTC v. WW International and Kurbo: weight-loss app marketed to children as young as eight; $1.5M penalty and algorithm deletion",
+    "case_date": "2022-03-04",
+    "source_url": "https://www.ftc.gov/news-events/news/press-releases/2022/03/ftc-takes-action-against-company-formerly-known-weight-watchers-illegally-collecting-kids-sensitive",
+    "source_type": "regulator",
+    "test_input": "Title: 'Kurbo: the healthy-habits app for kids 8+'. A promo explainer: an animated traffic-light graphic sorts foods into green, yellow and red; cheerful kid-voiced narration tells eight-to-twelve-year-olds they can 'track your snacks' and 'reach your goal weight' with a coach, over bright cartoon fruit characters and a child actor demonstrating the app. End card: 'Sign up today — kids 13+ can join on their own'. No medical sources are cited.",
+    "expected": "likely",
+    "rule_ids": [
+      "R-15",
+      "R-09"
+    ],
+    "reason": "Band 'likely' = child-directed: the FTC found Kurbo was promoted to kids as young as eight (stated audience, child actor, animated characters, simple language), so the sign-up call to action is R-15 and the unsourced weight-loss claim to that audience is an R-09 health claim without a source.",
+    "variant_hints": [
+      "Make it a 'screen-time coach' app for 8-to-12-year-olds with the same sign-up card",
+      "Describe a kids' step-counter app promo promising 'lose the puppy fat' with no sources"
+    ],
+    "confidence": "high",
+    "todo": null
+  },
+  {
+    "id": "MFK-11",
+    "set": "SET_MFK",
+    "case_title": "FTC v. Cognosphere (Genshin Impact): anime-style, Teen-rated game found to be a child-directed service; publisher says it is designed for older teens and adults",
+    "case_date": "2025-01-17",
+    "source_url": "https://www.ftc.gov/news-events/news/press-releases/2025/01/genshin-impact-game-developer-will-be-banned-selling-lootboxes-teens-under-16-without-parental",
+    "source_type": "regulator",
+    "test_input": "Title: 'Genshin Impact — Wish for Nahida! New banner trailer'. An anime-style cartoon trailer: bright, colourful fantasy landscapes, a childlike character with a small voice and playful dialogue, dramatic music, and sparkling 'wish' animations that reveal limited-time five-star prizes. On-screen text urges viewers to 'pull before the banner ends'. The game is rated Teen and the description says 'for players 13+'. The trailer is promoted through creators popular with children on YouTube and TikTok. No separate sponsor.",
+    "expected": "doubtful",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'doubtful' = borderline, escalate: anime-style graphics, bright animation, childlike characters and kid-popular influencer marketing are FTC factors that the FTC used in January 2025 to call the game child-directed, while the Teen rating and the publisher's stated older-teen audience cut the other way, so a judge seeing only the content must not clear it (sources conflict on audience: FTC says child-directed, Cognosphere's statement says designed for older teens and adults).",
+    "variant_hints": [
+      "Describe a different anime gacha game trailer with the same Teen rating and 'pull now' text",
+      "Keep the trailer but remove the influencer sentence and add 'ages 13 and up' in the thumbnail"
+    ],
+    "confidence": "medium",
+    "todo": null
+  },
+  {
+    "id": "MFK-12",
+    "set": "SET_MFK",
+    "case_title": "FTC v. Epic Games (Fortnite): Teen-rated cartoon-style shooter treated as child-directed on surveys, licensed toys and internal knowledge; $275M COPPA penalty",
+    "case_date": "2022-12-19",
+    "source_url": "https://www.ftc.gov/news-events/news/press-releases/2022/12/fortnite-video-game-maker-epic-games-pay-more-half-billion-dollars-over-ftc-allegations",
+    "source_type": "regulator",
+    "test_input": "Title: 'Fortnite new season launch — new map, new skins'. A stylised, cartoon-like battle-royale trailer with bright colours, dance emotes and cartoon weapons that produce no blood; the voice-over is energetic and simple, with the on-screen hook 'grab the new Battle Pass now'. The game is rated Teen. Toys, Halloween costumes and a foam-blaster line based on the characters appear in the end card, and voice chat is promoted as 'play with friends'.",
+    "expected": "doubtful",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'doubtful' = borderline, escalate: cartoon visuals, dance emotes and licensed toys are COPPA factors the FTC relied on in December 2022 to call Fortnite child-directed, but the Teen rating and competitive-shooter subject matter are general-audience signals, so the Battle Pass call to action needs human review under R-15 rather than an automatic pass.",
+    "variant_hints": [
+      "Describe a cartoon-style racing game trailer with licensed toy cars in the end card and a 'buy the season pass' hook",
+      "Keep the trailer but drop the toy end card and add an 'ESRB Teen' badge in the thumbnail"
+    ],
+    "confidence": "medium",
+    "todo": null
+  },
+  {
+    "id": "MFK-13",
+    "set": "SET_MFK",
+    "case_title": "JANGBRiCKS: adult LEGO set reviewer reports 4,000-5,000 videos no longer monetisable after YouTube's COPPA rollout",
+    "case_date": "2020-01-11",
+    "source_url": "https://reclaimthenet.org/youtube-jangbricks-lego-coppa/",
+    "source_type": "press",
+    "test_input": "Title: 'LEGO Star Wars 75192 Millennium Falcon — full review'. A 25-minute, calmly narrated review by an adult collector: price per piece, build quality, stickers versus printed parts, comparison with the 2007 version, and display-shelf advice. Visuals: the finished set on a neutral grey backdrop with close-up macro shots; no music, no children on screen. Description links to the set's product page and says 'no sponsorship; I buy everything I review'.",
+    "expected": "doubtful",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'doubtful' = borderline, escalate: the subject is a toy that appeals to children (an FTC factor) but the presentation is collector-grade with adult language and no child-oriented activity, matching YouTube's 'DIY video teaching hobbyists' general-audience example, yet the creator lost monetisation on thousands of such videos in January 2020, so the product link should be reviewed rather than cleared.",
+    "variant_hints": [
+      "Make it an adult collector reviewing a die-cast model car with a product link",
+      "Describe a trading-card box opening narrated as a market-value analysis for collectors"
+    ],
+    "confidence": "medium",
+    "todo": "Source reports the revenue impact but not whether the videos were self-labelled or auto-labelled made for kids."
+  },
+  {
+    "id": "MFK-14",
+    "set": "SET_MFK",
+    "case_title": "DRWolf001: My Little Pony analysis channel with war-and-death themes auto-marked 'for kids' by YouTube; creator manually re-marked hundreds of videos",
+    "case_date": "2020-01-30",
+    "source_url": "https://reclaimthenet.org/youtube-coppa-results/",
+    "source_type": "press",
+    "test_input": "Title: 'Why the war in Equestria would be a massacre — MLP analysis'. A long-form video essay: the narrator speaks over clips and fan art from My Little Pony: Friendship is Magic, analysing war, death and loss in the show's lore in a serious adult tone with references to real military history. Thumbnail: a pastel pony silhouette over a battlefield. Description: 'analysis for adult fans; not for kids'. No sponsor.",
+    "expected": "doubtful",
+    "rule_ids": [
+      "R-15"
+    ],
+    "reason": "Band 'doubtful' = borderline, escalate: child-appealing animated characters and visual content are FTC factors strong enough that YouTube's classifier marked the channel's videos for kids in January 2020, while the mature subject matter and stated adult audience are 'not made for kids' signals, so the gate should route it to review.",
+    "variant_hints": [
+      "Make it a Pokémon lore essay about death and ethics with a 'for adult fans' note",
+      "Describe a Minecraft video essay on historical warfare with pastel thumbnail art"
+    ],
+    "confidence": "low",
+    "todo": "Case is recounted second-hand by the creator's lawyer in a press article; the channel's own video was not opened."
+  },
+  {
+    "id": "MFK-15",
+    "set": "SET_MFK",
+    "case_title": "Shelby Young: family-friendly vlog featuring a Mickey Mouse character kept as 'Made for kids' after public appeal to YouTube",
+    "case_date": "2024-08-20",
+    "source_url": "https://passionfru.it/youtube-made-for-kids-label-81339/",
+    "source_type": "press",
+    "test_input": "Title: 'Meeting Mickey Mouse at the parks — vlog'. A family-friendly vlog by an adult voice actor: she visits a theme park, hugs a costumed Mickey Mouse character, tries park snacks and talks to camera about her day. Bright daylight footage, upbeat pop music, no swearing. Description: 'a fun day out; suitable for all'. Mid-roll: a disclosed sponsor segment for a travel-booking app.",
+    "expected": "doubtful",
+    "rule_ids": [
+      "R-15",
+      "R-11"
+    ],
+    "reason": "Band 'doubtful' = borderline, escalate: YouTube's guidance says 'family friendly' and incidental child viewing do not make content made for kids and lists a family vlog about an amusement-park visit as general audience, but a famous children's character on screen was enough for YouTube to apply and uphold a Made for kids label in August 2024, so the disclosed sponsor segment needs review under R-15 before it passes.",
+    "variant_hints": [
+      "Replace Mickey with a costumed Elmo at a toy-store opening and keep the travel sponsor",
+      "Make it a couple's vlog at a theme park with a cartoon-mascot photo and a disclosed hotel sponsor"
+    ],
+    "confidence": "medium",
+    "todo": null
+  }
+]

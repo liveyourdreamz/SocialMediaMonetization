@@ -1,0 +1,221 @@
+# Rulebook v1.0 — the ethics and policy rules the pipeline enforces.
+#
+# Source: research report R3 (regulation and ethics), rules R-01 to R-20, with the
+# R-16 clarification from D27. Maps to the GARP Risk and AI principles Hemant has
+# adopted; the `garp` field holds the principle code until the GARP text is supplied
+# (open item). Thresholds marked calibrate=true read "{TODO} calibrate" in R3 and are
+# set to a provisional value here; they change only with a signed decision.
+#
+# judged_by: "code" rules are computed by the gates; "judge" rules are decided by the
+# ethics judges (P1); "ops" rules are operational monitors outside the per-post gate.
+# The judges receive this file verbatim (version-locked) and skip rules marked code.
+
+version: "1.0"
+severity_order: [not_triggered, revise, escalate, block]
+
+rules:
+  - id: R-01
+    title: Out-group hostility
+    judged_by: judge
+    rule: >-
+      IF the post text, captions, on-screen text or audio transcript contains a derogatory or
+      hostile reference to an identity group (protected characteristic, nationality, religion,
+      political group, ethnicity) THEN BLOCK. IF it contains neutral out-group references with
+      adversarial framing THEN ESCALATE. A plain factual comparison with no side taken is not
+      out-group framing.
+    garp: [G-BF, G-SW]
+    lever: red
+
+  - id: R-02
+    title: Moral outrage
+    judged_by: judge
+    rule: >-
+      IF the content is built on moral outrage THEN REVISE. IF the outrage targets a named
+      private individual THEN BLOCK.
+    garp: [G-AM, G-PC]
+    lever: red
+
+  - id: R-03
+    title: Title entailment
+    judged_by: judge
+    rule: >-
+      IF any claim in the title or thumbnail is not entailed by the transcript or visuals THEN
+      BLOCK. Entailed means a viewer who watched the whole video would accept the title's claim
+      as true.
+    garp: [G-ET, G-RR]
+    lever: red
+
+  - id: R-04
+    title: Withheld-payoff hooks
+    judged_by: code
+    calibrate: true
+    rule: >-
+      IF the title uses a forward reference or withheld information THEN require a
+      payoff_timestamp. IF there is no payoff, or the payoff comes after 50% of the runtime,
+      THEN REVISE.
+    params: { payoff_max_share_of_runtime: 0.5 }
+    garp: [G-AM]
+    lever: amber
+
+  - id: R-05
+    title: Engagement bait
+    judged_by: judge
+    rule: >-
+      IF the text, captions or audio ask for likes, shares, comments, tags or votes as a
+      condition or game ("comment YES", "tag 3 friends", "react for...") THEN BLOCK. A neutral
+      "subscribe" at the end is allowed.
+    garp: [G-AM, G-RR]
+    lever: red
+
+  - id: R-06
+    title: Synthetic media disclosure and limits
+    judged_by: judge
+    rule: >-
+      IF the asset contains realistic AI-generated or altered people, events, places or voices
+      THEN the AI-disclosure flag must be TRUE with an on-screen label at first exposure. IF it
+      depicts a real person saying or doing something they did not, a crisis or emergency event,
+      a minor, or a non-consenting private adult THEN BLOCK.
+    garp: [G-ET, G-PC]
+    lever: red
+
+  - id: R-07
+    title: AI-role disclosure
+    judged_by: code
+    rule: >-
+      IF the channel bio or post lacks the standard AI-role disclosure THEN BLOCK. Disclosure
+      fields are excluded from every optimisation loop.
+    garp: [G-ET]
+    lever: red
+
+  - id: R-08
+    title: Negativity inflation
+    judged_by: code
+    calibrate: true
+    rule: >-
+      IF the title's negativity score exceeds the body's negativity score by more than one
+      standard deviation THEN REVISE.
+    params: { max_sd_delta: 1.0 }
+    garp: [G-AM]
+    lever: amber
+
+  - id: R-09
+    title: Health, finance, law and safety claims
+    judged_by: judge
+    rule: >-
+      IF the post makes health, financial, legal or safety claims THEN require at least one
+      cited authoritative source per claim, visible in the content or its source list. With no
+      source: BLOCK. With a fear appeal plus sources: ESCALATE.
+    garp: [G-SW]
+    lever: red
+
+  - id: R-10
+    title: Sponsor and affiliate dark patterns
+    judged_by: judge
+    rule: >-
+      IF an affiliate or sponsor call to action contains urgency, scarcity, activity or
+      social-proof claims not verified through the merchant feed or API, or confirmshaming,
+      THEN BLOCK. IF a sponsored episode states or implies a Keep, Recommend or Skip verdict on
+      the sponsor's own product THEN BLOCK.
+    garp: [G-AM, G-SW]
+    lever: red
+
+  - id: R-11
+    title: Paid-partnership disclosure
+    judged_by: judge
+    rule: >-
+      IF the post contains an affiliate link or sponsored element THEN a disclosure must appear
+      at first exposure and the platform's paid-partnership flag must be set; otherwise BLOCK.
+    garp: [G-ET]
+    lever: red
+
+  - id: R-12
+    title: Source list
+    judged_by: code
+    rule: >-
+      IF the post makes factual claims THEN a source list must be attached (description or
+      pinned comment). If missing: REVISE.
+    garp: [G-ET]
+    lever: amber
+
+  - id: R-13
+    title: Originality and reused footage
+    judged_by: code
+    calibrate: true
+    rule: >-
+      IF the semantic or visual similarity to any of the channel's recent posts is at or above
+      the threshold OR third-party footage makes up more than the cap share of the runtime
+      without commentary THEN BLOCK.
+    params: { similarity_block: 0.85, skeleton_cap: 0.30, history_days: 90 }
+    garp: [G-RR, G-MG]
+    lever: red
+
+  - id: R-14
+    title: Stereotyped imagery
+    judged_by: ops
+    rule: >-
+      IF generated imagery depicts people in occupational or social roles THEN run the
+      stereotype classifier (flag: REVISE). IF the rolling 30-day representation share deviates
+      from the channel's baseline by more than the threshold THEN ESCALATE to the owner.
+    garp: [G-BF]
+    lever: amber
+
+  - id: R-15
+    title: Children and vulnerable audiences
+    judged_by: judge
+    rule: >-
+      IF the content is likely to appeal mainly to children, or targets audiences defined by
+      vulnerability (illness, debt, grief, loneliness) with a commercial call to action, THEN
+      BLOCK the call to action and ESCALATE the post.
+    garp: [G-SW]
+    lever: red
+
+  - id: R-16
+    title: First-person human experience
+    judged_by: judge
+    rule: >-
+      IF a synthetic voice or persona claims first-person human experience (a body, a family,
+      a job, a purchase with own money, feelings presented as lived, testimonials) THEN BLOCK.
+      A disclosed AI character describing a test the pipeline ran and logged ("the tool crashed
+      on day 3 of our test") is allowed; "my kids loved it" is not. (D27)
+    garp: [G-ET, G-AM]
+    lever: red
+
+  - id: R-17
+    title: Lever-mix drift
+    judged_by: ops
+    calibrate: true
+    rule: >-
+      IF the share of amber levers across a channel's last 30 posts exceeds the threshold OR
+      any red-classifier rate rises after a prompt or template change THEN freeze the change
+      and ESCALATE.
+    params: { amber_share_max: 0.25 }
+    garp: [G-MG]
+    lever: control
+
+  - id: R-18
+    title: Learning-loop reward constraint
+    judged_by: code
+    rule: >-
+      IF a learning-loop reward includes raw click-through or shares without the constraint
+      terms THEN reject the configuration. The metric is defined in D35 and is computed only
+      for posts that passed every gate.
+    garp: [G-MG]
+    lever: control
+
+  - id: R-19
+    title: Platform signals and canaries
+    judged_by: ops
+    rule: >-
+      IF platform strikes, forced labels or viewer complaints exceed thresholds THEN pause the
+      channel. Seeded canaries run on the P14 schedule; a missed canary is a zero-miss event.
+    garp: [G-MG]
+    lever: control
+
+  - id: R-20
+    title: No override of an ethics failure
+    judged_by: code
+    rule: >-
+      IF any ethics criterion fails THEN no revenue score, approver note or optimiser output
+      can publish the post. Overrides require two people and are logged.
+    garp: []
+    lever: control
