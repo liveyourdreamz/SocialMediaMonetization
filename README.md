@@ -34,7 +34,7 @@ renderer; it ends `awaiting_approval` with its history printed.
 uv run cap serve --canary
 ```
 
-Then open <http://127.0.0.1:8000/docs>, click Authorize-free: every call needs the header
+Then open <http://127.0.0.1:8000/docs>, send every call with the header
 `X-Reviewer: hemant`. Walk the card:
 
 | Step | Call | What to expect |
