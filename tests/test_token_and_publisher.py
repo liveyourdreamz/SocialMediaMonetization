@@ -25,9 +25,27 @@ def test_token_round_trip_and_binding(tmp_path):
     assert tok.verify(t, r.post_id, r.asset.sha256) == (True, "ok")
     # tampering with any field breaks the signature
     bad = tok.ApprovalToken(**{**t.__dict__, "decision": "approve", "post_id": "other"})
-    assert tok.verify(bad, "other", r.asset.sha256)[0] is False
+    assert tok.verify(bad, "other", r.asset.sha256) == (False, "bad signature")
     # re-rendered file: hash mismatch
-    assert tok.verify(t, r.post_id, "0" * 64)[0] is False
+    assert tok.verify(t, r.post_id, "0" * 64)[1].startswith("asset hash")
+    # an unauthorised reviewer cannot get a token at all
+    with pytest.raises(PermissionError):
+        tok.issue(r.post_id, r.asset.sha256, "intruder", "approve", canary=False)
+    # an expired token is refused
+    old = tok.ApprovalToken(**{**t.__dict__, "issued_at": "2020-01-01T00:00:00+00:00"})
+    assert tok.verify(old, r.post_id, r.asset.sha256)[1] == "bad signature"  # re-signed below
+    import hashlib
+    import hmac
+
+    from cap.config import get_settings
+
+    sig = hmac.new(
+        get_settings().approval_signing_key.get_secret_value().encode(),
+        old.payload(),
+        hashlib.sha256,
+    ).hexdigest()
+    old = tok.ApprovalToken(**{**old.__dict__, "signature": sig})
+    assert tok.verify(old, r.post_id, r.asset.sha256) == (False, "token has expired")
     # encode/decode is lossless
     assert tok.ApprovalToken.decode(t.encode()) == t
 
@@ -42,7 +60,16 @@ def test_publisher_happy_path(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "break_it", ["canary", "not_approved", "gate_failed", "file_changed", "reject_token"]
+    "break_it",
+    [
+        "canary",
+        "not_approved",
+        "gate_failed",
+        "file_changed",
+        "reject_token",
+        "no_permit",
+        "no_hash",
+    ],
 )
 def test_publisher_refuses(tmp_path, break_it):
     r, asset = _approved_record(tmp_path)
@@ -57,6 +84,12 @@ def test_publisher_refuses(tmp_path, break_it):
         asset.write_text("someone edited the file after approval")
     elif break_it == "reject_token":
         t = tok.issue(r.post_id, r.asset.sha256, "hemant", "reject", canary=False)
+    elif break_it == "no_permit":
+        from cap.schema.post_record import Sponsor
+
+        r.sponsor = Sponsor(sponsor_id="s", name="NoteCo", permit_status="applied")
+    elif break_it == "no_hash":
+        r.asset.sha256 = ""
     with pytest.raises(PublishRefusedError):
         publish(r, asset, t, DryRunAdapter())
     assert r.status != PostStatus.PUBLISHED

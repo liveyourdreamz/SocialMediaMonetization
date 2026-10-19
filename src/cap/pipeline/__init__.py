@@ -18,7 +18,8 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from cap.agents import AgentBlockedError, adapt, critique, draft
+from cap.agents import AgentBlockedError, adapt, critique, critique_text, draft
+from cap.approval.card import prepare_card
 from cap.config import get_settings
 from cap.gates import (
     InMemoryHistory,
@@ -28,7 +29,7 @@ from cap.gates import (
     check_originality,
 )
 from cap.models import ModelClient, SourceDoc
-from cap.schema.post_record import Platform, PostRecord, PostStatus
+from cap.schema.post_record import OriginalityGate, Platform, PostRecord, PostStatus
 
 
 class PipelineState(TypedDict, total=False):
@@ -40,10 +41,12 @@ class PipelineState(TypedDict, total=False):
 @dataclass
 class PipelineDeps:
     client: ModelClient
-    history: InMemoryHistory = field(default_factory=lambda: InMemoryHistory(posts=[]))
+    history: InMemoryHistory = field(default_factory=InMemoryHistory)
     anchor_elements: dict[str, list[str]] = field(default_factory=dict)  # channel -> elements
     character_blocks: dict[str, str] = field(default_factory=dict)  # channel -> text
     render_dir: Path = field(default_factory=lambda: Path("renders"))
+    test_logs: dict[str, str] = field(default_factory=dict)  # post_id -> logged test
+    checkpointer: Any | None = None  # built once at app start; MemorySaver if None
 
 
 def _rec(state: PipelineState) -> PostRecord:
@@ -51,7 +54,7 @@ def _rec(state: PipelineState) -> PostRecord:
 
 
 def _put(record: PostRecord, **extra: Any) -> PipelineState:
-    out: PipelineState = {"record": record.model_dump(mode="json")}
+    out: PipelineState = {"record": record.model_dump(mode="json", by_alias=True)}
     out.update(extra)  # type: ignore[typeddict-item]
     return out
 
@@ -66,6 +69,7 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
                 deps.client,
                 _sources(state),
                 deps.character_blocks.get(record.channel_id.value, ""),
+                test_log=deps.test_logs.get(record.post_id, ""),
             )
         except AgentBlockedError as e:
             return _park(record, str(e))
@@ -73,19 +77,21 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
 
     def n_critic(state: PipelineState) -> PipelineState:
         record = _rec(state)
+        block = deps.character_blocks.get(record.channel_id.value, "")
         try:
-            record, accepted = critique(record, deps.client)
+            record, accepted = critique(record, deps.client, block)
         except AgentBlockedError as e:
             return _park(record, str(e))
         if not accepted:
-            # one revision pass: Foundation re-runs the drafter once with the critique
-            # attached (the critic's issues are in the history log for now)
+            # one revision pass (PRD agent 5): the drafter sees the critique this time
             try:
                 record = draft(
                     record,
                     deps.client,
                     _sources(state),
-                    deps.character_blocks.get(record.channel_id.value, ""),
+                    block,
+                    test_log=deps.test_logs.get(record.post_id, ""),
+                    critique=critique_text(record),
                 )
             except AgentBlockedError as e:
                 return _park(record, str(e))
@@ -103,18 +109,26 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
         record = _rec(state)
         record.status = PostStatus.GATED
         sources = _sources(state)
-        record.gates.originality = check_originality(
-            record, deps.history, deps.anchor_elements.get(record.channel_id.value, [])
-        )
+        anchors = deps.anchor_elements.get(record.channel_id.value, [])
+        record.gates.originality = _originality_over_variants(record, deps, anchors)
         record.gates.ethics = check_ethics(record, deps.client)
         record.gates.disclosure = check_disclosure(record, deps.client)
-        facts, injection = check_facts(record, deps.client, sources)
+        try:
+            facts, injection = check_facts(
+                record, deps.client, sources, test_log=deps.test_logs.get(record.post_id, "")
+            )
+        except AgentBlockedError as e:
+            return _park(record, str(e))
         record.gates.facts = facts
         if injection:
             record.flags.injection_suspected = True
             return _park(record, "injection suspected in fetched content; parked for review")
         if record.gates.ethics.verdict.value == "escalate":
             return _park(record, "ethics gate escalated")
+        if record.gates.disclosure.mfk_band in ("doubtful", "unscored"):
+            return _park(
+                record, f"made-for-kids {record.gates.disclosure.mfk_band}: Hemant decides"
+            )
         if not record.gates.all_passed:
             record.status = PostStatus.REJECTED
             record.log("gates failed: " + ", ".join(_failed_gates(record)))
@@ -133,6 +147,7 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
         record.asset.uri = str(path)
         record.asset.sha256 = hashlib.sha256(content.encode()).hexdigest()
         record.status = PostStatus.AWAITING_APPROVAL
+        prepare_card(record)  # D34: spot check and reading threshold fixed at queue time
         record.log("rendered (stand-in) and queued for approval")
         return _put(record)
 
@@ -152,6 +167,24 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
     g.add_conditional_edges("gates", route_after, {END: END, "next": "render"})
     g.add_edge("render", END)
     return g
+
+
+def _originality_over_variants(
+    record: PostRecord, deps: PipelineDeps, anchors: list[str]
+) -> OriginalityGate:
+    """PRD 4.12: the Short reusing a cold open must fail too, so the check runs on the
+    draft and on every variant's own text; the worst similarity is kept and the gate
+    passes only if every check passes."""
+    results = [check_originality(record, deps.history, anchors)]
+    for v in record.variants:
+        if not v.script_cut:
+            continue
+        probe = record.model_copy(deep=True)
+        probe.draft.title, probe.draft.script = v.title, v.script_cut
+        results.append(check_originality(probe, deps.history, anchors, require_anchor=False))
+    worst = max(results, key=lambda g: g.max_similarity)
+    worst.passed = all(g.passed for g in results)
+    return worst
 
 
 def _sources(state: PipelineState) -> list[SourceDoc]:
@@ -211,7 +244,7 @@ def run_post(
     deps: PipelineDeps,
     checkpointer: Any | None = None,
 ) -> PostRecord:
-    app = compile_pipeline(deps, checkpointer)
+    app = compile_pipeline(deps, checkpointer or deps.checkpointer)
     config = {"configurable": {"thread_id": record.post_id}}
     final = app.invoke(
         {"record": record.model_dump(mode="json"), "sources": sources}, config=config

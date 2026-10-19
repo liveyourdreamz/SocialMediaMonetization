@@ -50,8 +50,12 @@ def publish(
         raise PublishRefusedError(f"record status is {record.status.value}")
     if not record.gates.all_passed:
         raise PublishRefusedError("a gate did not pass; R-20 forbids any override here")
+    if record.sponsor is not None and record.sponsor.permit_status != "granted":
+        raise PublishRefusedError("sponsored post without the UAE permit (PRD 4.6)")
+    if not record.asset.sha256:
+        raise PublishRefusedError("record carries no asset hash")
     digest = sha256_file(asset)
-    if record.asset.sha256 and record.asset.sha256 != digest:
+    if record.asset.sha256 != digest:
         raise PublishRefusedError("rendered file changed since the record was approved")
     ok, reason = verify(token, record.post_id, digest)
     if not ok:

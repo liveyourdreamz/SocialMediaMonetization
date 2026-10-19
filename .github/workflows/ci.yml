@@ -11,9 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
       - name: Install
         run: |
-          uv venv .venv
+          uv venv --python 3.12 .venv
           uv pip install -e ".[dev]"
       - name: Lint
         run: .venv/bin/ruff check src tests scripts && .venv/bin/ruff format --check src tests scripts

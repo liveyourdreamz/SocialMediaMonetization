@@ -129,6 +129,11 @@
           "title": "Topic",
           "type": "string"
         },
+        "fast_moving": {
+          "default": false,
+          "title": "Fast Moving",
+          "type": "boolean"
+        },
         "format_id": {
           "default": "",
           "title": "Format Id",
@@ -315,6 +320,40 @@
       "title": "ClaimCheckResult",
       "type": "object"
     },
+    "CriticIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "rubric_item": {
+          "title": "Rubric Item",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "blocker",
+            "major",
+            "minor"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "span": {
+          "default": "",
+          "title": "Span",
+          "type": "string"
+        },
+        "instruction": {
+          "default": "",
+          "title": "Instruction",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rubric_item",
+        "severity"
+      ],
+      "title": "CriticIssue",
+      "type": "object"
+    },
     "Decision": {
       "enum": [
         "approve",
@@ -335,6 +374,11 @@
         "paid_promo": {
           "default": false,
           "title": "Paid Promo",
+          "type": "boolean"
+        },
+        "ad_prefix_ok": {
+          "default": true,
+          "title": "Ad Prefix Ok",
           "type": "boolean"
         },
         "made_for_kids": {
@@ -399,12 +443,48 @@
           "title": "Caption",
           "type": "string"
         },
+        "on_screen_text": {
+          "items": {
+            "type": "string"
+          },
+          "title": "On Screen Text",
+          "type": "array"
+        },
+        "thumbnail_text": {
+          "default": "",
+          "title": "Thumbnail Text",
+          "type": "string"
+        },
         "claims": {
           "items": {
             "$ref": "#/$defs/Claim"
           },
           "title": "Claims",
           "type": "array"
+        },
+        "source_list": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source List",
+          "type": "array"
+        },
+        "critic_issues": {
+          "items": {
+            "$ref": "#/$defs/CriticIssue"
+          },
+          "title": "Critic Issues",
+          "type": "array"
+        },
+        "critic_verdict": {
+          "default": "",
+          "enum": [
+            "",
+            "accept",
+            "revise"
+          ],
+          "title": "Critic Verdict",
+          "type": "string"
         }
       },
       "title": "Draft",
@@ -537,9 +617,35 @@
           ],
           "default": null
         },
+        "planted_fault": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlantedFault"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "canary_outcome": {
+          "default": "",
+          "enum": [
+            "",
+            "caught",
+            "missed"
+          ],
+          "title": "Canary Outcome",
+          "type": "string"
+        },
         "gate_blind": {
           "default": true,
           "title": "Gate Blind",
+          "type": "boolean"
+        },
+        "card_prepared": {
+          "default": false,
+          "title": "Card Prepared",
           "type": "boolean"
         }
       },
@@ -781,6 +887,29 @@
         }
       },
       "title": "OriginalityGate",
+      "type": "object"
+    },
+    "PlantedFault": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/FaultType"
+        },
+        "span": {
+          "title": "Span",
+          "type": "string"
+        },
+        "why_catchable": {
+          "default": "",
+          "title": "Why Catchable",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "span"
+      ],
+      "title": "PlantedFault",
       "type": "object"
     },
     "Platform": {
@@ -1026,6 +1155,18 @@
         "script_cut": {
           "default": "",
           "title": "Script Cut",
+          "type": "string"
+        },
+        "on_screen_text": {
+          "items": {
+            "type": "string"
+          },
+          "title": "On Screen Text",
+          "type": "array"
+        },
+        "thumbnail_text": {
+          "default": "",
+          "title": "Thumbnail Text",
           "type": "string"
         }
       },

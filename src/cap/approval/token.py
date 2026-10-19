@@ -15,10 +15,11 @@ import hashlib
 import hmac
 import json
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from cap.config import LOCAL_DEFAULT_KEY, get_settings
+from cap.policy import TOKEN_TTL_HOURS
 
 
 def sha256_file(path: Path) -> str:
@@ -58,7 +59,10 @@ def _key() -> bytes:
 
 def assert_production_key() -> None:
     s = get_settings()
-    if s.env != "local" and s.approval_signing_key.get_secret_value() == LOCAL_DEFAULT_KEY:
+    if (
+        s.env not in ("local", "test")
+        and s.approval_signing_key.get_secret_value() == LOCAL_DEFAULT_KEY
+    ):
         raise RuntimeError("CAP_APPROVAL_SIGNING_KEY must be set outside the local environment")
 
 
@@ -66,6 +70,10 @@ def issue(
     post_id: str, asset_sha256: str, reviewer: str, decision: str, canary: bool
 ) -> ApprovalToken:
     assert_production_key()
+    if reviewer not in get_settings().approvers:
+        raise PermissionError(f"{reviewer} is not an authorised approver (D5)")
+    if not asset_sha256:
+        raise ValueError("no asset hash to bind the token to")
     t = ApprovalToken(
         post_id=post_id,
         asset_sha256=asset_sha256,
@@ -91,4 +99,12 @@ def verify(token: ApprovalToken, post_id: str, asset_sha256: str) -> tuple[bool,
         return False, f"decision is {token.decision}, not approve"
     if token.canary:
         return False, "canary posts are never published"
+    if token.reviewer not in get_settings().approvers:
+        return False, "token reviewer is not an authorised approver"
+    try:
+        issued = datetime.fromisoformat(token.issued_at)
+    except ValueError:
+        return False, "token has no valid issue time"
+    if datetime.now(UTC) - issued > timedelta(hours=TOKEN_TTL_HOURS):
+        return False, "token has expired"
     return True, "ok"

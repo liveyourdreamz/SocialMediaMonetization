@@ -161,7 +161,22 @@ def test_settings_guards_outside_local():
             model_backend="anthropic",
             _env_file=None,
         )
+    with pytest.raises(ValueError, match="DEV_REVIEWER_HEADER"):
+        Settings(
+            env="prod",
+            approval_signing_key="x" * 40,
+            gcp_region="me-central1",
+            dev_reviewer_header=True,
+            _env_file=None,
+        )
     assert Settings(env="local", _env_file=None).gcp_region == "TODO-D13"
+
+
+def test_managed_runtime_is_production_whatever_env_says(monkeypatch):
+    monkeypatch.setenv("K_SERVICE", "cap-approval")
+    monkeypatch.setenv("CAP_DEV_REVIEWER_HEADER", "false")
+    with pytest.raises(ValueError, match="APPROVAL_SIGNING_KEY"):
+        Settings(env="local", _env_file=None)
 
 
 def test_model_call_dataclass_is_plain():

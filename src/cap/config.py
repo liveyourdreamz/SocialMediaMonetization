@@ -4,6 +4,7 @@ Nothing in this module reads a key from disk or asks for one."""
 
 from __future__ import annotations
 
+import os
 from enum import StrEnum
 from functools import lru_cache
 
@@ -22,6 +23,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="CAP_", env_file=".env", extra="ignore")
 
     env: str = "local"
+    # Foundation stand-in for Google sign-in: a reviewer identity from a header. Off
+    # unless switched on explicitly, and never with the default signing key outside local.
+    dev_reviewer_header: bool = False
+    # D5: who may approve. The token issuer and the publisher both check this list.
+    approvers: list[str] = Field(default_factory=lambda: ["hemant"])
+    arabic_reviewers: list[str] = Field(default_factory=list)  # D19 stage one, channel C
     # D13: Google Cloud region is still an open decision; the placeholder makes any
     # deploy fail loudly rather than silently pick a default.
     gcp_region: str = "TODO-D13"
@@ -64,7 +71,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _production_guards(self) -> Settings:
-        """A deploy outside local fails here, not in a log line nobody reads."""
+        """A deploy outside local fails here, not in a log line nobody reads. A managed
+        runtime (Cloud Run sets K_SERVICE, App Engine sets GAE_ENV) is production
+        whatever CAP_ENV says, so a forgotten variable cannot fall open."""
+        if os.environ.get("K_SERVICE") or os.environ.get("GAE_ENV"):
+            if self.env in ("local", "test"):
+                self.env = "prod"
         if self.env in ("local", "test"):
             return self
         key = self.approval_signing_key.get_secret_value()
@@ -74,6 +86,8 @@ class Settings(BaseSettings):
             raise ValueError("CAP_GCP_REGION is undecided (D13); set it before deploying")
         if self.model_backend == ModelBackend.ANTHROPIC and self.anthropic_api_key is None:
             raise ValueError("CAP_ANTHROPIC_API_KEY is required with the anthropic backend")
+        if self.dev_reviewer_header:
+            raise ValueError("CAP_DEV_REVIEWER_HEADER is for local runs only")
         return self
 
 

@@ -8,6 +8,7 @@ data (the character block) travels as a static system block, never in the user t
 
 from __future__ import annotations
 
+import json
 import re
 
 from cap.agents.outputs import (
@@ -18,8 +19,17 @@ from cap.agents.outputs import (
     P14Output,
 )
 from cap.models import ModelClient, ModelResult, SourceDoc
+from cap.policy import disclosure_block
 from cap.prompts import spec
-from cap.schema.post_record import Claim, FaultType, Platform, PostRecord, Variant
+from cap.schema.post_record import (
+    Claim,
+    CriticIssue,
+    FaultType,
+    PlantedFault,
+    Platform,
+    PostRecord,
+    Variant,
+)
 
 OPENING_LINE_SLOT = "[[HEMANT_OPENING_LINE]]"
 
@@ -39,22 +49,32 @@ def draft(
     sources: list[SourceDoc],
     character_block: str,
     test_log: str = "",
+    critique: str = "",
 ) -> PostRecord:
-    """P2, two calls (D27): call 1 writes the script from the brief, the character block
-    and the sources; call 2 lists the claims from the script plus the sources and the
-    test log."""
+    """P2, two calls (D27): call 1 writes the script from the brief, the character block,
+    the disclosure fields and the sources (plus the critic's notes on a revision); call
+    2 lists the claims from the script, the sources and the test log.
+
+    Code checks after call 2 (Pack P2): every numeral in the script appears in some
+    claim's text, else the post parks; each source_quote is an exact substring of its
+    cited source, else the claim's source_url is nulled for gate 10 to settle; the
+    opening-line slot appears exactly once."""
+    statics = [character_block, disclosure_block()]
     user1 = (
         f"<brief>{record.brief.model_dump_json()}</brief>\n"
         f"<opening_line_slot>{OPENING_LINE_SLOT}</opening_line_slot>"
     )
-    r1 = client.run(
-        spec("P2", "1"), user1, P2Call1Output, sources=sources, static_blocks=[character_block]
-    )
+    if critique:
+        user1 += f"\n<critique>{critique}</critique>\n<previous_draft>{record.draft.script}</previous_draft>"
+    r1 = client.run(spec("P2", "1"), user1, P2Call1Output, sources=sources, static_blocks=statics)
     if r1.output is None or r1.output.status == "blocked" or r1.output.draft is None:
         raise _blocked("P2 call 1", r1)
     d = r1.output.draft
     record.draft.title, record.draft.script = d.title, d.script
     record.draft.shot_list, record.draft.caption = d.shot_list, d.caption
+    record.draft.on_screen_text, record.draft.thumbnail_text = d.on_screen_text, d.thumbnail_text
+    if record.draft.script.count(OPENING_LINE_SLOT) != 1:
+        raise AgentBlockedError("P2 call 1: opening-line slot must appear exactly once")
 
     r2 = client.run(
         spec("P2", "2"),
@@ -62,35 +82,63 @@ def draft(
         P2Call2Output,
         sources=sources,
         user_tail=f"<test_log>{test_log}</test_log>",
-        static_blocks=[character_block],
+        static_blocks=statics,
     )
     if r2.output is None or r2.output.status == "blocked":
         raise _blocked("P2 call 2", r2)
-    record.draft.claims = [
-        Claim(
+    bodies = {src.url: src.body for src in sources}
+    claims = []
+    for c in r2.output.claims:
+        claim = Claim(
             text=c.text,
             source_url=c.source_url,
             source_quote=c.source_quote,
             in_test_log=c.in_test_log,
         )
-        for c in r2.output.claims
-    ]
+        if claim.source_url and claim.source_quote:
+            body = bodies.get(claim.source_url, test_log if claim.in_test_log else "")
+            if " ".join(claim.source_quote.split()) not in " ".join(body.split()):
+                claim.source_url = None  # gate 10 settles it
+                claim.source_quote = None
+        claims.append(claim)
+    record.draft.claims = claims
+    record.draft.source_list = sorted(
+        {c.source_url for c in claims if c.source_url and not c.source_url.startswith("testlog://")}
+    )
+    covered = " ".join(c.text for c in claims)
+    missing = sorted(set(_numerals(record.draft.script)) - set(_numerals(covered)))
+    if missing:
+        raise AgentBlockedError(f"P2: numerals in the script with no claim: {missing}")
     record.log(f"drafted: {len(record.draft.claims)} claims")
     return record
 
 
-def critique(record: PostRecord, client: ModelClient) -> tuple[PostRecord, bool]:
-    """P3, one pass only (PRD agent 5). Returns (record, accepted)."""
-    user = (
-        f"<title>{record.draft.title}</title>\n<script>{record.draft.script}</script>\n"
-        f"<brief>{record.brief.model_dump_json()}</brief>"
+def critique(
+    record: PostRecord, client: ModelClient, character_block: str = ""
+) -> tuple[PostRecord, bool]:
+    """P3, one pass only (PRD agent 5). The issues are stored on the record so they
+    travel to the gates and are revealed on the card after the verdict (D33)."""
+    draft_json = record.draft.model_dump_json(include={"title", "script", "caption", "claims"})
+    user = f"<draft>{draft_json}</draft>\n<brief>{record.brief.model_dump_json()}</brief>"
+    r = client.run(
+        spec("P3"), user, P3Output, static_blocks=[character_block] if character_block else None
     )
-    r = client.run(spec("P3"), user, P3Output)
     if r.output is None or r.output.status == "blocked":
         raise _blocked("P3", r)
+    record.draft.critic_verdict = r.output.verdict
+    record.draft.critic_issues = [
+        CriticIssue(
+            rubric_item=i.rubric_item, severity=i.severity, span=i.span, instruction=i.instruction
+        )
+        for i in r.output.issues
+    ]
     accepted = r.output.verdict == "accept"
     record.log(f"critic: {r.output.verdict}, {len(r.output.issues)} issues")
     return record, accepted
+
+
+def critique_text(record: PostRecord) -> str:
+    return json.dumps([i.model_dump() for i in record.draft.critic_issues], ensure_ascii=False)
 
 
 def adapt(record: PostRecord, client: ModelClient, platforms: list[Platform]) -> PostRecord:
@@ -102,7 +150,7 @@ def adapt(record: PostRecord, client: ModelClient, platforms: list[Platform]) ->
         f"<caption>{record.draft.caption}</caption>\n"
         f"<platforms>{[p.value for p in platforms]}</platforms>"
     )
-    r = client.run(spec("P7"), user, P7Output)
+    r = client.run(spec("P7"), user, P7Output, static_blocks=[disclosure_block()])
     if r.output is None or r.output.status == "blocked":
         raise _blocked("P7", r)
     script_numerals = set(_numerals(record.draft.script + " " + record.draft.title))
@@ -113,6 +161,9 @@ def adapt(record: PostRecord, client: ModelClient, platforms: list[Platform]) ->
         if new_numbers:
             record.log(f"variant {v.platform} dropped: introduced numerals {sorted(new_numbers)}")
             continue
+        if not v.disclosure_preserved:
+            record.log(f"variant {v.platform} dropped: disclosure not preserved")
+            continue
         record.variants.append(
             Variant(
                 platform=Platform(v.platform),
@@ -120,24 +171,42 @@ def adapt(record: PostRecord, client: ModelClient, platforms: list[Platform]) ->
                 caption=v.caption,
                 duration_s=v.duration_s,
                 script_cut=v.script_cut,
+                on_screen_text=v.on_screen_text,
+                thumbnail_text=v.thumbnail_text,
             )
         )
+    if not record.variants:
+        raise AgentBlockedError("P7: no variant survived the code checks")
     return record
 
 
 def write_canary(
-    record: PostRecord, client: ModelClient, fault_type: FaultType, base_draft: dict
+    record: PostRecord,
+    client: ModelClient,
+    fault_type: FaultType,
+    base_draft: dict,
+    character_block: str = "",
+    placement: str = "",
 ) -> PostRecord:
     """P14: a seeded-fault post for the queue. Flagged by code here, never by the
-    model; the publisher refuses the flag (D23)."""
-    user = f"<fault_type>{fault_type.value}</fault_type>\n<base_draft>{base_draft}</base_draft>"
-    r = client.run(spec("P14"), user, P14Output)
+    model; the publisher refuses the flag (D23). The planted fault is stored so the
+    card can reveal it and the spot check can target it."""
+    user = (
+        f"<fault_type>{fault_type.value}</fault_type>\n"
+        f"<placement>{placement}</placement>\n"
+        f"<base_draft>{json.dumps(base_draft, ensure_ascii=False)}</base_draft>"
+    )
+    statics = [b for b in (character_block, disclosure_block()) if b]
+    r = client.run(spec("P14"), user, P14Output, static_blocks=statics)
     if r.output is None or r.output.status == "blocked" or r.output.canary_draft is None:
         raise _blocked("P14", r)
+    if r.output.planted_fault is None or r.output.planted_fault.type != fault_type:
+        raise AgentBlockedError("P14: planted fault missing or of the wrong type")
     d = r.output.canary_draft
     record.draft.title, record.draft.script, record.draft.caption = d.title, d.script, d.caption
     record.flags.canary = True
     record.flags.canary_fault_type = fault_type
+    record.flags.planted_fault = PlantedFault(**r.output.planted_fault.model_dump())
     record.log(f"canary written: fault={fault_type.value}")
     return record
 

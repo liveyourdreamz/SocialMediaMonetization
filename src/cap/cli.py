@@ -52,8 +52,7 @@ def main(argv: list[str] | None = None) -> int:
         for rep in run_all(get_client(), runs=args.runs):
             print(rep.summary())
     elif args.cmd == "demo":
-        from tests.conftest import SOURCES, happy_fixtures
-
+        from cap.demo import CHARACTER_BLOCK, SOURCES, TEST_LOG, happy_fixtures
         from cap.models import MockClient
         from cap.pipeline import PipelineDeps, run_post
         from cap.schema.post_record import Brief, Channel, PostRecord
@@ -63,7 +62,10 @@ def main(argv: list[str] | None = None) -> int:
             brief=Brief(topic="Notely 7-day test", anchor_elements=["test log"]),
         )
         deps = PipelineDeps(
-            client=MockClient(happy_fixtures()), anchor_elements={"A": ["test log"]}
+            client=MockClient(happy_fixtures()),
+            anchor_elements={"A": ["test log"]},
+            character_blocks={"A": CHARACTER_BLOCK},
+            test_logs={rec.post_id: TEST_LOG},
         )
         out = run_post(rec, SOURCES, deps)
         print(f"{out.post_id} -> {out.status.value}")

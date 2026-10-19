@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import Field
 
 from cap.models import Envelope
-from cap.schema.post_record import FaultType, RuleOutcome, Strict, Verdict
+from cap.schema.post_record import PlantedFault, RuleOutcome, Strict, Verdict
 
 
 class RuleFindingOut(Strict):
@@ -33,6 +33,8 @@ class DraftOut(Strict):
     script: str
     shot_list: list[str] = Field(default_factory=list)
     caption: str = ""
+    on_screen_text: list[str] = Field(default_factory=list)
+    thumbnail_text: str = ""
 
 
 class P2Call1Output(Envelope):
@@ -73,6 +75,8 @@ class VariantOut(Strict):
     caption: str = ""
     script_cut: str = ""
     duration_s: int = 0
+    on_screen_text: list[str] = Field(default_factory=list)
+    thumbnail_text: str = ""
     disclosure_preserved: bool = False
 
 
@@ -90,11 +94,13 @@ class P8Output(Envelope):
 class MfkFactor(Strict):
     factor_id: str
     outcome: Literal["present", "absent", "unclear"]
+    strength: Literal["weak", "moderate", "strong"] = "moderate"
     evidence_span: str = ""
 
 
 class P9Output(Envelope):
     factors: list[MfkFactor] = Field(default_factory=list)
+    intended_audience_note: str = ""
 
 
 # ---- P10 Fact and claim check -----------------------------------------------------
@@ -120,12 +126,6 @@ class P10VerifyOutput(Envelope):
 
 
 # ---- P14 Canary writer ------------------------------------------------------------
-class PlantedFault(Strict):
-    type: FaultType
-    span: str
-    why_catchable: str = ""
-
-
 class P14Output(Envelope):
     canary_draft: DraftOut | None = None
     planted_fault: PlantedFault | None = None

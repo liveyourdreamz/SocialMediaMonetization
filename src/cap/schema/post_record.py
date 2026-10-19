@@ -121,6 +121,7 @@ class Versions(Strict):
 
 class Brief(Strict):
     topic: str = ""
+    fast_moving: bool = False  # P10 step 5: sources older than 12 months are outdated
     format_id: str = ""
     anchor_elements: list[str] = Field(default_factory=list)
     claims_allowed: list[str] = Field(default_factory=list)
@@ -162,12 +163,24 @@ class MediaManifest(Strict):
     imagery_roles: list[str] = Field(default_factory=list)  # people in occupational roles (R-14a)
 
 
+class CriticIssue(Strict):
+    rubric_item: str
+    severity: Literal["blocker", "major", "minor"]
+    span: str = ""
+    instruction: str = ""
+
+
 class Draft(Strict):
     title: str = ""
     script: str = ""
     shot_list: list[str] = Field(default_factory=list)
     caption: str = ""
+    on_screen_text: list[str] = Field(default_factory=list)
+    thumbnail_text: str = ""
     claims: list[Claim] = Field(default_factory=list)
+    source_list: list[str] = Field(default_factory=list)  # R-12: URLs for the description
+    critic_issues: list[CriticIssue] = Field(default_factory=list)  # PRD 4.10, revealed D33
+    critic_verdict: Literal["", "accept", "revise"] = ""
 
 
 class HumanContribution(Strict):
@@ -182,6 +195,8 @@ class Variant(Strict):
     caption: str = ""
     duration_s: int = 0
     script_cut: str = ""
+    on_screen_text: list[str] = Field(default_factory=list)
+    thumbnail_text: str = ""
 
 
 class OriginalityGate(Strict):
@@ -223,6 +238,7 @@ class EthicsGate(Strict):
 class DisclosureGate(Strict):
     ai_label: bool = True
     paid_promo: bool = False
+    ad_prefix_ok: bool = True  # when paid: title and caption start with "Ad", per variant
     made_for_kids: bool = False
     mfk_score: float = 0.0
     mfk_band: Literal["clear", "doubtful", "likely", "unscored"] = "unscored"
@@ -322,12 +338,21 @@ class Metrics(Strict):
     revenue_status: Literal["none", "estimated", "adjusted", "finalised"] = "none"  # P12
 
 
+class PlantedFault(Strict):
+    type: FaultType
+    span: str
+    why_catchable: str = ""
+
+
 class Flags(Strict):
     injection_suspected: bool = False
     injection_spans: list[str] = Field(default_factory=list)
     canary: bool = False  # D23: set by code; the publisher refuses, the index skips
     canary_fault_type: FaultType | None = None
+    planted_fault: PlantedFault | None = None  # revealed on the card after the verdict
+    canary_outcome: Literal["", "caught", "missed"] = ""
     gate_blind: bool = True  # D33: gates hidden on the card until a verdict is recorded
+    card_prepared: bool = False  # spot check and reading time set when queued (D34)
 
 
 class PostRecord(Strict):

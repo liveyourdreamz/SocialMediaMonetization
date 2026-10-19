@@ -1,13 +1,28 @@
-"""Approval card logic (PRD 4.5, D33, D34). Pure functions; the FastAPI app and the
+"""Approval card logic (PRD 4.5, D19, D33, D34). Pure functions; the FastAPI app and the
 tests both call these, so the rules live in one place.
+
+State machine for one post:
+
+  awaiting_approval, card_prepared=False
+    -> prepare_card()            at queue time: spot check and reading time fixed
+  awaiting_approval, gate_blind=True
+    -> record_verdict()          exactly once; D34 checks; stores pre-reveal verdict
+  awaiting_approval, gate_blind=False
+    -> finalise()                exactly once; optional single revision (D33); a
+                                 revised approve must meet the D34 checks again
+  approved | rejected | parked | discarded (canary)
+
+Nothing moves a post out of approved/rejected/parked here. Reopening is an operator
+action with its own audit line, not a card action.
 
 D33: the card shows content, claims with source quotes and the media manifest. Gate
      and judge outcomes, near-miss scores and critic notes are hidden until the
      reviewer records a verdict; then they are revealed and one revision is allowed.
-     Both verdicts are stored.
 D34: reject and escalate are one tap plus a reason chip. Approve requires the opening
-     line and one random-claim spot check. The too-fast flag is per card, from the
-     expected reading time. A wrong tap on a canary's planted claim is a miss.
+     line and one random-claim spot check. The too-fast flag is per card. A canary is
+     caught only when the reason chip matches the planted fault type; a wrong tap on
+     its planted claim is a miss.
+D19: channel C needs the Arabic reviewer's stage-one approval before Hemant's.
 """
 
 from __future__ import annotations
@@ -17,65 +32,91 @@ from dataclasses import dataclass, field
 
 from cap.config import get_settings
 from cap.schema.post_record import (
+    Channel,
     Decision,
-    FaultType,
     PostRecord,
     PostStatus,
     ReasonCode,
     SpotCheck,
+    StageOneReview,
 )
 
 WORDS_PER_MINUTE = 200  # reading speed used for the per-card threshold
 MIN_READ_SECONDS = 30
+READ_SHARE = 0.8  # a reviewer who read less than 80% of the full read time is too fast
+
+
+class CardError(ValueError):
+    pass
+
+
+class CanaryMissedError(RuntimeError):
+    """P14 zero-miss: raised after the record is updated so the caller pauses the
+    session. The record itself is already discarded."""
 
 
 def expected_reading_seconds(record: PostRecord) -> int:
     words = len(record.draft.script.split()) + len(record.draft.title.split())
     words += sum(len(c.text.split()) for c in record.draft.claims)
-    return max(MIN_READ_SECONDS, int(words / WORDS_PER_MINUTE * 60 * 0.5))  # half the full read
+    return max(MIN_READ_SECONDS, int(words / WORDS_PER_MINUTE * 60 * READ_SHARE))
+
+
+def pick_spot_check(record: PostRecord, rng: random.Random | None = None) -> SpotCheck | None:
+    """One claim at random with its source quote (D34). On a canary whose planted
+    fault lies in a claim, the spot check is that claim, matched by span."""
+    rng = rng or random.Random()
+    claims = [c for c in record.draft.claims if c.text]
+    if not claims:
+        return None
+    pf = record.flags.planted_fault
+    if record.flags.canary and pf is not None:
+        planted = [c for c in claims if pf.span and pf.span in c.text]
+        if planted:
+            return SpotCheck(claim_text=planted[0].text, actually_supported=False, is_planted=True)
+    c = rng.choice(claims)
+    return SpotCheck(claim_text=c.text, actually_supported=(c.status == "supported"))
+
+
+def prepare_card(record: PostRecord, rng: random.Random | None = None) -> PostRecord:
+    """Called once when the post enters the queue. Fixes the spot check and the reading
+    threshold so a client cannot skip them by never fetching the card."""
+    if record.status != PostStatus.AWAITING_APPROVAL:
+        raise CardError(f"post is {record.status.value}, not awaiting approval")
+    record.approval.spot_check = pick_spot_check(record, rng)
+    record.approval.expected_reading_s = expected_reading_seconds(record)
+    record.flags.card_prepared = True
+    return record
 
 
 @dataclass
 class CardView:
-    """What the reviewer sees. Built from the record; gate fields are absent, not
-    blanked, while the card is blind."""
+    """What the reviewer sees. Gate fields are absent, not blanked, while blind."""
 
     post_id: str
     channel_id: str
     title: str
     script: str
     caption: str
+    on_screen_text: list[str] = field(default_factory=list)
+    thumbnail_text: str = ""
     claims: list[dict] = field(default_factory=list)
     media_manifest: dict = field(default_factory=dict)
+    sponsor: dict | None = None
+    stage_one: dict | None = None
     spot_check_claim: str | None = None
     spot_check_quote: str | None = None
     expected_reading_s: int = 0
     gates_revealed: bool = False
     gates: dict | None = None  # only after reveal
+    critic_issues: list[dict] | None = None  # only after reveal
+    planted_fault: dict | None = None  # only after reveal, canaries only
 
 
-def pick_spot_check(record: PostRecord, rng: random.Random | None = None) -> SpotCheck | None:
-    """One claim at random with its source quote (D34). On a canary, prefer the planted
-    claim so the spot check doubles as the canary probe."""
-    rng = rng or random.Random()
-    claims = [c for c in record.draft.claims if c.text]
-    if not claims:
-        return None
-    if record.flags.canary and record.flags.canary_fault_type == FaultType.UNSOURCED_NUMBER:
-        planted = [c for c in claims if c.status != "supported"]
-        if planted:
-            c = rng.choice(planted)
-            return SpotCheck(claim_text=c.text, actually_supported=False, is_planted=True)
-    c = rng.choice(claims)
-    return SpotCheck(claim_text=c.text, actually_supported=(c.status == "supported"))
-
-
-def build_card(record: PostRecord, rng: random.Random | None = None) -> CardView:
+def build_card(record: PostRecord) -> CardView:
+    """Read-only view; never mutates the record."""
+    if not record.flags.card_prepared:
+        raise CardError("card not prepared; prepare_card() runs at queue time")
     s = get_settings()
-    if record.approval.spot_check is None:
-        record.approval.spot_check = pick_spot_check(record, rng)
-    if record.approval.expected_reading_s == 0:
-        record.approval.expected_reading_s = expected_reading_seconds(record)
     sc = record.approval.spot_check
     quote = None
     if sc:
@@ -87,24 +128,52 @@ def build_card(record: PostRecord, rng: random.Random | None = None) -> CardView
         title=record.draft.title,
         script=record.draft.script,
         caption=record.draft.caption,
+        on_screen_text=list(record.draft.on_screen_text),
+        thumbnail_text=record.draft.thumbnail_text,
         claims=[
             {"text": c.text, "source_url": c.source_url, "source_quote": c.source_quote}
             for c in record.draft.claims
         ],
-        media_manifest={
-            "ai_label": record.gates.disclosure.ai_label,
-            "asset_uri": record.asset.uri,
-        },
+        media_manifest=record.media_manifest.model_dump(),
+        sponsor=record.sponsor.model_dump() if record.sponsor else None,
+        stage_one=record.approval.stage_one.model_dump() if record.approval.stage_one else None,
         spot_check_claim=sc.claim_text if sc else None,
         spot_check_quote=quote,
         expected_reading_s=record.approval.expected_reading_s,
         gates_revealed=revealed,
-        gates=record.gates.model_dump() if revealed else None,
+        gates=record.gates.model_dump(by_alias=True) if revealed else None,
+        critic_issues=[i.model_dump() for i in record.draft.critic_issues] if revealed else None,
+        planted_fault=(
+            record.flags.planted_fault.model_dump()
+            if revealed and record.flags.planted_fault
+            else None
+        ),
     )
 
 
-class CardError(ValueError):
-    pass
+def _check_approve_inputs(
+    record: PostRecord, opening_line: str | None, spot_check_supported: bool | None
+) -> None:
+    if not opening_line or not opening_line.strip():
+        raise CardError("approve needs the opening line (human contribution)")
+    if record.approval.spot_check is not None and spot_check_supported is None:
+        raise CardError("approve needs the spot check answered")
+
+
+def record_stage_one(
+    record: PostRecord, *, reviewer: str, decision: Decision, notes: str, time_on_card_s: int
+) -> PostRecord:
+    """D19: the Arabic reviewer's pass on channel C. Does not change status; Hemant's
+    verdict follows."""
+    if record.channel_id != Channel.C:
+        raise CardError("stage-one review applies to channel C only")
+    if reviewer not in get_settings().arabic_reviewers:
+        raise CardError("reviewer is not an authorised Arabic reviewer")
+    record.approval.stage_one = StageOneReview(
+        reviewer=reviewer, decision=decision, notes=notes, time_on_card_s=time_on_card_s
+    )
+    record.log(f"stage one {decision.value} by {reviewer}")
+    return record
 
 
 def record_verdict(
@@ -118,20 +187,21 @@ def record_verdict(
     spot_check_supported: bool | None = None,
 ) -> PostRecord:
     """First verdict on a blind card. Validates D34's requirements, stores the
-    pre-reveal decision, reveals the gates. Does not issue a token: that happens in
-    `finalise` after the reviewer has seen the gates and had the chance to revise."""
+    pre-reveal decision, reveals the gates. Exactly once per post."""
     if record.status != PostStatus.AWAITING_APPROVAL:
         raise CardError(f"post is {record.status.value}, not awaiting approval")
+    if not record.flags.card_prepared:
+        raise CardError("card not prepared")
     a = record.approval
-    if decision in (Decision.REJECT, Decision.ESCALATE):
-        if reason_code is None:
-            raise CardError("reject and escalate need a reason chip")
+    if a.pre_reveal_decision is not None:
+        raise CardError("verdict already recorded; use finalise")
+    if reviewer not in get_settings().approvers:
+        raise CardError("reviewer is not an authorised approver (D5)")
+    if decision in (Decision.REJECT, Decision.ESCALATE) and reason_code is None:
+        raise CardError("reject and escalate need a reason chip")
     if decision == Decision.APPROVE:
-        if not opening_line or not opening_line.strip():
-            raise CardError("approve needs the opening line (human contribution)")
-        if a.spot_check is not None and spot_check_supported is None:
-            raise CardError("approve needs the spot check answered")
-        record.human_contribution.text = opening_line.strip()
+        _check_approve_inputs(record, opening_line, spot_check_supported)
+        record.human_contribution.text = (opening_line or "").strip()
         record.human_contribution.author = reviewer
     if a.spot_check is not None and spot_check_supported is not None:
         a.spot_check.reviewer_said_supported = spot_check_supported
@@ -143,7 +213,8 @@ def record_verdict(
     a.decision = decision
     record.flags.gate_blind = False  # D33: reveal now
     record.log(
-        f"verdict {decision.value} pre-reveal by {reviewer} in {time_on_card_s}s (too_fast={a.too_fast})"
+        f"verdict {decision.value} pre-reveal by {reviewer} in {time_on_card_s}s "
+        f"(too_fast={a.too_fast})"
     )
     return record
 
@@ -151,36 +222,73 @@ def record_verdict(
 def finalise(
     record: PostRecord,
     *,
+    reviewer: str,
     revised_decision: Decision | None = None,
     reason_code: ReasonCode | None = None,
+    opening_line: str | None = None,
+    spot_check_supported: bool | None = None,
 ) -> PostRecord:
     """Second step: the reviewer has seen the gates; may revise once (D33). Applies
     the status change and the canary outcome. Token issue is the caller's job (needs
-    the asset hash)."""
+    the asset hash). Exactly once per post."""
+    if record.status != PostStatus.AWAITING_APPROVAL:
+        raise CardError(f"post is {record.status.value}; finalise applies once, while awaiting")
     a = record.approval
-    if a.pre_reveal_decision is None:
+    if a.pre_reveal_decision is None or record.flags.gate_blind:
         raise CardError("no pre-reveal verdict recorded")
+    if reviewer != a.reviewer:
+        raise CardError("finalise must come from the reviewer who recorded the verdict")
     if revised_decision is not None and revised_decision != a.pre_reveal_decision:
         if revised_decision in (Decision.REJECT, Decision.ESCALATE) and reason_code is None:
             raise CardError("a revised reject or escalate needs a reason chip")
+        if revised_decision == Decision.APPROVE:
+            _check_approve_inputs(record, opening_line, spot_check_supported)
+            record.human_contribution.text = (opening_line or "").strip()
+            record.human_contribution.author = reviewer
+            if a.spot_check is not None:
+                a.spot_check.reviewer_said_supported = spot_check_supported
         a.decision = revised_decision
         a.reason_code = reason_code or a.reason_code
         a.revised_after_reveal = True
         record.log(f"verdict revised after reveal to {revised_decision.value}")
-    # canary outcome (P14 zero-miss): approving a canary is a miss; so is a wrong tap
-    # on its planted claim
+    decision = a.decision or Decision.ESCALATE
+
     if record.flags.canary:
-        missed = a.decision == Decision.APPROVE
-        if a.spot_check and a.spot_check.is_planted and a.spot_check.reviewer_said_supported:
-            missed = True
-        record.log(
-            f"canary {'MISSED' if missed else 'caught'}: fault={record.flags.canary_fault_type} reason={a.reason_code}"
-        )
-        record.status = PostStatus.DISCARDED  # canaries never go further (D23)
-        return record
+        return _finalise_canary(record, decision)
+
+    if decision == Decision.APPROVE and record.channel_id == Channel.C:
+        so = a.stage_one
+        if so is None or so.decision != Decision.APPROVE:
+            raise CardError("channel C needs the Arabic reviewer's stage-one approval (D19)")
     record.status = {
         Decision.APPROVE: PostStatus.APPROVED,
         Decision.REJECT: PostStatus.REJECTED,
         Decision.ESCALATE: PostStatus.PARKED,
-    }[a.decision or Decision.ESCALATE]
+    }[decision]
+    return record
+
+
+def _finalise_canary(record: PostRecord, decision: Decision) -> PostRecord:
+    """P14: a catch needs the matching reason chip; approving, or a wrong tap on the
+    planted claim, is a miss. Canaries never go further (D23)."""
+    a = record.approval
+    fault = record.flags.canary_fault_type
+    matched = (
+        decision != Decision.APPROVE
+        and a.reason_code is not None
+        and fault is not None
+        and a.reason_code.value == fault.value
+    )
+    wrong_tap = bool(
+        a.spot_check and a.spot_check.is_planted and a.spot_check.reviewer_said_supported
+    )
+    missed = decision == Decision.APPROVE or wrong_tap or not matched
+    record.flags.canary_outcome = "missed" if missed else "caught"
+    record.status = PostStatus.DISCARDED
+    record.log(
+        f"canary {record.flags.canary_outcome.upper()}: fault={fault.value if fault else None} "
+        f"chip={a.reason_code.value if a.reason_code else None} decision={decision.value}"
+    )
+    if missed:
+        raise CanaryMissedError(record.post_id)
     return record

@@ -12,3 +12,7 @@ dist/
 secrets/
 *.key
 *.pem
+renders/
+*.sqlite
+*.db
+.coverage

@@ -18,11 +18,11 @@ through the same ModelClient interface.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from typing import Literal
 
 from cap.agents.outputs import P1Output
 from cap.models import ModelClient
+from cap.policy import AI_ROLE_DISCLOSURE_KEY
 from cap.prompts import spec
 from cap.rulebook import Rulebook, load_rulebook
 from cap.schema.post_record import (
@@ -37,43 +37,51 @@ from cap.schema.post_record import (
 )
 
 # R-05 engagement bait: asks framed as a condition or game. A plain closing "subscribe"
-# is allowed. Provisional patterns; the Red/Green sets are the regression check.
+# is allowed. Patterns are anchored to an imperative object so ordinary prose ("tools
+# like this are common") does not fire; the judge is the recall net (judged_by both).
 _BAIT = re.compile(
-    r"\b(comment\s+(yes|no|\w+\s+if)|tag\s+\d+\s+friends?|react\s+\S+\s+(if|for)|"
-    r"like\s+(this|if)\s|share\s+(this|if)\s+you|vote\s+(yes|no|in\s+the\s+comments))\b",
+    r"\b("
+    r"comment\s+(yes|no|[A-Z]{2,}|\w+\s+if)\b"
+    r"|tag\s+(\d+|a|one|two|three|four|five|some|your)\s+(friends?|mates?|people)\b"
+    r"|react\s+(with\s+\S+\s+)?(if|for)\b"
+    r"|like\s+(this|the)\s+(video|post|short|clip)\b"
+    r"|share\s+(this\s+(video|post|short|clip)|if\s+you)\b"
+    r"|vote\s+(yes|no|in\s+the\s+comments)\b"
+    r"|smash\s+(that|the)\s+like\b"
+    r")",
     re.I,
 )
-
-# R-07: the standard AI-role disclosure must appear in the caption or description.
-AI_ROLE_DISCLOSURE = "presented by an ai character"
-
-
-@dataclass
-class VariantVerdict:
-    platform: str
-    verdict: Verdict
-    judges: list[JudgeResult]
-    disagreement: bool
 
 
 def hard_rules(record: PostRecord, variant: Variant, rulebook: Rulebook) -> list[RuleFinding]:
     """Rules judged by code. Returns findings; an empty list means none triggered."""
     findings: list[RuleFinding] = []
-    text = " ".join([variant.title, variant.caption, variant.script_cut or record.draft.script])
+    text = " ".join(
+        [
+            variant.title,
+            variant.caption,
+            variant.script_cut or record.draft.script,
+            " ".join(variant.on_screen_text or record.draft.on_screen_text),
+            variant.thumbnail_text or record.draft.thumbnail_text,
+        ]
+    )
     m = _BAIT.search(text)
     if m:
         findings.append(
             RuleFinding(rule_id="R-05", outcome=RuleOutcome.BLOCK, evidence_span=m.group(0))
         )
-    if AI_ROLE_DISCLOSURE not in (variant.caption + " " + record.draft.caption).lower():
+    # R-07 is checked per variant: each variant publishes with its own caption.
+    if AI_ROLE_DISCLOSURE_KEY not in variant.caption.lower():
         findings.append(
             RuleFinding(
                 rule_id="R-07",
                 outcome=RuleOutcome.BLOCK,
-                evidence_span="caption lacks AI-role disclosure",
+                evidence_span=f"{variant.platform.value} caption lacks the AI-role disclosure",
             )
         )
-    if record.draft.claims and not any(c.source_url for c in record.draft.claims):
+    # R-12: a post with factual claims carries a source list; per-claim sourcing is
+    # gate 10's job, so this only asks whether the list exists at all.
+    if record.draft.claims and not record.draft.source_list:
         findings.append(
             RuleFinding(
                 rule_id="R-12",
@@ -94,6 +102,8 @@ def _judge_user_message(record: PostRecord, variant: Variant) -> str:
         f"<title>{variant.title}</title>\n"
         f"<script>{variant.script_cut or record.draft.script}</script>\n"
         f"<caption>{variant.caption}</caption>\n"
+        f"<on_screen_text>{variant.on_screen_text or record.draft.on_screen_text}</on_screen_text>\n"
+        f"<thumbnail_text>{variant.thumbnail_text or record.draft.thumbnail_text}</thumbnail_text>\n"
         f"</variant>\n"
         f"<media_manifest>{record.media_manifest.model_dump_json()}</media_manifest>\n"
         f"<channel>{record.channel_id.value}</channel>\n"
@@ -199,7 +209,7 @@ def check_ethics(
         hard_verdict = verdict_from_findings(hard)
         if hard_verdict == Verdict.FAIL:
             worst = Verdict.FAIL
-            continue  # D20 ordering: judges are only called if no hard rule fired
+            break  # PRD 4.4: a hard-rule fail ends the gate with no judge call
         results = [run_judge(client, j, record, variant, rulebook) for j in judges]
         gate.judges.extend(results)
         v, dis = aggregate(results)

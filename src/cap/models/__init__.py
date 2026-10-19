@@ -215,7 +215,7 @@ def _parse[T: Envelope](raw: str, output_model: type[T], spec: PromptSpec) -> T 
     return out
 
 
-FixtureValue = dict[str, Any] | tuple[str, str] | Callable[[str], Any]
+FixtureValue = dict[str, Any] | tuple[str, str] | Callable[[ModelCall], Any]
 
 
 class MockClient(ModelClient):
@@ -223,7 +223,7 @@ class MockClient(ModelClient):
 
     A fixture is a dict of the prompt's own fields (envelope fields are filled in; a
     fixture cannot override prompt_id or prompt_version), a (raw_text, stop_reason)
-    tuple to exercise the refusal / max_tokens / error paths, or a callable(user_text)
+    tuple to exercise the refusal / max_tokens / error paths, or a callable(call)
     returning either. A missing fixture is a blocked output: the fail-closed path.
     """
 
@@ -237,7 +237,7 @@ class MockClient(ModelClient):
         if fx is None:
             fx = self.fixtures.get((call.spec.prompt_id, "*"))
         if callable(fx):
-            fx = fx(call.user)
+            fx = fx(call)  # the whole call: user, user_tail, sources, system
         if isinstance(fx, tuple):
             return Completion(raw=fx[0], stop_reason=fx[1], model="mock")
         if fx is None:
