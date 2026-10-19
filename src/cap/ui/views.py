@@ -10,8 +10,8 @@ from statistics import median
 from typing import Any
 
 from cap import policy
-from cap.approval.app import Store
-from cap.approval.card import build_card
+from cap.approval.app import Store, card_for
+from cap.approval.identity import Reviewer
 from cap.config import get_settings
 from cap.schema.post_record import Decision, PostRecord, PostStatus, ReasonCode
 
@@ -29,6 +29,15 @@ LABELS = {
         "no_quote": "no quote recorded",
         "stage_one": "Stage one, the Arabic reviewer",
         "slot": "your opening line goes here",
+        "claims_n": "claims",
+        "clips_n": "clips",
+        "no_sponsor": "no sponsor",
+        "short": "Short",
+        "longform": "long-form",
+        "read": "min read",
+        "approve": "approve",
+        "reject": "reject",
+        "escalate": "escalate",
     },
     "ar": {
         "script": "النص",
@@ -41,6 +50,15 @@ LABELS = {
         "no_quote": "لا اقتباس مسجّل",
         "stage_one": "المراجعة الأولى",
         "slot": "سطر هيمانت الافتتاحي يأتي هنا",
+        "claims_n": "ادعاءات",
+        "clips_n": "مقاطع",
+        "no_sponsor": "بلا راعٍ",
+        "short": "قصير",
+        "longform": "طويل",
+        "read": "دقيقة قراءة",
+        "approve": "موافقة",
+        "reject": "رفض",
+        "escalate": "تصعيد",
     },
 }
 
@@ -129,13 +147,14 @@ class QueueItem:
     stage_one_done: bool
 
 
-def queue_items(records: list[PostRecord], for_role: str) -> list[QueueItem]:
+def queue_items(records: list[PostRecord], for_role: str, lang: str = "en") -> list[QueueItem]:
+    labels = LABELS[lang]
     out = []
     for r in records:
         if for_role == "arabic":
             if not is_rtl(r.channel_id.value) or r.approval.stage_one is not None:
                 continue
-        fmt = "Short" if word_count(r) < 220 else "long-form"
+        fmt = labels["short"] if word_count(r) < 220 else labels["longform"]
         so = r.approval.stage_one
         so_text = None
         if is_rtl(r.channel_id.value) and for_role == "approver":
@@ -148,10 +167,10 @@ def queue_items(records: list[PostRecord], for_role: str) -> list[QueueItem]:
                 rtl=is_rtl(r.channel_id.value),
                 title=r.draft.title,
                 format=fmt,
-                reading=about_minutes(r.approval.expected_reading_s),
+                reading=f"~{max(1, round(r.approval.expected_reading_s / 60))} {labels['read']}",
                 claims=len(r.draft.claims),
                 clips=len(r.media_manifest.imagery_roles) or len(r.draft.shot_list),
-                sponsor=r.sponsor.name if r.sponsor else "no sponsor",
+                sponsor=r.sponsor.name if r.sponsor else labels["no_sponsor"],
                 stage_one=so_text,
                 stage_one_done=so is not None,
             )
@@ -163,11 +182,11 @@ def queue_items(records: list[PostRecord], for_role: str) -> list[QueueItem]:
 
 
 def card_context(
-    record: PostRecord, store: Store, reviewer: str, lang: str = "en"
+    record: PostRecord, store: Store, reviewer: Reviewer, lang: str = "en"
 ) -> dict[str, Any]:
-    card = build_card(record)
+    card = card_for(record, reviewer)  # the Arabic reviewer never gets gate fields
     labels = LABELS[lang]
-    on_card = store.seconds_on_card(record.post_id, reviewer)
+    on_card = store.seconds_on_card(record.post_id, reviewer.name)
     gates = None
     if card.gates:
         gates = []
@@ -219,6 +238,11 @@ def card_context(
         "reason_text": REASON_TEXT.get(record.approval.reason_code)
         if record.approval.reason_code
         else None,
+        "closed": record.status
+        not in (PostStatus.AWAITING_APPROVAL,),  # the planted fault shows only then
+        "stage_one_word": labels.get(record.approval.stage_one.decision.value, "")
+        if record.approval.stage_one
+        else "",
         "needs_stage_one": is_rtl(record.channel_id.value) and record.approval.stage_one is None,
     }
 
@@ -304,8 +328,12 @@ class Portfolio:
     sources: str
 
 
+CLOSED = (PostStatus.APPROVED, PostStatus.REJECTED, PostStatus.PARKED, PostStatus.PUBLISHED)
+
+
 def _finalised(store: Store) -> list[PostRecord]:
-    return [p for p in store.posts.values() if p.approval.decision is not None]
+    """Posts a reviewer has closed (not canaries, not pending revisions)."""
+    return [p for p in store.posts.values() if p.status in CLOSED and p.approval.decided_at]
 
 
 def canary_record(store: Store) -> tuple[int, int]:
@@ -315,7 +343,15 @@ def canary_record(store: Store) -> tuple[int, int]:
 
 
 def canary_rate(store: Store) -> str:
-    reviewed = len(_finalised(store))
+    """The schedule restarts at a miss (P14): count cards closed since the last one."""
+    closed = _finalised(store)
+    misses = [
+        p.approval.decided_at
+        for p in store.posts.values()
+        if p.flags.canary_outcome == "missed" and p.approval.decided_at
+    ]
+    since = max(misses) if misses else None
+    reviewed = sum(1 for p in closed if since is None or (p.approval.decided_at or since) > since)
     seen = 0
     for n, m in get_settings().canary_schedule:
         if m == 0 or reviewed < seen + m:
@@ -474,7 +510,9 @@ def portfolio(store: Store) -> Portfolio:
 
 def _add_months(d: date, n: int) -> date:
     y, m = divmod(d.month - 1 + n, 12)
-    return d.replace(year=d.year + y, month=m + 1, day=min(d.day, 28))
+    year, month = d.year + y, m + 1
+    last = (date(year + (month == 12), (month % 12) + 1, 1) - timedelta(days=1)).day
+    return date(year, month, min(d.day, last))
 
 
 # ---------------------------------------------------------------- digest
@@ -501,7 +539,11 @@ class Digest:
 def digest(store: Store) -> Digest:
     now = datetime.now(UTC)
     since = now - timedelta(days=7)
-    week = [p for p in _finalised(store) if p.created_at >= since and not p.flags.canary]
+    week = [
+        p
+        for p in _finalised(store)
+        if p.approval.decided_at and p.approval.decided_at >= since and not p.flags.canary
+    ]
     approved = sum(1 for p in week if p.approval.decision == Decision.APPROVE)
     rejected = sum(1 for p in week if p.approval.decision == Decision.REJECT)
     escalated = sum(1 for p in week if p.approval.decision == Decision.ESCALATE)
@@ -525,7 +567,11 @@ def digest(store: Store) -> Digest:
         if pairs
         else None
     )
-    canaries = [p for p in store.posts.values() if p.flags.canary and p.created_at >= since]
+    canaries = [
+        p
+        for p in store.posts.values()
+        if p.flags.canary and p.approval.decided_at and p.approval.decided_at >= since
+    ]
     return Digest(
         week=f"{since.strftime('%-d %b')} to {now.strftime('%-d %b %Y')}",
         approved=approved,
@@ -551,6 +597,9 @@ def parked(store: Store) -> list[tuple[PostRecord, str]]:
     out = []
     for p in store.posts.values():
         if p.status == PostStatus.PARKED:
-            reason = next((h for h in reversed(p.history) if "parked" in h), "parked")
-            out.append((p, reason.split("parked: ", 1)[-1]))
+            reason = next((h for h in reversed(p.history) if "parked: " in h), "")
+            text = reason.split("parked: ", 1)[-1] if reason else "escalated by the reviewer"
+            if p.approval.reason_code:
+                text = f"{REASON_TEXT[p.approval.reason_code]} · {text}"
+            out.append((p, text))
     return out

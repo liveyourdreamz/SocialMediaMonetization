@@ -20,20 +20,23 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from cap.approval import token as tok
 from cap.approval.card import (
     CanaryMissedError,
     CardError,
+    CardView,
     build_card,
     finalise,
     record_stage_one,
     record_verdict,
 )
-from cap.approval.identity import reviewer_identity
-from cap.schema.post_record import Decision, PostRecord, PostStatus, ReasonCode
+from cap.approval.identity import Reviewer, reviewer_identity
+from cap.config import get_settings
+from cap.schema.post_record import Channel, Decision, PostRecord, PostStatus, ReasonCode
 
 
 class Store:
@@ -86,12 +89,10 @@ class Store:
 class StageOneIn(BaseModel):
     decision: Decision
     notes: str = ""
-    time_on_card_s: int
 
 
 class VerdictIn(BaseModel):
     decision: Decision
-    time_on_card_s: int
     reason_code: ReasonCode | None = None
     opening_line: str | None = None
     spot_check_supported: bool | None = None
@@ -122,6 +123,27 @@ def finalise_and_issue(store: Store, record: PostRecord, reviewer: str, **kw: An
     return issued
 
 
+def visible_to(record: PostRecord, reviewer: Reviewer) -> bool:
+    """D19: the Arabic reviewer sees channel C only; approvers see everything."""
+    return reviewer.is_approver or record.channel_id == Channel.C
+
+
+def card_for(record: PostRecord, reviewer: Reviewer) -> CardView:
+    """The card as this reviewer may see it. The Arabic reviewer never sees gate
+    outcomes, critic notes or planted faults, whatever the record's state (D19)."""
+    if not visible_to(record, reviewer):
+        raise HTTPException(403, "channel C only")
+    view = build_card(record)
+    if not reviewer.is_approver:
+        view.gates, view.critic_issues, view.planted_fault, view.gates_revealed = (
+            None,
+            None,
+            None,
+            False,
+        )
+    return view
+
+
 def api_router(store: Store) -> APIRouter:
     r = APIRouter(prefix="/api")
 
@@ -129,27 +151,37 @@ def api_router(store: Store) -> APIRouter:
         if store.paused:
             raise HTTPException(423, "session paused after a missed canary; operator review needed")
 
+    def _approver(reviewer: Reviewer) -> None:
+        if not reviewer.is_approver:
+            raise HTTPException(403, "approvers only")
+
     @r.get("/queue")
-    def queue(reviewer: str = Depends(reviewer_identity)) -> list[dict[str, Any]]:
-        return [asdict(build_card(p)) for p in store.queue()]
+    def queue(reviewer: Reviewer = Depends(reviewer_identity)) -> list[dict[str, Any]]:
+        return [asdict(card_for(p, reviewer)) for p in store.queue() if visible_to(p, reviewer)]
 
     @r.get("/posts/{post_id}/card")
-    def card(post_id: str, reviewer: str = Depends(reviewer_identity)) -> dict[str, Any]:
-        return asdict(build_card(store.get(post_id)))
+    def card(post_id: str, reviewer: Reviewer = Depends(reviewer_identity)) -> dict[str, Any]:
+        record = store.get(post_id)
+        view = card_for(record, reviewer)
+        if record.status == PostStatus.AWAITING_APPROVAL:
+            store.open_card(post_id, reviewer.name)  # the clock starts here, server-side
+        return asdict(view)
 
     @r.post("/posts/{post_id}/stage-one")
     def stage_one(
-        post_id: str, body: StageOneIn, reviewer: str = Depends(reviewer_identity)
+        post_id: str, body: StageOneIn, reviewer: Reviewer = Depends(reviewer_identity)
     ) -> dict[str, Any]:
         _guard_paused()
+        if reviewer.role != "arabic":
+            raise HTTPException(403, "the Arabic reviewer records stage one")
         record = store.get(post_id)
         try:
             record_stage_one(
                 record,
-                reviewer=reviewer,
+                reviewer=reviewer.name,
                 decision=body.decision,
                 notes=body.notes,
-                time_on_card_s=body.time_on_card_s,
+                time_on_card_s=store.seconds_on_card(post_id, reviewer.name),
             )
         except CardError as e:
             raise HTTPException(422, str(e)) from e
@@ -158,16 +190,17 @@ def api_router(store: Store) -> APIRouter:
 
     @r.post("/posts/{post_id}/verdict")
     def verdict(
-        post_id: str, body: VerdictIn, reviewer: str = Depends(reviewer_identity)
+        post_id: str, body: VerdictIn, reviewer: Reviewer = Depends(reviewer_identity)
     ) -> dict[str, Any]:
         _guard_paused()
+        _approver(reviewer)
         record = store.get(post_id)
         try:
             record_verdict(
                 record,
                 body.decision,
-                reviewer=reviewer,
-                time_on_card_s=body.time_on_card_s,
+                reviewer=reviewer.name,
+                time_on_card_s=store.seconds_on_card(post_id, reviewer.name),
                 reason_code=body.reason_code,
                 opening_line=body.opening_line,
                 spot_check_supported=body.spot_check_supported,
@@ -179,15 +212,16 @@ def api_router(store: Store) -> APIRouter:
 
     @r.post("/posts/{post_id}/finalise")
     def finalise_post(
-        post_id: str, body: FinaliseIn, reviewer: str = Depends(reviewer_identity)
+        post_id: str, body: FinaliseIn, reviewer: Reviewer = Depends(reviewer_identity)
     ) -> dict[str, Any]:
         _guard_paused()
+        _approver(reviewer)
         record = store.get(post_id)
         try:
             issued = finalise_and_issue(
                 store,
                 record,
-                reviewer,
+                reviewer.name,
                 revised_decision=body.revised_decision,
                 reason_code=body.reason_code,
                 opening_line=body.opening_line,
@@ -221,11 +255,24 @@ def create_app(store: Store | None = None) -> FastAPI:
     )  # the screens; imported here to keep the API importable alone
 
     store = store or Store()
+    local = get_settings().env in ("local", "test")
     app = FastAPI(
-        title="Content Agent Portfolio", docs_url="/api/docs", openapi_url="/api/openapi.json"
+        title="Content Agent Portfolio",
+        docs_url="/api/docs" if local else None,
+        openapi_url="/api/openapi.json" if local else None,
+        redoc_url=None,
     )
     app.state.store = store
     app.include_router(api_router(store))
     app.include_router(ui_router(store))
     app.mount("/static", STATIC, name="static")
+
+    @app.exception_handler(HTTPException)
+    async def _html_aware(request: Request, exc: HTTPException):  # type: ignore[no-untyped-def]
+        """The screens get a sign-in redirect, not a JSON body, when the cookie has
+        expired; the API keeps JSON."""
+        if exc.status_code == 401 and not request.url.path.startswith("/api"):
+            return RedirectResponse("/login", status_code=303)
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
     return app

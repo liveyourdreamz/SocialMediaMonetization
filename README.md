@@ -34,8 +34,9 @@ renderer; it ends `awaiting_approval` with its history printed.
 uv run cap serve --demo
 ```
 
-Open <http://127.0.0.1:8000/login?name=hemant> (on your phone: your laptop's address
-on the same Wi-Fi, or the browser's phone emulation). You land on the Portfolio, built
+Open <http://127.0.0.1:8000/login> and sign in as `hemant` (`layla` for channel C). On
+your phone: `uv run cap serve --demo --host 0.0.0.0`, then your laptop's address on the
+same Wi-Fi; or use the browser's phone emulation. You land on the Portfolio, built
 on the Proof design system (`design/proof/`): the queue strip, the four figures, a
 card per channel, the next kill gate, a sources line. The demo marks its figures as
 examples; without analytics the screen says "no pull yet" rather than inventing.
@@ -49,7 +50,8 @@ Then walk a card the way D33 and D34 say it goes:
 | After the verdict | "Now, what the machines thought": the four gates and the critic, revealed; one change allowed |
 | Reject | A bottom sheet of nine reason chips; one tap finishes it |
 | The canary ("THEIR note apps") | Reject it with the wrong chip and finalise: the queue pauses, every screen carries the band, and only an approver can reopen it from /paused |
-| Channel C | Approve is disabled until the Arabic reviewer has recorded stage one. Sign in as `?name=layla`: Arabic chrome, right-to-left, her channel only, no tabs |
+| Channel C | Approve is disabled until the Arabic reviewer has recorded stage one. Sign in as `layla`: Arabic chrome, right-to-left, her channel only, no tabs, never a gate |
+| Canaries | Scored on the blind verdict only; the planted fault is shown once the record is closed, so the reveal cannot hand you the answer |
 | Time on card | Measured by the server from the first open; a 3-second approval is flagged |
 
 The JSON API that the screens use is at `/api` (docs at `/api/docs`); the same rules,

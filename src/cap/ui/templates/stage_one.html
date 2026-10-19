@@ -18,9 +18,9 @@
   {% include "_content.html" %}
 
   {% if done %}
-  <div class="banner verdict"><span class="eyebrow">قرارك</span><span class="head">{{ record.approval.stage_one.decision.value }}</span><span class="facts">{{ record.approval.stage_one.notes }}</span></div>
+  <div class="banner verdict"><span class="eyebrow">قرارك</span><span class="head">{{ stage_one_word }}</span><span class="facts">{{ record.approval.stage_one.notes }}</span></div>
   {% else %}
-  <form method="post" action="/posts/{{ card.post_id }}/stage-one" class="stack">
+  <form method="post" action="/posts/{{ card.post_id }}/stage-one" class="stack"><input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="field">
       <label for="notes">ملاحظات لهيمانت (اختياري)</label>
       <textarea class="input" id="notes" name="notes" rows="3" style="font-family: var(--font-ui-ar); font-size: 16px"></textarea>

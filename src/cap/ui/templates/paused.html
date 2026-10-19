@@ -1,10 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Queue paused · Content Agent Portfolio{% endblock %}
 {% block body %}
+{% if not reviewer.is_approver %}
+<div class="hero">
+  <span class="eyebrow">القائمة متوقفة مؤقتاً</span>
+  <h1>توقفت المراجعة مؤقتاً.</h1>
+  <p style="font-size: 15px; line-height: 24px">لا يُنشر شيء حتى يعيد هيمانت فتح القائمة. لا حاجة لأي إجراء منك.</p>
+</div>
+<main class="screen no-tabs" style="padding-top: var(--space-5)"><a class="btn quiet" href="/queue">العودة إلى القائمة</a></main>
+{% else %}
 <div class="hero">
   <span class="eyebrow">{{ 'Queue paused' if paused else 'Canary record' }}</span>
   <h1>{% if paused %}That one was a canary, and it got through.{% else %}The queue is open.{% endif %}</h1>
-  <p style="font-size: 14px; line-height: 20px; opacity: .92">{% if paused %}Nothing has published. The queue stays locked until you have read this and reopened it.{% else %}Every miss is kept here so the record is never tidied away.{% endif %}</p>
+  <p style="font-size: 14px; line-height: 20px">{% if paused %}Nothing has published. The queue stays locked until you have read this and reopened it.{% else %}Every miss is kept here so the record is never tidied away.{% endif %}</p>
 </div>
 <main class="screen no-tabs" style="padding-top: var(--space-5)">
   {% if last %}
@@ -33,7 +41,7 @@
   </section>
 
   {% if paused and reviewer.is_approver %}
-  <form method="post" action="/paused/reopen" class="stack-sm">
+  <form method="post" action="/paused/reopen" class="stack-sm"><input type="hidden" name="csrf" value="{{ csrf }}">
     <button class="btn primary" type="submit">I have read this, reopen the queue</button>
     <a class="btn quiet" href="/operator">Open the operator screen</a>
   </form>
@@ -43,4 +51,5 @@
   <a class="btn quiet" href="/queue">Back to the queue</a>
   {% endif %}
 </main>
+{% endif %}
 {% endblock %}

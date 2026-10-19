@@ -15,7 +15,7 @@
 
   {% if error %}<div class="error" role="alert"><strong>Not recorded.</strong> {{ error }}</div>{% endif %}
 
-  <form method="post" action="/posts/{{ card.post_id }}/{{ 'finalise' if revising else 'verdict' }}" class="stack" style="gap: var(--space-6)" data-approve-form data-needs-spot="{{ '1' if card.spot_check_claim else '0' }}">
+  <form method="post" action="/posts/{{ card.post_id }}/{{ 'finalise' if revising else 'verdict' }}" class="stack" style="gap: var(--space-6)" data-approve-form data-needs-spot="{{ '1' if card.spot_check_claim else '0' }}"><input type="hidden" name="csrf" value="{{ csrf }}">
     <input type="hidden" name="{{ 'revised_decision' if revising else 'decision' }}" value="approve">
 
     <section class="card stack">
@@ -41,16 +41,17 @@
       <fieldset class="stack-sm" style="border: 0; padding: 0; margin: 0">
         <legend style="font-weight: 500; padding: 0; margin-bottom: 8px">Does the quote support the claim?</legend>
         <div style="display: flex; gap: 10px">
-          <label class="chip" style="flex: 1"><input type="radio" name="spot_check_supported" value="yes" required><span style="width: 100%; justify-content: center; min-height: 48px; border-radius: var(--radius-md)">Yes, it does</span></label>
-          <label class="chip" style="flex: 1"><input type="radio" name="spot_check_supported" value="no"><span style="width: 100%; justify-content: center; min-height: 48px; border-radius: var(--radius-md)">No, it does not</span></label>
+          <label class="chip" style="flex: 1"><input type="radio" name="spot_check_supported" value="yes" required><span style="width: 100%; justify-content: center; min-height: 48px">Yes, it does</span></label>
+          <label class="chip" style="flex: 1"><input type="radio" name="spot_check_supported" value="no"><span style="width: 100%; justify-content: center; min-height: 48px">No, it does not</span></label>
         </div>
-        <span class="meta">"No" is recorded with the approval and counts against the fact gate; if you doubt the post, reject it instead.</span>
+        <span class="meta">"No" turns this into a reject with the reason "A number with no source" already chosen; the post goes back to the drafter.</span>
       </fieldset>
     </section>
     {% endif %}
 
     <div class="stack-sm">
-      <button class="btn primary" type="submit" data-approve-submit disabled>Approve</button>
+      <input type="hidden" name="reason_code" value="" data-reason>
+      <button class="btn primary" type="submit" data-approve-submit>Approve</button>
       <p class="meta" style="text-align: center">On the card <span class="tabular">{{ on_card_text }}</span> · expected {{ expected_text }}</p>
     </div>
   </form>

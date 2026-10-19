@@ -56,10 +56,34 @@
           ],
           "default": null
         },
+        "pre_reveal_reason_code": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasonCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "revised_after_reveal": {
           "default": false,
           "title": "Revised After Reveal",
           "type": "boolean"
+        },
+        "decided_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decided At"
         },
         "spot_check": {
           "anyOf": [

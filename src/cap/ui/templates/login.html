@@ -8,13 +8,13 @@
     <p class="muted">Local stand-in for Google sign-in. Only names on the approver or Arabic-reviewer lists get in.</p>
   </div>
   {% if error %}<div class="error"><strong>Refused.</strong> {{ error }}</div>{% endif %}
-  <form method="get" action="/login" class="stack">
+  <form method="post" action="/login" class="stack">
     <div class="field">
       <label for="name">Reviewer</label>
       <input class="input" id="name" name="name" value="{{ name }}" autocomplete="username" required>
     </div>
     <button class="btn primary" type="submit">Continue</button>
-    <p class="meta">Approvers: {{ settings.approvers | join(', ') }}{% if settings.arabic_reviewers %} · Arabic reviewers: {{ settings.arabic_reviewers | join(', ') }}{% endif %}</p>
+    <p class="meta">Local stand-in only. In production this is Google sign-in.</p>
   </form>
 </main>
 {% endblock %}

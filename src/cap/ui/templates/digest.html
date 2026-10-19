@@ -13,7 +13,7 @@
     <div class="card tight tile"><span class="lbl">Approved</span><span class="val">{{ d.approved }}</span><span class="meta">this week</span></div>
     <div class="card tight tile"><span class="lbl">Rejected</span><span class="val">{{ d.rejected }}{% if d.escalated %} <span style="font-size: 14px; font-weight: 500; color: var(--muted)">+ {{ d.escalated }} escalated</span>{% endif %}</span><span class="meta">your reject rate {{ pct(d.reviewer_reject_rate) }}</span></div>
     <div class="card tight tile"><span class="lbl">Critic flagged</span><span class="val">{{ pct(d.critic_flag_rate) }}</span><span class="meta">of drafts sent back once</span></div>
-    <div class="card tight tile"><span class="lbl">Reveal agreement</span><span class="val">{{ pct(d.agreement) }}</span><span class="meta">{{ d.revised }} changed after the reveal · review at 200 cards</span></div>
+    <div class="card tight tile"><span class="lbl">Reveal agreement</span><span class="val">{{ pct(d.agreement) }}</span><span class="meta">{{ d.revised }} changed after the reveal · review at {{ settings.blind_review_point_cards }} cards</span></div>
   </div>
 
   <section class="stack">
@@ -28,7 +28,7 @@
 
   <section class="stack">
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Canaries this week</h2>
-    <div class="card tight"><span><span class="word-pass">{{ d.canaries_caught }} caught</span> · {{ d.canaries_missed }} missed</span></div>
+    <div class="card tight"><span><span class="word-pass"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px"><path d="M20 6 9 17l-5-5"/></svg> {{ d.canaries_caught }} caught</span> · {{ d.canaries_missed }} missed</span></div>
   </section>
 
   <section class="stack">

@@ -13,8 +13,8 @@
     <div class="card tight stack-sm">
       {% if paused %}
       <span class="word-signal">Paused: {{ queue_state.paused_reason }}</span>
-      <form method="post" action="/paused/reopen"><button class="btn secondary sm" type="submit">Reopen the queue</button></form>
-      {% else %}<span class="word-pass">Open</span>{% endif %}
+      <form method="post" action="/paused/reopen"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn secondary sm" type="submit">Reopen the queue</button></form>
+      {% else %}<span class="word-pass"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px"><path d="M20 6 9 17l-5-5"/></svg> Open</span>{% endif %}
       <span class="meta">Environment {{ settings.env }} · region {{ settings.gcp_region }} · model backend {{ settings.model_backend.value }}</span>
     </div>
   </section>

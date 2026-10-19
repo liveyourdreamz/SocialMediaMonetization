@@ -57,14 +57,14 @@ def _falak_english(rec: PostRecord) -> PostRecord:
     rec.draft.claims = [
         Claim(
             text="Reverse osmosis runs at about 60 bar",
-            source_url="https://help.notely.example/sync",
-            source_quote="Sync completes within 10 seconds on a normal connection",
+            source_url="https://desal.example/ro-basics",
+            source_quote="Seawater RO plants typically operate at feed pressures of 55 to 70 bar",
             status="supported",
         ),
         Claim(
             text="The Gulf runs around 40 percent of the world's desalination capacity",
-            source_url="https://help.notely.example/sync",
-            source_quote="Notes are stored locally first and then synced",
+            source_url="https://desal.example/idra-2025",
+            source_quote="GCC states account for roughly 40% of global installed desalination capacity",
             status="supported",
         ),
         Claim(
@@ -93,14 +93,14 @@ def _falak_arabic(rec: PostRecord) -> PostRecord:
     rec.draft.claims = [
         Claim(
             text="يعمل التناضح العكسي عند نحو 60 بار",
-            source_url="https://help.notely.example/sync",
-            source_quote="Sync completes within 10 seconds on a normal connection",
+            source_url="https://desal.example/ro-basics",
+            source_quote="Seawater RO plants typically operate at feed pressures of 55 to 70 bar",
             status="supported",
         ),
         Claim(
             text="تشغّل دول الخليج نحو 40 في المئة من طاقة التحلية العالمية",
-            source_url="https://help.notely.example/sync",
-            source_quote="Notes are stored locally first and then synced",
+            source_url="https://desal.example/idra-2025",
+            source_quote="GCC states account for roughly 40% of global installed desalination capacity",
             status="supported",
         ),
     ]

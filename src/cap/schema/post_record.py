@@ -317,7 +317,9 @@ class Approval(Strict):
     too_fast: bool = False
     # D33: the verdict recorded before gate outcomes were revealed, and the final one.
     pre_reveal_decision: Decision | None = None
+    pre_reveal_reason_code: ReasonCode | None = None  # P14 scores canaries on these two
     revised_after_reveal: bool = False
+    decided_at: datetime | None = None  # when finalise closed the post
     spot_check: SpotCheck | None = None
     edits: list[str] = Field(default_factory=list)  # PRD 4.5: reviewer edits as a diff log
     stage_one: StageOneReview | None = None

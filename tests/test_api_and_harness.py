@@ -30,7 +30,7 @@ def test_api_full_approval_flow(client, record, tmp_path):
     r = api.post(
         f"/api/posts/{post.post_id}/verdict",
         headers=H,
-        json={"decision": "approve", "time_on_card_s": 300},
+        json={"decision": "approve"},
     )
     assert r.status_code == 422
     # and someone who is not an approver cannot record anything
@@ -39,19 +39,17 @@ def test_api_full_approval_flow(client, record, tmp_path):
         headers={"X-Reviewer": "intruder"},
         json={
             "decision": "approve",
-            "time_on_card_s": 300,
             "opening_line": "x",
             "spot_check_supported": True,
         },
     )
-    assert r.status_code == 422
+    assert r.status_code == 403
 
     r = api.post(
         f"/api/posts/{post.post_id}/verdict",
         headers=H,
         json={
             "decision": "approve",
-            "time_on_card_s": 600,
             "opening_line": "Notes that forget to sync are notes you never wrote.",
             "spot_check_supported": True,
         },
@@ -78,11 +76,12 @@ def test_api_full_approval_flow(client, record, tmp_path):
         ).status_code
         == 422
     )
+    assert api.get("/api/queue", headers={"X-Reviewer": "nobody"}).status_code == 403
     assert (
         api.post(
             f"/api/posts/{post.post_id}/verdict",
             headers=H,
-            json={"decision": "reject", "time_on_card_s": 5, "reason_code": "other"},
+            json={"decision": "reject", "reason_code": "other"},
         ).status_code
         == 422
     )
@@ -96,7 +95,7 @@ def test_api_rejected_post_cannot_be_flipped_to_approved(client, record, tmp_pat
     api.post(
         f"/api/posts/{post.post_id}/verdict",
         headers=H,
-        json={"decision": "reject", "time_on_card_s": 600, "reason_code": "other"},
+        json={"decision": "reject", "reason_code": "other"},
     )
     assert (
         api.post(f"/api/posts/{post.post_id}/finalise", headers=H, json={}).json()["status"]

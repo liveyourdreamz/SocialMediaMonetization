@@ -238,10 +238,9 @@ def test_one_revision_after_reveal_and_same_reviewer():
 
 def test_channel_c_needs_stage_one_approval():
     r = _queued(channel=Channel.C)
-    _approve(r)
     with pytest.raises(CardError, match="D19"):
-        finalise(r, reviewer=H)
-    assert r.status == PostStatus.AWAITING_APPROVAL
+        _approve(r)  # a blind approve on C is refused before stage one, nothing recorded
+    assert r.approval.pre_reveal_decision is None
     with pytest.raises(CardError, match="Arabic reviewer"):
         record_stage_one(
             r, reviewer="nobody", decision=Decision.APPROVE, notes="", time_on_card_s=90
@@ -249,8 +248,11 @@ def test_channel_c_needs_stage_one_approval():
     record_stage_one(
         r, reviewer="layla", decision=Decision.APPROVE, notes="fluent", time_on_card_s=90
     )
+    with pytest.raises(CardError, match="already recorded"):
+        record_stage_one(r, reviewer="layla", decision=Decision.REJECT, notes="", time_on_card_s=5)
+    _approve(r)
     finalise(r, reviewer=H)
-    assert r.status == PostStatus.APPROVED
+    assert r.status == PostStatus.APPROVED and r.approval.decided_at is not None
 
 
 def test_canary_caught_only_with_matching_chip():

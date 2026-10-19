@@ -31,6 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("demo")
     sv = sub.add_parser("serve")
     sv.add_argument("--port", type=int, default=8000)
+    sv.add_argument(
+        "--host", default="127.0.0.1", help="0.0.0.0 to open it on your phone over Wi-Fi"
+    )
     sv.add_argument("--canary", action="store_true", help="queue a canary too (planted fault)")
     sv.add_argument(
         "--demo",

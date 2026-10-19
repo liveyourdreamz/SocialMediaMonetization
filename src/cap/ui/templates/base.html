@@ -14,8 +14,8 @@
 <div class="app">
 {% if paused %}
 <div class="band" role="status">
-  <span><strong>Queue paused.</strong> A canary got through; nothing publishes until it is reopened.</span>
-  <a href="/paused">Read why</a>
+  <span><strong>Queue paused.</strong> Nothing publishes until an approver reopens it.</span>
+  <a href="/paused" style="min-height: 44px; display: inline-flex; align-items: center; padding: 0 8px">{{ 'Read why' if reviewer and reviewer.is_approver else 'Details' }}</a>
 </div>
 {% endif %}
 {% block body %}{% endblock %}

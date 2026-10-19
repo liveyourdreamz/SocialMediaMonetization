@@ -15,7 +15,7 @@
   <div class="banner verdict">
     <span class="eyebrow">Your verdict, recorded</span>
     <span class="head">{{ verdict_text }}{% if reason_text %}: {{ reason_text | lower }}{% endif %}</span>
-    <span class="facts">{{ record.approval.time_on_card_s | minutes }} on the card{% if record.approval.too_fast %} · faster than the card's reading time, flagged{% endif %}{% if record.human_contribution.text %} · opening line saved{% endif %}{% if record.approval.spot_check %} · spot check: {{ 'supported' if record.approval.spot_check.actually_supported else 'not supported' }}{% endif %}</span>
+    <span class="facts">{{ record.approval.time_on_card_s | minutes }} on the card{% if record.approval.too_fast %} · faster than the card's reading time, flagged{% endif %}{% if record.human_contribution.text %} · opening line saved{% endif %}{% if record.approval.spot_check and record.approval.spot_check.reviewer_said_supported is not none %} · spot check: you said {{ 'supported' if record.approval.spot_check.reviewer_said_supported else 'not supported' }}{% endif %}</span>
     {% if closed %}<span class="facts">Final: {{ record.status.value }}{% if record.approval.revised_after_reveal %} · changed after the reveal{% endif %}</span>{% endif %}
   </div>
   {% endif %}
@@ -36,7 +36,7 @@
       <span class="disc {{ 'pass' if 'first time' in critic else 'near' }}" aria-hidden="true">{% if 'first time' in critic %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% else %}!{% endif %}</span>
       <div><span class="name">Critic</span><span class="line">{{ critic }}</span></div>
     </div>
-    {% if planted %}
+    {% if planted and closed %}
     <div class="card tight stack-sm" style="border-color: var(--signal)">
       <span class="eyebrow" style="color: var(--signal)">This was a canary</span>
       <span>Planted fault: <strong>{{ planted.type }}</strong> at "{{ planted.span }}". {{ planted.why_catchable }}</span>
@@ -50,28 +50,31 @@
   {% if not blind and not closed %}
   <section class="stack">
     <h2 style="font-size: 16px; font-weight: 600">Does any of that change your mind?</h2>
-    <p class="muted" style="font-size: 14px; line-height: 20px">One change allowed, by you only. Both verdicts are stored so we can see whether the reveal is steering you.</p>
+    <p class="muted" style="font-size: 14px; line-height: 20px">One change allowed, by you only. Both verdicts are stored, so the digest can show whether the reveal is steering you.{% if record.flags.canary %} A canary is scored on the blind verdict; a change here is recorded but does not alter the score.{% endif %}</p>
     {% if record.approval.pre_reveal_decision.value == 'approve' %}
     <div style="display: flex; gap: 10px">
-      <form method="post" action="/posts/{{ card.post_id }}/finalise" style="flex: 1; display: flex"><button class="btn primary grow" type="submit">Keep approve</button></form>
+      <form method="post" action="/posts/{{ card.post_id }}/finalise" style="flex: 1; display: flex"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary grow" type="submit">Keep approve</button></form>
       <button class="btn secondary grow" type="button" data-open-sheet="reject">Change to reject</button>
     </div>
     <p class="meta" style="text-align: center">Keep approve signs the token bound to this exact render. Publishing is scheduled, not instant.</p>
     {% else %}
     <div style="display: flex; gap: 10px">
-      <form method="post" action="/posts/{{ card.post_id }}/finalise" style="flex: 1; display: flex"><button class="btn primary grow" type="submit">Keep {{ record.approval.pre_reveal_decision.value }}</button></form>
+      <form method="post" action="/posts/{{ card.post_id }}/finalise" style="flex: 1; display: flex"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary grow" type="submit">Keep {{ record.approval.pre_reveal_decision.value }}</button></form>
       <a class="btn secondary grow" href="/posts/{{ card.post_id }}/approve">Change to approve</a>
     </div>
     {% endif %}
   </section>
   {% endif %}
 
+  {% if blind and not closed and needs_stage_one %}
+  <p class="meta" style="text-align: center">Approve waits for the Arabic reviewer's stage-one pass (D19). Reject and escalate are open.</p>
+  {% endif %}
   {% if blind and not closed %}
   <div class="bar">
     <button class="btn secondary grow" type="button" data-open-sheet="reject">Reject</button>
     <button class="btn quiet" type="button" data-open-sheet="escalate">Escalate</button>
     {% if needs_stage_one %}
-    <a class="btn primary grow" aria-disabled="true" href="/posts/{{ card.post_id }}/approve" title="Channel C needs stage one first">Approve…</a>
+    <button class="btn primary grow" type="button" disabled>Approve…</button>
     {% else %}
     <a class="btn primary grow" href="/posts/{{ card.post_id }}/approve">Approve…</a>
     {% endif %}
@@ -81,12 +84,13 @@
   {% if not closed %}
   <div class="sheet" id="reject-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
     <form class="panel" method="post" action="/posts/{{ card.post_id }}/{{ 'finalise' if not blind else 'verdict' }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
       <input type="hidden" name="{{ 'revised_decision' if not blind else 'decision' }}" value="reject">
       <div class="row">
         <h2 id="sheet-title" data-sheet-title style="font-size: 20px; font-weight: 600">Why reject?</h2>
         <button type="button" class="iconbtn" aria-label="Back to the card" data-close-sheet><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
-      <p class="muted" style="font-size: 14px; line-height: 20px">One tap finishes it. Pick the thing you saw first; you can add a note after.</p>
+      <p class="muted" style="font-size: 14px; line-height: 20px">One tap finishes it. Pick the thing you saw first{% if blind %}; a note for the drafter is optional{% endif %}.</p>
       <div class="chips" role="radiogroup" aria-label="Reason">
         {% for code, text in chips %}
         <label class="chip{% if code.value == 'other' %} other{% endif %}"><input type="radio" name="reason_code" value="{{ code.value }}" data-text="{{ text }}" required><span>{{ text }}</span></label>
@@ -95,7 +99,7 @@
       {% if blind %}
       <div class="field"><label for="note">Note for the drafter (optional)</label><input class="input" id="note" name="note" placeholder="e.g. the 12-second figure is not in the log"></div>
       {% endif %}
-      <button class="btn primary" type="submit" data-sheet-submit disabled>Pick a reason</button>
+      <button class="btn primary" type="submit" data-sheet-submit>Reject with this reason</button>
       <p class="meta" style="text-align: center">Nothing is lost; the drafter gets the reason.</p>
     </form>
   </div>

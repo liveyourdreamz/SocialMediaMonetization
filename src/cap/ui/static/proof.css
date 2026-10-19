@@ -41,7 +41,7 @@ button, input, textarea { font: inherit; color: inherit; }
 /* objects */
 .card { background: var(--surface); border: var(--hairline) solid var(--line); border-radius: var(--radius-md); padding: var(--space-4); }
 .card.tight { padding: 12px 14px; }
-.card.link { display: block; text-decoration: none; color: inherit; }
+.card.link { display: flex; flex-direction: column; text-decoration: none; color: inherit; }
 .pill { font-size: 13px; padding: 6px 10px; border: var(--hairline) solid var(--line); border-radius: var(--radius-pill); background: var(--surface); }
 .hr { border: 0; border-top: var(--hairline) solid var(--line); margin: 0; }
 
@@ -68,7 +68,7 @@ button, input, textarea { font: inherit; color: inherit; }
 /* inputs */
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 13px; line-height: 18px; color: var(--muted); }
-.input, textarea.input { min-height: 48px; padding: 12px 14px; border: var(--hairline) solid var(--line); border-radius: var(--radius-md); background: var(--surface); width: 100%; }
+.input, textarea.input { min-height: 48px; padding: 12px 14px; border: var(--hairline) solid var(--muted); border-radius: var(--radius-md); background: var(--surface); width: 100%; }
 textarea.input { resize: none; font-family: var(--font-read); font-size: 17px; line-height: 1.45; }
 .input:focus { border: var(--stroke) solid var(--line-strong); outline: 2px solid var(--focus); outline-offset: 2px; }
 
@@ -88,7 +88,8 @@ textarea.input { resize: none; font-family: var(--font-read); font-size: 17px; l
 .band { background: var(--signal); color: var(--on-signal); padding: 12px var(--space-5); display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
 .band a { color: inherit; font-weight: 600; }
 .hero { background: var(--signal); color: var(--on-signal); padding: calc(var(--space-12) + 8px) var(--space-5) var(--space-5); display: flex; flex-direction: column; gap: 8px; }
-.hero .eyebrow { color: inherit; opacity: .92; }
+.hero .eyebrow { color: inherit; }
+.hero p { opacity: 1; }
 .hero h1 { font-size: 26px; line-height: 1.2; font-weight: 600; }
 
 /* gate rows (Proof GateResult) */
@@ -125,7 +126,7 @@ textarea.input { resize: none; font-family: var(--font-read); font-size: 17px; l
 /* sheet (reject) */
 .sheet { position: fixed; inset: 0; background: var(--dim); display: none; align-items: flex-end; z-index: 10; }
 .sheet[open], .sheet.open { display: flex; }
-.sheet .panel { width: 100%; max-width: 480px; margin: 0 auto; background: var(--ground); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; padding: 18px var(--space-5) calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: var(--space-4); max-height: 92vh; overflow: auto; }
+.sheet .panel { width: 100%; max-width: 480px; margin: 0 auto; background: var(--surface); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; padding: 18px var(--space-5) calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: var(--space-4); max-height: 92vh; overflow: auto; }
 .iconbtn { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; color: var(--ink); cursor: pointer; border-radius: var(--radius-pill); }
 
 /* errors */
@@ -138,7 +139,7 @@ textarea.input { resize: none; font-family: var(--font-read); font-size: 17px; l
 .cut { max-height: 520px; overflow: hidden; position: relative; }
 .cut::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 80px; background: linear-gradient(transparent, var(--ground)); }
 .cut.open { max-height: none; } .cut.open::after { display: none; }
-.linkbtn { background: none; border: 0; padding: 4px 0; color: var(--accent); font-weight: 500; cursor: pointer; }
+.linkbtn { background: none; border: 0; padding: 0; min-height: 44px; color: var(--accent); font-weight: 500; cursor: pointer; }
 .tabular { font-variant-numeric: tabular-nums; }
 
 /* the opening-line slot in the script */

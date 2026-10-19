@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from cap.config import get_settings
 from cap.schema.post_record import (
@@ -169,6 +170,10 @@ def record_stage_one(
         raise CardError("stage-one review applies to channel C only")
     if reviewer not in get_settings().arabic_reviewers:
         raise CardError("reviewer is not an authorised Arabic reviewer")
+    if record.status != PostStatus.AWAITING_APPROVAL:
+        raise CardError(f"post is {record.status.value}, not awaiting approval")
+    if record.approval.stage_one is not None:
+        raise CardError("stage one already recorded")
     record.approval.stage_one = StageOneReview(
         reviewer=reviewer, decision=decision, notes=notes, time_on_card_s=time_on_card_s
     )
@@ -201,6 +206,7 @@ def record_verdict(
         raise CardError("reject and escalate need a reason chip")
     if decision == Decision.APPROVE:
         _check_approve_inputs(record, opening_line, spot_check_supported)
+        _check_stage_one(record)
         record.human_contribution.text = (opening_line or "").strip()
         record.human_contribution.author = reviewer
     if a.spot_check is not None and spot_check_supported is not None:
@@ -209,6 +215,7 @@ def record_verdict(
     a.time_on_card_s = time_on_card_s
     a.too_fast = time_on_card_s < a.expected_reading_s
     a.reason_code = reason_code
+    a.pre_reveal_reason_code = reason_code
     a.pre_reveal_decision = decision
     a.decision = decision
     record.flags.gate_blind = False  # D33: reveal now
@@ -238,46 +245,72 @@ def finalise(
         raise CardError("no pre-reveal verdict recorded")
     if reviewer != a.reviewer:
         raise CardError("finalise must come from the reviewer who recorded the verdict")
-    if revised_decision is not None and revised_decision != a.pre_reveal_decision:
-        if revised_decision in (Decision.REJECT, Decision.ESCALATE) and reason_code is None:
+
+    if record.flags.canary:
+        # P14: a canary is scored on the blind verdict only. The reveal names the fault,
+        # so a revision after it would be a catch with the answer in hand.
+        if revised_decision is not None and revised_decision != a.pre_reveal_decision:
+            record.log("revision after reveal ignored: canaries are scored blind")
+        return _finalise_canary(record)
+
+    revising = revised_decision is not None and revised_decision != a.pre_reveal_decision
+    decision: Decision = (
+        revised_decision
+        if revising and revised_decision is not None
+        else (a.decision or Decision.ESCALATE)
+    )
+    # validate everything before touching the record (a refused revision leaves it intact)
+    if revising:
+        if decision in (Decision.REJECT, Decision.ESCALATE) and reason_code is None:
             raise CardError("a revised reject or escalate needs a reason chip")
-        if revised_decision == Decision.APPROVE:
+        if decision == Decision.APPROVE:
             _check_approve_inputs(record, opening_line, spot_check_supported)
+    if decision == Decision.APPROVE:
+        _check_stage_one(record)
+    if revising:
+        if decision == Decision.APPROVE:
             record.human_contribution.text = (opening_line or "").strip()
             record.human_contribution.author = reviewer
             if a.spot_check is not None:
                 a.spot_check.reviewer_said_supported = spot_check_supported
-        a.decision = revised_decision
+        a.decision = decision
         a.reason_code = reason_code or a.reason_code
         a.revised_after_reveal = True
-        record.log(f"verdict revised after reveal to {revised_decision.value}")
-    decision = a.decision or Decision.ESCALATE
-
-    if record.flags.canary:
-        return _finalise_canary(record, decision)
-
-    if decision == Decision.APPROVE and record.channel_id == Channel.C:
-        so = a.stage_one
-        if so is None or so.decision != Decision.APPROVE:
-            raise CardError("channel C needs the Arabic reviewer's stage-one approval (D19)")
+        record.log(f"verdict revised after reveal to {decision.value}")
     record.status = {
         Decision.APPROVE: PostStatus.APPROVED,
         Decision.REJECT: PostStatus.REJECTED,
         Decision.ESCALATE: PostStatus.PARKED,
     }[decision]
+    a.decided_at = datetime.now(UTC)
+    if decision == Decision.ESCALATE:
+        record.log(
+            f"parked: escalated by {reviewer}: {a.reason_code.value if a.reason_code else 'no chip'}"
+        )
     return record
 
 
-def _finalise_canary(record: PostRecord, decision: Decision) -> PostRecord:
-    """P14: a catch needs the matching reason chip; approving, or a wrong tap on the
-    planted claim, is a miss. Canaries never go further (D23)."""
+def _check_stage_one(record: PostRecord) -> None:
+    """D19: channel C cannot be approved, blind or revised, without stage one."""
+    if record.channel_id == Channel.C:
+        so = record.approval.stage_one
+        if so is None or so.decision != Decision.APPROVE:
+            raise CardError("channel C needs the Arabic reviewer's stage-one approval (D19)")
+
+
+def _finalise_canary(record: PostRecord) -> PostRecord:
+    """P14: scored on the blind verdict and its chip. A catch needs the matching reason
+    chip; approving, or a wrong tap on the planted claim, is a miss. Canaries never go
+    further (D23)."""
     a = record.approval
+    decision = a.pre_reveal_decision or Decision.ESCALATE
+    chip = a.pre_reveal_reason_code
     fault = record.flags.canary_fault_type
     matched = (
         decision != Decision.APPROVE
-        and a.reason_code is not None
+        and chip is not None
         and fault is not None
-        and a.reason_code.value == fault.value
+        and chip.value == fault.value
     )
     wrong_tap = bool(
         a.spot_check and a.spot_check.is_planted and a.spot_check.reviewer_said_supported
@@ -285,9 +318,10 @@ def _finalise_canary(record: PostRecord, decision: Decision) -> PostRecord:
     missed = decision == Decision.APPROVE or wrong_tap or not matched
     record.flags.canary_outcome = "missed" if missed else "caught"
     record.status = PostStatus.DISCARDED
+    a.decided_at = datetime.now(UTC)
     record.log(
         f"canary {record.flags.canary_outcome.upper()}: fault={fault.value if fault else None} "
-        f"chip={a.reason_code.value if a.reason_code else None} decision={decision.value}"
+        f"chip={chip.value if chip else None} decision={decision.value}"
     )
     if missed:
         raise CanaryMissedError(record.post_id)
