@@ -1,0 +1,3 @@
+We tested Notely for 7 days
+
+[[HEMANT_OPENING_LINE]] Today we test Notely, a note-taking tool, for 7 days. On day 3 the sync failed twice in our test log. Notely stores notes locally first, then syncs; the vendor says sync completes within 10 seconds on a normal connection. Our test measured 12 seconds on average. Verdict from the test log: it works, with one caveat. This channel is presented by an AI character.

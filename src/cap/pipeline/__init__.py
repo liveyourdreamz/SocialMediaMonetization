@@ -1,0 +1,216 @@
+"""The post pipeline as a LangGraph state machine (D20).
+
+brief -> draft -> critic -> adapt -> gates -> render -> awaiting_approval
+Any agent that fails closed parks the post (status parked) and the graph ends; a
+human decides. The state is the post record plus the sources; the checkpointer is
+SQLite locally and Postgres in production, chosen by settings.
+
+The four gates run in one node here; they are independent and will be fanned out
+once the renderer is real and gate latency matters.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, TypedDict
+
+from langgraph.graph import END, StateGraph
+
+from cap.agents import AgentBlockedError, adapt, critique, draft
+from cap.config import get_settings
+from cap.gates import (
+    InMemoryHistory,
+    Source,
+    check_disclosure,
+    check_ethics,
+    check_facts,
+    check_originality,
+)
+from cap.models import ModelClient
+from cap.schema.post_record import Platform, PostRecord, PostStatus
+
+
+class PipelineState(TypedDict, total=False):
+    record: dict[str, Any]
+    sources: list[dict[str, Any]]
+    parked_reason: str | None
+
+
+@dataclass
+class PipelineDeps:
+    client: ModelClient
+    history: InMemoryHistory = field(default_factory=lambda: InMemoryHistory(posts=[]))
+    anchor_elements: dict[str, list[str]] = field(default_factory=dict)  # channel -> elements
+    character_blocks: dict[str, str] = field(default_factory=dict)  # channel -> text
+    render_dir: Path = field(default_factory=lambda: Path("renders"))
+
+
+def _rec(state: PipelineState) -> PostRecord:
+    return PostRecord.model_validate(state["record"])
+
+
+def _put(record: PostRecord, **extra: Any) -> PipelineState:
+    out: PipelineState = {"record": record.model_dump(mode="json")}
+    out.update(extra)  # type: ignore[typeddict-item]
+    return out
+
+
+def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
+    def n_draft(state: PipelineState) -> PipelineState:
+        record = _rec(state)
+        record.status = PostStatus.DRAFTING
+        try:
+            record = draft(
+                record,
+                deps.client,
+                state.get("sources", []),
+                deps.character_blocks.get(record.channel_id.value, ""),
+            )
+        except AgentBlockedError as e:
+            return _park(record, str(e))
+        return _put(record)
+
+    def n_critic(state: PipelineState) -> PipelineState:
+        record = _rec(state)
+        try:
+            record, accepted = critique(record, deps.client)
+        except AgentBlockedError as e:
+            return _park(record, str(e))
+        if not accepted:
+            # one revision pass: Foundation re-runs the drafter once with the critique
+            # attached (the critic's issues are in the history log for now)
+            try:
+                record = draft(
+                    record,
+                    deps.client,
+                    state.get("sources", []),
+                    deps.character_blocks.get(record.channel_id.value, ""),
+                )
+            except AgentBlockedError as e:
+                return _park(record, str(e))
+        return _put(record)
+
+    def n_adapt(state: PipelineState) -> PipelineState:
+        record = _rec(state)
+        try:
+            record = adapt(record, deps.client, [Platform.YOUTUBE_LONG, Platform.YOUTUBE_SHORT])
+        except AgentBlockedError as e:
+            return _park(record, str(e))
+        return _put(record)
+
+    def n_gates(state: PipelineState) -> PipelineState:
+        record = _rec(state)
+        record.status = PostStatus.GATED
+        sources = [
+            Source(
+                url=s["url"],
+                body=s["body"],
+                fetched_at=s.get("fetched_at", ""),
+                page_date=s.get("page_date"),
+            )
+            for s in state.get("sources", [])
+        ]
+        record.gates.originality = check_originality(
+            record, deps.history, deps.anchor_elements.get(record.channel_id.value, [])
+        )
+        record.gates.ethics = check_ethics(record, deps.client)
+        record.gates.disclosure = check_disclosure(record, deps.client)
+        facts, _checks, injection = check_facts(record, deps.client, sources)
+        record.gates.facts = facts
+        if injection:
+            record.flags.injection_suspected = True
+            return _park(record, "injection suspected in fetched content; parked for review")
+        if record.gates.ethics.verdict.value == "escalate":
+            return _park(record, "ethics gate escalated")
+        if not record.gates.all_passed:
+            record.status = PostStatus.REJECTED
+            record.log("gates failed: " + ", ".join(_failed_gates(record)))
+            return _put(record, parked_reason="gates failed")
+        return _put(record)
+
+    def n_render(state: PipelineState) -> PipelineState:
+        record = _rec(state)
+        record.status = PostStatus.RENDERING
+        deps.render_dir.mkdir(parents=True, exist_ok=True)
+        # Foundation stand-in for the media renderer: a text manifest of what would be
+        # rendered. The hash binding and the approval token are real from day one.
+        path = deps.render_dir / f"{record.post_id}.render.txt"
+        content = f"{record.draft.title}\n\n{record.draft.script}\n"
+        path.write_text(content, encoding="utf-8")
+        record.asset.uri = str(path)
+        record.asset.sha256 = hashlib.sha256(content.encode()).hexdigest()
+        record.status = PostStatus.AWAITING_APPROVAL
+        record.log("rendered (stand-in) and queued for approval")
+        return _put(record)
+
+    def route_after(state: PipelineState) -> str:
+        return END if state.get("parked_reason") else "next"
+
+    g = StateGraph(PipelineState)
+    g.add_node("draft", n_draft)
+    g.add_node("critic", n_critic)
+    g.add_node("adapt", n_adapt)
+    g.add_node("gates", n_gates)
+    g.add_node("render", n_render)
+    g.set_entry_point("draft")
+    g.add_conditional_edges("draft", route_after, {END: END, "next": "critic"})
+    g.add_conditional_edges("critic", route_after, {END: END, "next": "adapt"})
+    g.add_conditional_edges("adapt", route_after, {END: END, "next": "gates"})
+    g.add_conditional_edges("gates", route_after, {END: END, "next": "render"})
+    g.add_edge("render", END)
+    return g
+
+
+def _park(record: PostRecord, reason: str) -> PipelineState:
+    record.status = PostStatus.PARKED
+    record.log(f"parked: {reason}")
+    return _put(record, parked_reason=reason)
+
+
+def _failed_gates(record: PostRecord) -> list[str]:
+    g = record.gates
+    out = []
+    if not g.originality.passed:
+        out.append("originality")
+    if g.ethics.verdict.value != "pass":
+        out.append("ethics")
+    if not g.disclosure.passed:
+        out.append("disclosure")
+    if not g.facts.passed:
+        out.append("facts")
+    return out
+
+
+def compile_pipeline(deps: PipelineDeps, checkpointer: Any | None = None):  # type: ignore[no-untyped-def]
+    graph = build_graph(deps)
+    if checkpointer is None:
+        from langgraph.checkpoint.memory import MemorySaver
+
+        checkpointer = MemorySaver()
+    return graph.compile(checkpointer=checkpointer)
+
+
+def sqlite_checkpointer():  # type: ignore[no-untyped-def]
+    """Local checkpointer (settings.checkpoint_path). Production swaps in Postgres."""
+    import sqlite3
+
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    conn = sqlite3.connect(get_settings().checkpoint_path, check_same_thread=False)
+    return SqliteSaver(conn)
+
+
+def run_post(
+    record: PostRecord,
+    sources: list[dict[str, Any]],
+    deps: PipelineDeps,
+    checkpointer: Any | None = None,
+) -> PostRecord:
+    app = compile_pipeline(deps, checkpointer)
+    config = {"configurable": {"thread_id": record.post_id}}
+    final = app.invoke(
+        {"record": record.model_dump(mode="json"), "sources": sources}, config=config
+    )
+    return PostRecord.model_validate(final["record"])

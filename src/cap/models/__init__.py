@@ -16,7 +16,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -27,8 +27,6 @@ if TYPE_CHECKING:
     from anthropic.types import MessageParam, OutputConfigParam
 
 log = logging.getLogger(__name__)
-
-T = TypeVar("T", bound="Envelope")
 
 
 class Envelope(BaseModel):
@@ -55,8 +53,8 @@ class ModelCall:
 
 
 @dataclass
-class ModelResult:
-    output: Envelope | None
+class ModelResult[T: Envelope]:
+    output: T | None
     raw: str
     stop_reason: str  # end_turn | refusal | max_tokens | error | mock
     attempts: int
@@ -72,14 +70,14 @@ class ModelClient(ABC):
     def _complete(self, call: ModelCall) -> tuple[str, str, dict[str, int]]:
         """Return (raw_text, stop_reason, usage)."""
 
-    def run(
+    def run[T: Envelope](
         self,
         spec: PromptSpec,
         user: str,
         output_model: type[T],
         tool_results: list[dict[str, Any]] | None = None,
         nonce: str | None = None,
-    ) -> ModelResult:
+    ) -> ModelResult[T]:
         nonce = nonce or new_nonce()
         call = ModelCall(
             spec=spec,
@@ -96,17 +94,17 @@ class ModelClient(ABC):
             last_raw, last_stop = raw, stop
             if stop == "refusal":
                 # A refusal is not a malformed reply; do not retry, fail closed.
-                return ModelResult(None, raw, stop, attempt, usage)
+                return ModelResult[T](None, raw, stop, attempt, usage)
             parsed = _parse(raw, output_model, spec)
             if parsed is not None:
-                return ModelResult(parsed, raw, stop, attempt, usage)
+                return ModelResult[T](parsed, raw, stop, attempt, usage)
             log.warning(
                 "prompt %s call %s: invalid output on attempt %d",
                 spec.prompt_id,
                 spec.call,
                 attempt,
             )
-        return ModelResult(None, last_raw, last_stop, 2, usage)
+        return ModelResult[T](None, last_raw, last_stop, 2, usage)
 
 
 def _parse[T: Envelope](raw: str, output_model: type[T], spec: PromptSpec) -> T | None:
