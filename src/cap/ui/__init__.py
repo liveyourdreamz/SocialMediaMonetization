@@ -381,7 +381,21 @@ def ui_router(store: Store) -> APIRouter:
         _approver(reviewer)
         from cap.demo.seed import run_brief
 
-        record = run_brief(store, channel, topic.strip())
+        try:
+            record = run_brief(store, channel, topic.strip())
+        except Exception as e:  # a backend or config fault: show it, never a blank 500
+            return render(
+                request,
+                "operator.html",
+                reviewer,
+                500,
+                tab="operator",
+                error=f"The pipeline could not run: {type(e).__name__}: {e}",
+                parked=views.parked(store),
+                queue_state=store,
+                published=views.published(store),
+                recent=views.recent_briefs(store),
+            )
         return RedirectResponse(
             f"/posts/{record.post_id}"
             if record.status == PostStatus.AWAITING_APPROVAL

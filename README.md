@@ -16,7 +16,14 @@ cd SocialMediaMonetization && git checkout bootstrap
 ./run.sh
 ```
 
-Windows (PowerShell): the same, then `.\run.ps1`.
+Windows: download `install.bat` from the repository, double-click it. It installs Git
+and `uv` if missing, downloads the code to `%USERPROFILE%\SocialMediaMonetization`,
+asks for your Anthropic API key once (typed masked, saved only to the local `.env`,
+blank for mock mode), then starts the app. Run it again to update. `run.ps1` does the
+same from a clone you already have.
+
+`run.sh` asks for the key the same way on a Mac. The key never goes anywhere but
+`.env` and, from there, to Anthropic.
 
 The script installs `uv` if you do not have it, creates `.env` from `.env.example`,
 seeds three channels and a canary, starts the app and opens the browser at
