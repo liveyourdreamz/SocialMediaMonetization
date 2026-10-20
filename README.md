@@ -6,6 +6,37 @@ Specifications live in the claude.ai Project "Social Media Monetization" (PRD, A
 
 No credential is ever committed here; keys live in Secret Manager.
 
+## Run it on your laptop
+
+Mac or Linux:
+
+```bash
+git clone https://github.com/liveyourdreamz/SocialMediaMonetization.git
+cd SocialMediaMonetization && git checkout bootstrap
+./run.sh
+```
+
+Windows (PowerShell): the same, then `.\run.ps1`.
+
+The script installs `uv` if you do not have it, creates `.env` from `.env.example`,
+seeds three channels and a canary, starts the app and opens the browser at
+<http://127.0.0.1:8000/login>. Sign in as `hemant` (or `layla` for channel C). On your
+phone, use your laptop's address on the same Wi-Fi. Records live in `./cap-data` and
+survive restarts; `./run.sh --reset` starts clean.
+
+**The loop, end to end.** Operator tab → *File a brief* → the pipeline drafts,
+critiques, cuts, runs the four gates and renders → the card lands in your Queue → you
+approve (opening line, spot check) → the plain-code publisher verifies the token
+against the rendered file and writes the post to `cap-data/published/<post id>/`
+(the YouTube adapter replaces that last step) → the Operator tab lists it as
+published. With the mock backend the drafter returns the sample episode; set
+`CAP_MODEL_BACKEND=anthropic` and the key in `.env` for real drafts.
+
+**Google sign-in.** `.env.example` says how: an OAuth client in your own Google Cloud
+console, two values in `.env`, and your e-mail mapped to your reviewer name. The
+login page then offers "Sign in with Google"; the local name box stays as a fallback
+on the laptop and is refused outside local.
+
 ## Testing the solution
 
 Three layers; each one takes a minute and needs no credentials.

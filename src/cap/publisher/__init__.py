@@ -41,6 +41,37 @@ class DryRunAdapter:
         return pid
 
 
+class LocalFolderAdapter:
+    """The laptop build's platform: copies the rendered file into <dir>/<post_id>/
+    with a manifest of what was approved and by whom. The YouTube and Meta adapters
+    replace it with the same one method."""
+
+    name = "local"
+
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
+
+    def upload(self, record: PostRecord, asset: Path) -> str:
+        import json
+        import shutil
+
+        out = self.directory / record.post_id
+        out.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(asset, out / asset.name)
+        manifest = {
+            "post_id": record.post_id,
+            "channel": record.channel_id.value,
+            "title": record.draft.title,
+            "approved_by": record.approval.reviewer,
+            "opening_line": record.human_contribution.text,
+            "asset": asset.name,
+            "sha256": record.asset.sha256,
+            "published_at": datetime.now(UTC).isoformat(),
+        }
+        (out / "manifest.json").write_text(json.dumps(manifest, indent=1), encoding="utf-8")
+        return f"local:{out}"
+
+
 def publish(
     record: PostRecord, asset: Path, token: ApprovalToken, adapter: PlatformAdapter
 ) -> PostRecord:

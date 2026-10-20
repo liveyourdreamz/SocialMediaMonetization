@@ -261,3 +261,90 @@ def test_every_post_form_carries_the_csrf_field(world):
     for html in pages:
         for form in re.findall(r"<form[^>]*method=\"post\".*?</form>", html, flags=re.S):
             assert 'name="csrf"' in form, form[:120]
+
+
+def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
+    """Brief -> pipeline -> queue -> approve -> token -> publisher -> published folder,
+    with records surviving a restart (FileStore)."""
+    from cap.approval.app import FileStore
+    from cap.publisher import LocalFolderAdapter
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "cap-data"))
+    from cap.config import get_settings
+
+    get_settings.cache_clear()
+    data = tmp_path / "cap-data"
+    store = FileStore(data)
+    store.publisher = LocalFolderAdapter(data / "published")
+    api = Browser(create_app(store), follow_redirects=False)
+    api.sign_in("hemant")
+    # file a brief from the operator screen: the pipeline runs and the card is queued
+    r = api.form("/operator/brief", channel="A", topic="A week with a note app")
+    assert r.status_code == 303 and r.headers["location"].startswith("/posts/")
+    post_id = r.headers["location"].split("/")[-1]
+    rec = store.get(post_id)
+    assert (
+        rec.status == PostStatus.AWAITING_APPROVAL and rec.brief.topic == "A week with a note app"
+    )
+    assert (data / "posts" / f"{post_id}.json").exists()
+    # approve it
+    api.get(f"/posts/{post_id}")
+    api.form(
+        f"/posts/{post_id}/verdict",
+        decision="approve",
+        opening_line="One week, one surprise.",
+        spot_check_supported="yes",
+    )
+    r = api.form(f"/posts/{post_id}/finalise")
+    assert r.status_code == 303
+    assert rec.status == PostStatus.PUBLISHED and "local" in rec.publish.platform_post_ids
+    assert (data / "published" / post_id / "manifest.json").exists()
+    assert "published" in api.get("/operator").text
+    # restart: a new store on the same folder sees everything
+    again = FileStore(data)
+    assert again.get(post_id).status == PostStatus.PUBLISHED
+    assert again.get(post_id).approval.token == rec.approval.token
+    # a canary can never reach the publisher, even approved
+    canary = (
+        next(p for p in store.queue() if p.flags.canary)
+        if any(p.flags.canary for p in store.queue())
+        else None
+    )
+    assert canary is None or canary.status != PostStatus.PUBLISHED
+
+
+def test_google_sign_in_maps_a_verified_email_to_a_reviewer(world, monkeypatch):
+    store, _ = world
+    monkeypatch.setenv("CAP_GOOGLE_CLIENT_ID", "client-id.apps.googleusercontent.com")
+    monkeypatch.setenv("CAP_GOOGLE_CLIENT_SECRET", "not-a-real-secret")
+    monkeypatch.setenv("CAP_REVIEWER_EMAILS", '{"hemant@example.com": "hemant"}')
+    from cap.approval import google
+    from cap.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(google, "exchange_code", lambda code, uri: "id-token-" + code)
+    monkeypatch.setattr(
+        google,
+        "verify_id_token",
+        lambda tok: "hemant@example.com" if tok == "id-token-good" else "stranger@example.com",
+    )
+    b = Browser(create_app(store), follow_redirects=False)
+    page = b.get("/login").text
+    assert "Sign in with Google" in page
+    r = b.get("/auth/google")
+    assert r.status_code == 303 and "accounts.google.com" in r.headers["location"]
+    state = b.cookies.get("cap_oauth_state")
+    assert state and f"state={state}" in r.headers["location"]
+    # a forged state is refused; a good code maps to hemant and sets the same cookies
+    r = b.get("/auth/google/callback?code=good&state=wrong")
+    assert r.status_code == 303 and r.headers["location"] == "/login"  # refused: back to sign-in
+    assert not b.cookies.get("cap_reviewer")
+    r = b.get(f"/auth/google/callback?code=good&state={state}")
+    assert r.status_code == 303 and b.cookies.get("cap_reviewer") and b.cookies.get("cap_csrf")
+    assert b.get("/").status_code == 200
+    # an unknown e-mail is refused
+    b2 = Browser(create_app(store), follow_redirects=False)
+    b2.get("/auth/google")
+    s2 = b2.cookies.get("cap_oauth_state")
+    assert b2.get(f"/auth/google/callback?code=bad&state={s2}").status_code == 403

@@ -9,13 +9,57 @@
   </header>
 
   <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">File a brief</h2>
+    <form method="post" action="/operator/brief" class="card stack"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <p class="muted" style="font-size: 14px; line-height: 20px">Runs the whole pipeline now: draft, critic, platform cuts, the four gates, the render, then the card lands in the queue. {% if settings.model_backend.value == 'mock' %}The drafter is the mock backend until an API key is in <code>.env</code>, so the draft is the sample episode.{% endif %}</p>
+      <div class="field">
+        <label for="channel">Channel</label>
+        <select class="input" id="channel" name="channel">{% for ch in settings.channels %}<option value="{{ ch }}">{{ ch }} · {{ settings.channel_characters.get(ch, '') }}</option>{% endfor %}</select>
+      </div>
+      <div class="field">
+        <label for="topic">Topic</label>
+        <input class="input" id="topic" name="topic" placeholder="e.g. What a 7-day test of a note app showed" required maxlength="140">
+      </div>
+      <button class="btn primary sm" type="submit">Run the pipeline</button>
+    </form>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Recent posts, any state</h2>
+    <div class="stack-sm">
+      {% for p in recent %}
+      <a class="card tight link" href="/posts/{{ p.post_id }}" style="gap: 4px">
+        <div class="row"><span class="tag">{{ p.channel_id.value }}</span><span class="meta">{{ p.status.value | replace('_', ' ') }}</span></div>
+        <span class="read" style="font-size: 16px">{{ p.draft.title or p.brief.topic }}</span>
+        <span class="meta">brief: {{ p.brief.topic }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Published</h2>
+    <div class="stack-sm">
+      {% if published %}
+      {% for p in published %}
+      <div class="card tight stack-sm" style="gap: 4px">
+        <div class="row"><span class="tag">{{ p.channel_id.value }}</span><span class="meta">{{ p.publish.published_at.strftime('%-d %b %H:%M') if p.publish.published_at else '' }}</span></div>
+        <span class="read" style="font-size: 16px">{{ p.draft.title }}</span>
+        <span class="meta" style="font-family: var(--font-mono)">{% for k, v in p.publish.platform_post_ids.items() %}{{ k }}: {{ v }}{% endfor %}</span>
+      </div>
+      {% endfor %}
+      {% else %}<div class="card tight muted">Nothing published yet. An approval issues the token; the publisher verifies it against the rendered file and writes the post to the local folder (the YouTube adapter replaces that step).</div>{% endif %}
+    </div>
+  </section>
+
+  <section class="stack">
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Queue state</h2>
     <div class="card tight stack-sm">
       {% if paused %}
       <span class="word-signal">Paused: {{ queue_state.paused_reason }}</span>
       <form method="post" action="/paused/reopen"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn secondary sm" type="submit">Reopen the queue</button></form>
       {% else %}<span class="word-pass"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px"><path d="M20 6 9 17l-5-5"/></svg> Open</span>{% endif %}
-      <span class="meta">Environment {{ settings.env }} · region {{ settings.gcp_region }} · model backend {{ settings.model_backend.value }}</span>
+      <span class="meta">Environment {{ settings.env }} · region {{ settings.gcp_region }} · model backend {{ settings.model_backend.value }} · sign-in {{ 'Google' if settings.google_enabled else 'local stand-in' }} · records in {{ settings.data_dir }}/</span>
     </div>
   </section>
 

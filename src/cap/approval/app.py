@@ -16,8 +16,11 @@ Identity: cap.approval.identity (header or signed cookie, opt-in, local only).
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import asdict
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
@@ -36,6 +39,7 @@ from cap.approval.card import (
 )
 from cap.approval.identity import Reviewer, reviewer_identity
 from cap.config import get_settings
+from cap.publisher import PlatformAdapter, PublishRefusedError, publish
 from cap.schema.post_record import Channel, Decision, PostRecord, PostStatus, ReasonCode
 
 
@@ -50,8 +54,9 @@ class Store:
         self.paused: bool = False  # P14: a missed canary pauses the session
         self.paused_reason: str = ""
         self.opened_at: dict[tuple[str, str], datetime] = {}
-        self.analytics: dict[str, dict[str, Any]] = {}  # channel id -> figures + source
+        self.analytics: dict[str, Any] = {}  # agent 14's figures, with source and pull time
         self.analytics_note: str = ""  # "example figures" in demo mode; else empty
+        self.publisher: PlatformAdapter | None = None  # set by the app; None = approve only
 
     def get(self, post_id: str) -> PostRecord:
         try:
@@ -81,9 +86,61 @@ class Store:
 
     def pause(self, reason: str) -> None:
         self.paused, self.paused_reason = True, reason
+        self.save_state()
 
     def reopen(self) -> None:
         self.paused, self.paused_reason = False, ""
+        self.save_state()
+
+    def save_state(self) -> None:  # the file-backed store overrides
+        return None
+
+
+class FileStore(Store):
+    """The laptop build's store: one JSON file per post under <data_dir>/posts and a
+    state file for the paused flag and analytics. Writes are atomic (write, then
+    rename). The Cloud SQL repository replaces this with the same methods."""
+
+    def __init__(self, root: Path) -> None:
+        super().__init__()
+        self.root = root
+        (self.root / "posts").mkdir(parents=True, exist_ok=True)
+        for f in sorted((self.root / "posts").glob("*.json")):
+            rec = PostRecord.model_validate_json(f.read_text(encoding="utf-8"))
+            self.posts[rec.post_id] = rec
+        state = self.root / "state.json"
+        if state.exists():
+            d = json.loads(state.read_text(encoding="utf-8"))
+            self.paused = bool(d.get("paused"))
+            self.paused_reason = d.get("paused_reason", "")
+            self.analytics = d.get("analytics", {})
+            self.analytics_note = d.get("analytics_note", "")
+
+    def put(self, record: PostRecord) -> None:
+        super().put(record)
+        _atomic_write(
+            self.root / "posts" / f"{record.post_id}.json", record.model_dump_json(indent=1)
+        )
+
+    def save_state(self) -> None:
+        _atomic_write(
+            self.root / "state.json",
+            json.dumps(
+                {
+                    "paused": self.paused,
+                    "paused_reason": self.paused_reason,
+                    "analytics": self.analytics,
+                    "analytics_note": self.analytics_note,
+                },
+                indent=1,
+            ),
+        )
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 class StageOneIn(BaseModel):
@@ -119,6 +176,14 @@ def finalise_and_issue(store: Store, record: PostRecord, reviewer: str, **kw: An
         t = tok.issue(record.post_id, record.asset.sha256, reviewer, "approve", canary=False)
         record.approval.token = t.encode()
         issued = True
+        if store.publisher is not None:
+            # The plain-code publisher (PRD 4.6): verifies the token against the file's
+            # hash and refuses canaries, failed gates and changed files. A refusal is
+            # logged on the record and the post stays approved for the operator to see.
+            try:
+                publish(record, Path(record.asset.uri), t, store.publisher)
+            except PublishRefusedError as e:
+                record.log(f"publish refused: {e}")
     store.put(record)
     return issued
 

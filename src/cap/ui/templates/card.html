@@ -16,7 +16,7 @@
     <span class="eyebrow">Your verdict, recorded</span>
     <span class="head">{{ verdict_text }}{% if reason_text %}: {{ reason_text | lower }}{% endif %}</span>
     <span class="facts">{{ record.approval.time_on_card_s | minutes }} on the card{% if record.approval.too_fast %} · faster than the card's reading time, flagged{% endif %}{% if record.human_contribution.text %} · opening line saved{% endif %}{% if record.approval.spot_check and record.approval.spot_check.reviewer_said_supported is not none %} · spot check: you said {{ 'supported' if record.approval.spot_check.reviewer_said_supported else 'not supported' }}{% endif %}</span>
-    {% if closed %}<span class="facts">Final: {{ record.status.value }}{% if record.approval.revised_after_reveal %} · changed after the reveal{% endif %}</span>{% endif %}
+    {% if closed %}<span class="facts">Final: {{ record.status.value | replace('_', ' ') }}{% if record.approval.revised_after_reveal %} · changed after the reveal{% endif %}{% if record.status.value == 'published' %} · token verified against the rendered file by the publisher{% endif %}</span>{% endif %}
   </div>
   {% endif %}
 

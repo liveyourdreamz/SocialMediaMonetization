@@ -326,6 +326,8 @@ class Portfolio:
     gate_body: str
     gate_meta: str
     sources: str
+    published_count: int = 0
+    approved_waiting: int = 0
 
 
 CLOSED = (PostStatus.APPROVED, PostStatus.REJECTED, PostStatus.PARKED, PostStatus.PUBLISHED)
@@ -505,6 +507,8 @@ def portfolio(store: Store) -> Portfolio:
         gate_body=gate_body,
         gate_meta=gate_meta,
         sources=" · ".join(src_parts),
+        published_count=sum(1 for p in store.posts.values() if p.status == PostStatus.PUBLISHED),
+        approved_waiting=sum(1 for p in store.posts.values() if p.status == PostStatus.APPROVED),
     )
 
 
@@ -603,3 +607,13 @@ def parked(store: Store) -> list[tuple[PostRecord, str]]:
                 text = f"{REASON_TEXT[p.approval.reason_code]} · {text}"
             out.append((p, text))
     return out
+
+
+def published(store: Store) -> list[PostRecord]:
+    out = [p for p in store.posts.values() if p.status == PostStatus.PUBLISHED]
+    return sorted(out, key=lambda p: p.publish.published_at or p.created_at, reverse=True)
+
+
+def recent_briefs(store: Store) -> list[PostRecord]:
+    """The last few posts in any state, newest first: what a brief turned into."""
+    return sorted(store.posts.values(), key=lambda p: p.created_at, reverse=True)[:8]

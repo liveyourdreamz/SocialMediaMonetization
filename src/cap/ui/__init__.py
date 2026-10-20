@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from cap.approval import google
 from cap.approval.app import Store, finalise_and_issue, visible_to
 from cap.approval.card import CardError, record_stage_one, record_verdict
 from cap.approval.identity import (
@@ -82,12 +83,69 @@ def ui_router(store: Store) -> APIRouter:
         if not reviewer.is_approver:
             raise HTTPException(403, "approvers only")
 
-    # ---- sign-in stand-in (local only; Google sign-in sets the same cookies later)
+    def _signed_in(name: str) -> Response:
+        resp = RedirectResponse("/", status_code=303)
+        secure = secure_cookies()
+        for key, value in ((COOKIE, sign_cookie(name)), (CSRF_COOKIE, new_csrf_token())):
+            resp.set_cookie(
+                key, value, max_age=COOKIE_MAX_AGE_S, httponly=True, samesite="lax", secure=secure
+            )
+        resp.delete_cookie(google.STATE_COOKIE)
+        return resp
+
+    # ---- sign-in: Google when configured; the local name box only under the dev flag
     @r.get("/login", response_class=HTMLResponse)
     def login_form(request: Request) -> Response:
-        if not get_settings().dev_reviewer_header:
+        s = get_settings()
+        if not s.google_enabled and not s.dev_reviewer_header:
             raise HTTPException(503, "sign-in not configured for this environment")
-        return render(request, "login.html", None, name="", error="")
+        return render(
+            request,
+            "login.html",
+            None,
+            name="",
+            error="",
+            google=s.google_enabled,
+            local=s.dev_reviewer_header,
+        )
+
+    @r.get("/auth/google")
+    def google_start(request: Request) -> Response:
+        if not get_settings().google_enabled:
+            raise HTTPException(503, "Google sign-in is not configured")
+        state = google.new_state()
+        redirect_uri = str(request.url_for("google_callback"))
+        resp = RedirectResponse(google.auth_url(redirect_uri, state), status_code=303)
+        resp.set_cookie(
+            google.STATE_COOKIE,
+            state,
+            max_age=600,
+            httponly=True,
+            samesite="lax",
+            secure=secure_cookies(),
+        )
+        return resp
+
+    @r.get("/auth/google/callback", name="google_callback")
+    def google_callback(
+        request: Request, code: str = "", state: str = "", error: str = ""
+    ) -> Response:
+        if error or not code:
+            return render(
+                request,
+                "login.html",
+                None,
+                401,
+                error="Google sign-in was cancelled.",
+                name="",
+                google=True,
+                local=get_settings().dev_reviewer_header,
+            )
+        if not state or state != request.cookies.get(google.STATE_COOKIE):
+            raise HTTPException(401, "sign-in state did not match; start again")
+        redirect_uri = str(request.url_for("google_callback"))
+        email = google.verify_id_token(google.exchange_code(code, redirect_uri))
+        return _signed_in(google.reviewer_for_email(email))
 
     @r.post("/login")
     def login(request: Request, name: str = Form(default="")) -> Response:
@@ -102,26 +160,10 @@ def ui_router(store: Store) -> APIRouter:
                 403,
                 error="That name is not on a reviewer list.",
                 name=name,
+                google=get_settings().google_enabled,
+                local=True,
             )
-        resp = RedirectResponse("/", status_code=303)
-        secure = secure_cookies()
-        resp.set_cookie(
-            COOKIE,
-            sign_cookie(name),
-            max_age=COOKIE_MAX_AGE_S,
-            httponly=True,
-            samesite="lax",
-            secure=secure,
-        )
-        resp.set_cookie(
-            CSRF_COOKIE,
-            new_csrf_token(),
-            max_age=COOKIE_MAX_AGE_S,
-            httponly=True,
-            samesite="lax",
-            secure=secure,
-        )
-        return resp
+        return _signed_in(name)
 
     @r.post("/logout", dependencies=[Depends(check_csrf)])
     def logout() -> Response:
@@ -326,6 +368,27 @@ def ui_router(store: Store) -> APIRouter:
         _approver(reviewer)
         return render(request, "digest.html", reviewer, tab="digest", d=views.digest(store))
 
+    @r.post("/operator/brief", dependencies=[Depends(check_csrf)])
+    def file_brief(
+        request: Request,
+        channel: str = Form(...),
+        topic: str = Form(...),
+        reviewer: Reviewer = Depends(current_reviewer),
+    ) -> Response:
+        """Brief -> draft -> critic -> adapt -> gates -> render -> queue, in one request.
+        On the mock backend the drafter returns the sample episode; with an API key it
+        drafts the topic. Either way the gates, the card and the publisher are real."""
+        _approver(reviewer)
+        from cap.demo.seed import run_brief
+
+        record = run_brief(store, channel, topic.strip())
+        return RedirectResponse(
+            f"/posts/{record.post_id}"
+            if record.status == PostStatus.AWAITING_APPROVAL
+            else "/operator",
+            status_code=303,
+        )
+
     @r.get("/operator", response_class=HTMLResponse)
     def operator(request: Request, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
         _approver(reviewer)
@@ -336,6 +399,8 @@ def ui_router(store: Store) -> APIRouter:
             tab="operator",
             parked=views.parked(store),
             queue_state=store,
+            published=views.published(store),
+            recent=views.recent_briefs(store),
         )
 
     return r

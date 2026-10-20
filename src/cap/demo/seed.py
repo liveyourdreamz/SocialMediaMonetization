@@ -6,6 +6,7 @@ mark (D39): nothing here pretends to be a measurement."""
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from cap.approval.app import Store
@@ -13,10 +14,20 @@ from cap.approval.card import prepare_card
 from cap.demo import CHARACTER_BLOCK, SOURCES, TEST_LOG, happy_fixtures
 from cap.models import MockClient
 from cap.pipeline import PipelineDeps, run_post
-from cap.schema.post_record import Brief, Channel, Claim, FaultType, PlantedFault, PostRecord
+from cap.schema.post_record import (
+    Brief,
+    Channel,
+    Claim,
+    FaultType,
+    PlantedFault,
+    PostRecord,
+    PostStatus,
+)
 
 
 def demo_post(channel: Channel = Channel.A, canary: bool = False) -> PostRecord:
+    from cap.config import get_settings
+
     rec = PostRecord(
         channel_id=channel,
         brief=Brief(topic="Notely 7-day test", anchor_elements=["test log"]),
@@ -26,6 +37,7 @@ def demo_post(channel: Channel = Channel.A, canary: bool = False) -> PostRecord:
         anchor_elements={channel.value: ["test log"]},
         character_blocks={channel.value: CHARACTER_BLOCK},
         test_logs={rec.post_id: TEST_LOG},
+        render_dir=Path(get_settings().data_dir) / "renders",
     )
     out = run_post(rec, SOURCES, deps)
     if canary:
@@ -133,6 +145,33 @@ EXAMPLE_ANALYTICS: dict[str, Any] = {
         },
     },
 }
+
+
+def run_brief(store: Store, channel: str, topic: str) -> PostRecord:
+    """The whole pipeline on one brief. Mock backend: the sample episode with the brief's
+    topic recorded; Anthropic backend: a real draft of the topic."""
+    from cap.config import get_settings
+    from cap.models import get_client
+
+    ch = Channel(channel)
+    rec = PostRecord(channel_id=ch, brief=Brief(topic=topic, anchor_elements=["test log"]))
+    client = get_client(happy_fixtures())
+    deps = PipelineDeps(
+        client=client,
+        anchor_elements={ch.value: ["test log"]},
+        character_blocks={ch.value: CHARACTER_BLOCK},
+        test_logs={rec.post_id: TEST_LOG},
+        render_dir=Path(get_settings().data_dir) / "renders",
+    )
+    out = run_post(rec, SOURCES, deps)
+    if get_settings().model_backend.value == "mock":
+        out.log("drafted by the mock backend from the sample episode (no API key yet)")
+    if ch == Channel.C:
+        out = _falak_arabic(out)
+        if out.status == PostStatus.AWAITING_APPROVAL:
+            prepare_card(out)
+    store.put(out)
+    return out
 
 
 def seed_store(store: Store, demo: bool = False, canary: bool = False) -> None:

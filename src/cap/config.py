@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///cap-local.db"
     checkpoint_path: str = "cap-checkpoints.sqlite"
 
+    # Google sign-in (OIDC). When both are set, /login offers "Sign in with Google" and
+    # the e-mail must map to a reviewer below. Values come from .env locally and Secret
+    # Manager in production; never from code or chat.
+    google_client_id: str = ""
+    google_client_secret: SecretStr | None = None
+    reviewer_emails: dict[str, str] = Field(default_factory=dict)  # e-mail -> reviewer name
+
+    # Where the laptop build keeps its records (posts, verdicts, published files).
+    data_dir: str = "cap-data"
+
     model_backend: ModelBackend = ModelBackend.MOCK
     anthropic_api_key: SecretStr | None = None
     anthropic_max_budget_usd_per_post: float = 5.0  # not yet enforced; kill-gate work
@@ -96,7 +106,15 @@ class Settings(BaseSettings):
             raise ValueError("CAP_ANTHROPIC_API_KEY is required with the anthropic backend")
         if self.dev_reviewer_header:
             raise ValueError("CAP_DEV_REVIEWER_HEADER is for local runs only")
+        if not self.google_client_id or self.google_client_secret is None:
+            raise ValueError(
+                "Google sign-in (CAP_GOOGLE_CLIENT_ID/SECRET) is required outside local"
+            )
         return self
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
 
 
 @lru_cache

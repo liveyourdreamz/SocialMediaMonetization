@@ -26,6 +26,10 @@
     {% endfor %}
   </div>
 
+  {% if p.published_count %}
+  <p class="meta">{{ p.published_count }} published so far, {{ p.approved_waiting }} approved and waiting for the publisher.</p>
+  {% endif %}
+
   <section class="stack">
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Channels</h2>
     {% for c in p.channels %}
