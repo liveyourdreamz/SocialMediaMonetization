@@ -88,6 +88,13 @@ def _falak_english(rec: PostRecord) -> PostRecord:
         ),
     ]
     rec.sponsor = None
+    rec.draft.on_screen_text = ["60 bar", "40% of world capacity", "3.1 kWh per m³"]
+    rec.draft.shot_list = [
+        "RO membrane bench rig, close",
+        "Gulf plant aerial (credited)",
+        "Energy bill overlay",
+    ]
+    rec.variants = []  # the hand-edited demo post keeps no cuts from the sample episode
     return rec
 
 
@@ -102,6 +109,8 @@ def _falak_arabic(rec: PostRecord) -> PostRecord:
         "وهو ضمن النطاق الذي ينشره المشغّلون."
     )
     rec.draft.caption = "المصادر في الوصف. يقدّمها شخصية بالذكاء الاصطناعي."
+    rec.draft.on_screen_text = ["60 بار", "40% من الطاقة العالمية", "3.1 كيلوواط ساعة للمتر المكعب"]
+    rec.variants = []
     rec.draft.claims = [
         Claim(
             text="يعمل التناضح العكسي عند نحو 60 بار",
