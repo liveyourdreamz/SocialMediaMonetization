@@ -41,9 +41,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Tests on Windows
+        shell: pwsh
         run: |
           uv sync --locked --all-extras
-          uv run pytest -q
+          uv run pytest -q -x --tb=short 2>&1 | Tee-Object -FilePath pytest.txt
+          exit $LASTEXITCODE
+      - name: Surface the failure as an annotation (log API is not always readable)
+        if: failure()
+        shell: pwsh
+        run: |
+          $tail = (Get-Content pytest.txt | Select-Object -Last 60) -join "%0A"
+          Write-Output "::error title=pytest on Windows::$tail"
       - name: install.bat end to end
         shell: cmd
         env:
@@ -52,8 +60,14 @@ jobs:
           CAP_SMOKE: "1"
         run: |
           git config --global url."https://x-access-token:${{ github.token }}@github.com/".insteadOf "https://github.com/"
-          call install.bat
+          call install.bat > install.txt 2>&1
+          type install.txt
           if errorlevel 1 exit /b 1
+      - name: Surface install.bat output as an annotation
+        if: failure()
+        shell: pwsh
+        run: |
+          if (Test-Path install.txt) { $tail = (Get-Content install.txt | Select-Object -Last 60) -join "%0A"; Write-Output "::error title=install.bat on Windows::$tail" }
       - name: run.ps1 parses
         shell: pwsh
         run: $null = [scriptblock]::Create((Get-Content -Raw run.ps1)); "ok"
