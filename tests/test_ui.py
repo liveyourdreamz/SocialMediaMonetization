@@ -348,3 +348,25 @@ def test_google_sign_in_maps_a_verified_email_to_a_reviewer(world, monkeypatch):
     b2.get("/auth/google")
     s2 = b2.cookies.get("cap_oauth_state")
     assert b2.get(f"/auth/google/callback?code=bad&state={s2}").status_code == 403
+
+
+def test_dates_render_without_platform_specific_strftime(world):
+    """Windows has no %-d; every date on a screen goes through views.day()."""
+    import re
+    from pathlib import Path
+
+    store, api = world
+    src = Path(__file__).resolve().parents[1] / "src" / "cap"
+    offenders = [
+        str(f)
+        for f in src.rglob("*")
+        if f.suffix in (".py", ".html") and re.search(r"%-[dmHIMjU]", f.read_text(encoding="utf-8"))
+    ]
+    assert not offenders, offenders
+    assert api.get("/").status_code == 200 and api.get("/digest").status_code == 200
+    from datetime import UTC, datetime
+
+    from cap.ui.views import day
+
+    assert day(datetime(2026, 12, 8, 9, 5, tzinfo=UTC)) == "8 Dec 2026"
+    assert day(datetime(2026, 12, 8, 9, 5, tzinfo=UTC), year=False, time=True) == "8 Dec 09:05"

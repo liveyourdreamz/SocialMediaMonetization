@@ -42,6 +42,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = StaticFiles(directory=str(HERE / "static"))
 templates = Jinja2Templates(directory=str(HERE / "templates"))
 templates.env.filters["minutes"] = views.minutes
+templates.env.filters["day"] = views.day
 
 
 def _ctx(request: Request, store: Store, reviewer: Reviewer | None, **extra: Any) -> dict[str, Any]:

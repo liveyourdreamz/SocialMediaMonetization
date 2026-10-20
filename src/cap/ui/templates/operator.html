@@ -44,7 +44,7 @@
       {% if published %}
       {% for p in published %}
       <div class="card tight stack-sm" style="gap: 4px">
-        <div class="row"><span class="tag">{{ p.channel_id.value }}</span><span class="meta">{{ p.publish.published_at.strftime('%-d %b %H:%M') if p.publish.published_at else '' }}</span></div>
+        <div class="row"><span class="tag">{{ p.channel_id.value }}</span><span class="meta">{{ p.publish.published_at | day(False, True) if p.publish.published_at else '' }}</span></div>
         <span class="read" style="font-size: 16px">{{ p.draft.title }}</span>
         <span class="meta" style="font-family: var(--font-mono)">{% for k, v in p.publish.platform_post_ids.items() %}{{ k }}: {{ v }}{% endfor %}</span>
       </div>

@@ -104,6 +104,16 @@ GATE_NAMES = [
 ]
 
 
+def day(d: date | datetime, year: bool = True, time: bool = False) -> str:
+    """'8 Dec 2026' without a leading zero, on every platform (Windows' strftime rejects the dash flag)."""
+    out = f"{d.day} {d.strftime('%b')}"
+    if year:
+        out += f" {d.year}"
+    if time:
+        out += f" {d.strftime('%H:%M')}"
+    return out
+
+
 def minutes(seconds: int) -> str:
     m, s = divmod(max(int(seconds), 0), 60)
     return f"{m} min {s:02d} s" if m else f"{s} s"
@@ -475,11 +485,11 @@ def portfolio(store: Store) -> Portfolio:
             (12, _add_months(start, 12)),
         ]
         nxt = next(((n, d) for n, d in gates if d >= now.date()), gates[-1])
-        gate_title = f"Month {nxt[0]} review · {nxt[1].strftime('%-d %b %Y')}"
+        gate_title = f"Month {nxt[0]} review · {day(nxt[1])}"
         gate_body = (
             f"What must be true: [R1 month-{nxt[0]} threshold, re-run for the Feb 2027 YPP bar]."
         )
-        gate_meta = f"Pilot started {start.strftime('%-d %b %Y')}."
+        gate_meta = f"Pilot started {day(start)}."
     else:
         gate_title, gate_body, gate_meta = (
             "Not started",
@@ -577,7 +587,7 @@ def digest(store: Store) -> Digest:
         if p.flags.canary and p.approval.decided_at and p.approval.decided_at >= since
     ]
     return Digest(
-        week=f"{since.strftime('%-d %b')} to {now.strftime('%-d %b %Y')}",
+        week=f"{day(since, year=False)} to {day(now)}",
         approved=approved,
         rejected=rejected,
         escalated=escalated,

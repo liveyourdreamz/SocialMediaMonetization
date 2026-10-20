@@ -332,6 +332,31 @@ def create_app(store: Store | None = None) -> FastAPI:
     app.include_router(ui_router(store))
     app.mount("/static", STATIC, name="static")
 
+    @app.exception_handler(Exception)
+    async def _crash(request: Request, exc: Exception):  # type: ignore[no-untyped-def]
+        """A fault on a laptop run says what broke (type, message, file and line) so it
+        can be reported; outside local it stays a plain 500 with the detail in the log."""
+        import logging
+        import traceback
+
+        logging.getLogger("cap").exception("unhandled error on %s", request.url.path)
+        if not local:
+            return JSONResponse({"detail": "internal error"}, status_code=500)
+        tb = traceback.extract_tb(exc.__traceback__)
+        where = f"{tb[-1].filename.split('cap')[-1]}:{tb[-1].lineno}" if tb else "?"
+        body = (
+            "<!doctype html><meta charset='utf-8'><title>Something broke</title>"
+            "<body style='font: 15px/1.5 system-ui; max-width: 640px; margin: 48px auto; padding: 0 16px'>"
+            "<h1 style='font-size: 22px'>Something broke on this page</h1>"
+            f"<p><b>{type(exc).__name__}</b>: {str(exc)[:500]}</p>"
+            f"<p style='color:#5c5955'>at cap{where} · {request.method} {request.url.path}</p>"
+            "<p>Copy this page's text into the chat and it gets fixed. Nothing was published.</p>"
+            "<p><a href='/'>Portfolio</a> · <a href='/queue'>Queue</a></p></body>"
+        )
+        from fastapi.responses import HTMLResponse
+
+        return HTMLResponse(body, status_code=500)
+
     @app.exception_handler(HTTPException)
     async def _html_aware(request: Request, exc: HTTPException):  # type: ignore[no-untyped-def]
         """The screens get a sign-in redirect, not a JSON body, when the cookie has
