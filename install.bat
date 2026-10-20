@@ -4,8 +4,8 @@ title Content Agent Portfolio
 rem One file to install and run the app on a Windows laptop.
 rem Double-click it, or run it from a terminal. Safe to run again: it updates and restarts.
 rem This file only fetches the code; the steps that change over time live in tools\start.bat.
-rem Your Anthropic API key is asked for here, typed masked, and written only to the local
-rem .env file next to the code (git-ignored). It is never sent anywhere but Anthropic.
+rem The app asks for your Anthropic API key on first run (typed hidden) and writes it only
+rem to the local .env file next to the code (git-ignored). It never goes anywhere but Anthropic.
 
 set "REPO=https://github.com/liveyourdreamz/SocialMediaMonetization.git"
 set "BRANCH=bootstrap"
@@ -47,6 +47,7 @@ if exist "%DIR%\.git" (
   git -C "%DIR%" fetch -q origin %BRANCH%
   git -C "%DIR%" checkout -q %BRANCH%
   git -C "%DIR%" pull -q --ff-only origin %BRANCH%
+  if errorlevel 1 ( echo  Update failed - the messages above say why. & pause & exit /b 1 )
 ) else (
   echo  Downloading the code to %DIR% ...
   git clone -q --branch %BRANCH% %REPO% "%DIR%"

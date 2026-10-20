@@ -6,7 +6,8 @@ cap prompts check          verify the extracted prompts match the registry
 cap harness run [--runs N] run the regression sets (mock backend unless configured)
 cap demo                   run one fake Patch episode through the pipeline (mock)
 cap serve [--demo]         run the app locally (Portfolio, queue, card, digest, operator)
-                           with demo posts queued; sign in at /login?name=hemant
+                           with demo posts queued; asks for the API key on first run
+cap key                    enter or change the Anthropic API key (hidden; local .env only)
 cap tokens build|check     compile design/proof/tokens.json to the app's tokens.css
 cap youtube auth           one-time browser sign-in for YouTube uploads (laptop)
 """
@@ -43,6 +44,8 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="three channels, a canary, example analytics, an Arabic reviewer",
     )
+    k = sub.add_parser("key")
+    k.add_argument("--no-check", action="store_true", help="do not test the key against Anthropic")
     yt = sub.add_parser("youtube")
     yt.add_argument("action", choices=["auth"])
     t = sub.add_parser("tokens")
@@ -66,6 +69,22 @@ def main(argv: list[str] | None = None) -> int:
             assert "{nonce}" not in text, key
             assert "<role>" in text, key
         print(f"{len(SPECS)} prompt calls load from pack v{pack_version()}")
+    elif args.cmd == "key":
+        from pathlib import Path
+
+        from cap.setup import check_key, ensure_env, read_key
+
+        ensure_env(Path(".env"), force=True)
+        saved = read_key(Path(".env"))
+        if saved and not args.no_check:
+            print("checking the key with Anthropic...")
+            err = check_key(saved)
+            print(
+                f"key rejected ({err}). Run `uv run cap key` to re-enter it."
+                if err
+                else "key works."
+            )
+        print("restart the app for the change to take effect.")
     elif args.cmd == "youtube":
         from cap.publisher.youtube import authorise
 
@@ -104,6 +123,9 @@ def main(argv: list[str] | None = None) -> int:
         import webbrowser
         from pathlib import Path
 
+        from cap.setup import ensure_env
+
+        model = ensure_env(Path(".env"))
         os.environ.setdefault("CAP_DEV_REVIEWER_HEADER", "true")
         if args.demo:
             os.environ.setdefault("CAP_ARABIC_REVIEWERS", '["layla"]')
@@ -138,6 +160,12 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"records in {data.resolve()}: {len(store.posts)} posts, {len(store.queue())} waiting"
         )
+        if settings.model_backend.value != model:
+            print(f"note: CAP_MODEL_BACKEND in the environment overrides .env ({model})")
+        if settings.model_backend.value == "anthropic":
+            print("model backend: anthropic (real drafts and judges)")
+        else:
+            print("model backend: mock (sample drafts). `uv run cap key` adds your key.")
         local_url = f"http://127.0.0.1:{args.port}/login"
         if settings.google_enabled:
             how = "Google sign-in is on"

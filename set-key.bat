@@ -1,5 +1,5 @@
 @echo off
-rem Change the Anthropic API key in the local .env (typed masked). Restart the app after.
+rem Enter or change the Anthropic API key (typed hidden, saved to the local .env only).
 cd /d "%~dp0"
-powershell -NoProfile -ExecutionPolicy Bypass -File "tools\setkey.ps1" -Force
+uv run cap key
 pause
