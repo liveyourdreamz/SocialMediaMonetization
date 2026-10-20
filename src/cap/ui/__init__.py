@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from cap.approval import google
-from cap.approval.app import Store, finalise_and_issue, visible_to
+from cap.approval.app import Store, finalise_and_issue, publish_now, visible_to
 from cap.approval.card import CardError, record_stage_one, record_verdict
 from cap.approval.identity import (
     COOKIE,
@@ -305,6 +305,39 @@ def ui_router(store: Store) -> APIRouter:
             return RedirectResponse("/paused", status_code=303)
         return RedirectResponse("/queue", status_code=303)
 
+    # ---- the outbox: what goes out, and the publish step (PRD 4.6)
+    @r.get("/posts/{post_id}/preview", response_class=HTMLResponse)
+    def preview(
+        request: Request, post_id: str, reviewer: Reviewer = Depends(current_reviewer)
+    ) -> Response:
+        _approver(reviewer)
+        record = store.get(post_id)
+        return render(
+            request,
+            "preview.html",
+            reviewer,
+            record=record,
+            pkg=views.package(record),
+            content_rtl=views.is_rtl(record.channel_id.value),
+            channel_label=views.channel_label(record.channel_id.value),
+            refusal=request.query_params.get("refused", ""),
+        )
+
+    @r.post("/posts/{post_id}/publish", dependencies=[Depends(check_csrf)])
+    def publish_post(post_id: str, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
+        _approver(reviewer)
+        if store.paused:
+            return RedirectResponse("/paused", status_code=303)
+        record = store.get(post_id)
+        refused = publish_now(store, record)
+        if refused:
+            from urllib.parse import quote
+
+            return RedirectResponse(
+                f"/posts/{post_id}/preview?refused={quote(refused)}", status_code=303
+            )
+        return RedirectResponse(f"/posts/{post_id}/preview", status_code=303)
+
     # ---- channel C, stage one (D19)
     @r.post("/posts/{post_id}/stage-one", dependencies=[Depends(check_csrf)])
     def stage_one(
@@ -396,6 +429,7 @@ def ui_router(store: Store) -> APIRouter:
                 queue_state=store,
                 published=views.published(store),
                 recent=views.recent_briefs(store),
+                outbox=views.outbox(store),
             )
         return RedirectResponse(
             f"/posts/{record.post_id}"
@@ -416,6 +450,7 @@ def ui_router(store: Store) -> APIRouter:
             queue_state=store,
             published=views.published(store),
             recent=views.recent_briefs(store),
+            outbox=views.outbox(store),
         )
 
     return r

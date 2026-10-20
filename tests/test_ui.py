@@ -298,9 +298,34 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
     )
     r = api.form(f"/posts/{post_id}/finalise")
     assert r.status_code == 303
+    # approval stops at the token: the post waits in the outbox with a preview
+    assert rec.status == PostStatus.APPROVED and rec.approval.token
+    assert not (data / "published" / post_id).exists()
+    op = api.get("/operator").text
+    assert "Outbox" in op and f"/posts/{post_id}/preview" in op
+    pv = api.get(f"/posts/{post_id}/preview").text
+    assert "What goes out" in pv and "One week, one surprise." in pv and "Publish now" in pv
+    assert rec.approval.token not in pv
+    # publish: the plain-code publisher verifies the token and writes the folder
+    r = api.form(f"/posts/{post_id}/publish")
+    assert r.status_code == 303
     assert rec.status == PostStatus.PUBLISHED and "local" in rec.publish.platform_post_ids
     assert (data / "published" / post_id / "manifest.json").exists()
-    assert "published" in api.get("/operator").text
+    assert "Publish now" not in api.get(f"/posts/{post_id}/preview").text
+    # a changed render after approval is refused by the publisher
+    other = (
+        api.form("/operator/brief", channel="A", topic="Second").headers["location"].split("/")[-1]
+    )
+    api.get(f"/posts/{other}")
+    api.form(
+        f"/posts/{other}/verdict", decision="approve", opening_line="x", spot_check_supported="yes"
+    )
+    api.form(f"/posts/{other}/finalise")
+    from pathlib import Path
+
+    Path(store.get(other).asset.uri).write_text("tampered", encoding="utf-8")
+    r = api.form(f"/posts/{other}/publish")
+    assert "refused=" in r.headers["location"] and store.get(other).status == PostStatus.APPROVED
     # restart: a new store on the same folder sees everything
     again = FileStore(data)
     assert again.get(post_id).status == PostStatus.PUBLISHED

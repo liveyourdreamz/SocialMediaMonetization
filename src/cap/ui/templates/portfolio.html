@@ -26,8 +26,8 @@
     {% endfor %}
   </div>
 
-  {% if p.published_count %}
-  <p class="meta">{{ p.published_count }} published so far, {{ p.approved_waiting }} approved and waiting for the publisher.</p>
+  {% if p.published_count or p.approved_waiting %}
+  <p class="meta">{{ p.published_count }} published so far · <a href="/operator">{{ p.approved_waiting }} in the outbox</a></p>
   {% endif %}
 
   <section class="stack">

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from statistics import median
 from typing import Any
 
@@ -627,3 +628,57 @@ def published(store: Store) -> list[PostRecord]:
 def recent_briefs(store: Store) -> list[PostRecord]:
     """The last few posts in any state, newest first: what a brief turned into."""
     return sorted(store.posts.values(), key=lambda p: p.created_at, reverse=True)[:8]
+
+
+def outbox(store: Store) -> list[PostRecord]:
+    """Approved, token issued, not yet published: what the publisher will send."""
+    out = [
+        p for p in store.posts.values() if p.status == PostStatus.APPROVED and not p.flags.canary
+    ]
+    return sorted(out, key=lambda p: p.approval.decided_at or p.created_at)
+
+
+def package(record: PostRecord) -> dict[str, Any]:
+    """Exactly what goes out, per platform, as the adapters will receive it."""
+    human = record.human_contribution.text.strip()
+    script = record.draft.script.replace(OPENING_SLOT, human) if human else record.draft.script
+    base = {
+        "title": record.draft.title,
+        "caption": record.draft.caption,
+        "thumbnail_text": record.draft.thumbnail_text,
+        "on_screen_text": list(record.draft.on_screen_text),
+        "script": script,
+        "shot_list": list(record.draft.shot_list),
+        "sources": sorted(
+            {
+                c.source_url
+                for c in record.draft.claims
+                if c.source_url and not c.source_url.startswith("testlog://")
+            }
+        ),
+    }
+    cuts = []
+    for v in record.variants:
+        cuts.append(
+            {
+                "platform": v.platform.value.replace("_", " "),
+                "title": v.title or base["title"],
+                "caption": v.caption or base["caption"],
+                "duration_s": v.duration_s,
+                "script": (v.script_cut.replace(OPENING_SLOT, human) if human else v.script_cut)
+                or script,
+                "on_screen_text": list(v.on_screen_text) or base["on_screen_text"],
+                "thumbnail_text": v.thumbnail_text or base["thumbnail_text"],
+            }
+        )
+    if not cuts:  # no platform cuts recorded: the base package is the one cut
+        cuts.append({"platform": "youtube long", "duration_s": 0, **base})
+    asset = Path(record.asset.uri) if record.asset.uri else None
+    return {
+        "base": base,
+        "cuts": cuts,
+        "asset_name": asset.name if asset else "",
+        "asset_exists": bool(asset and asset.exists()),
+        "sha256": record.asset.sha256,
+        "token_present": bool(record.approval.token),
+    }

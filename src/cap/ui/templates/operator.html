@@ -39,6 +39,21 @@
   </section>
 
   <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Outbox: approved, waiting to publish</h2>
+    <div class="stack-sm">
+      {% if outbox %}
+      {% for p in outbox %}
+      <a class="card tight link" href="/posts/{{ p.post_id }}/preview" style="gap: 4px">
+        <div class="row"><span class="tag">{{ p.channel_id.value }}</span><span class="meta">approved {{ p.approval.decided_at | day(False, True) if p.approval.decided_at else '' }}</span></div>
+        <span class="read" style="font-size: 16px">{{ p.draft.title }}</span>
+        <span class="meta">See what goes out, then publish</span>
+      </a>
+      {% endfor %}
+      {% else %}<div class="card tight muted">Nothing waiting. An approval puts the post here with its token; it leaves when you (today) or the scheduler (later) press Publish.</div>{% endif %}
+    </div>
+  </section>
+
+  <section class="stack">
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Published</h2>
     <div class="stack-sm">
       {% if published %}

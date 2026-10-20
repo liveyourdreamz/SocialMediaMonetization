@@ -176,16 +176,33 @@ def finalise_and_issue(store: Store, record: PostRecord, reviewer: str, **kw: An
         t = tok.issue(record.post_id, record.asset.sha256, reviewer, "approve", canary=False)
         record.approval.token = t.encode()
         issued = True
-        if store.publisher is not None:
-            # The plain-code publisher (PRD 4.6): verifies the token against the file's
-            # hash and refuses canaries, failed gates and changed files. A refusal is
-            # logged on the record and the post stays approved for the operator to see.
-            try:
-                publish(record, Path(record.asset.uri), t, store.publisher)
-            except PublishRefusedError as e:
-                record.log(f"publish refused: {e}")
+        record.log("approved: token issued; waiting in the outbox for the publisher")
     store.put(record)
     return issued
+
+
+def publish_now(store: Store, record: PostRecord) -> str | None:
+    """The plain-code publisher (PRD 4.6) on one approved post: verifies the token
+    against the rendered file's hash and refuses canaries, failed gates, changed
+    files and anything not approved. Returns the refusal text, or None on success.
+    The scheduler calls this at the posting slot; the Outbox button calls it now."""
+    if store.publisher is None:
+        return "no platform adapter is configured"
+    if not record.approval.token:
+        return "no approval token on the record"
+    try:
+        publish(
+            record,
+            Path(record.asset.uri),
+            tok.ApprovalToken.decode(record.approval.token),
+            store.publisher,
+        )
+    except PublishRefusedError as e:
+        record.log(f"publish refused: {e}")
+        store.put(record)
+        return str(e)
+    store.put(record)
+    return None
 
 
 def visible_to(record: PostRecord, reviewer: Reviewer) -> bool:
