@@ -3,6 +3,7 @@ setlocal EnableExtensions
 title Content Agent Portfolio
 rem One file to install and run the app on a Windows laptop.
 rem Double-click it, or run it from a terminal. Safe to run again: it updates and restarts.
+rem This file only fetches the code; the steps that change over time live in tools\start.bat.
 rem Your Anthropic API key is asked for here, typed masked, and written only to the local
 rem .env file next to the code (git-ignored). It is never sent anywhere but Anthropic.
 
@@ -53,21 +54,6 @@ if exist "%DIR%\.git" (
 )
 cd /d "%DIR%"
 
-rem ---- .env and the API key ------------------------------------------------------
-powershell -NoProfile -ExecutionPolicy Bypass -File "tools\setkey.ps1"
-if errorlevel 1 ( echo  Could not write .env. & pause & exit /b 1 )
-
-rem ---- run -----------------------------------------------------------------------
-echo.
-echo  Installing dependencies (first time takes a minute)...
-uv sync --quiet
-if errorlevel 1 ( echo  Dependency install failed. & pause & exit /b 1 )
-
-echo.
-findstr /b /c:"CAP_MODEL_BACKEND=anthropic" ".env" >nul 2>nul && (echo  Model backend: anthropic ^(real drafts^)) || (echo  Model backend: mock ^(run set-key.bat to add your key^))
-echo  Starting. The browser opens at http://127.0.0.1:8000/login - sign in as hemant.
-echo  On your phone, same Wi-Fi: http://^<this laptop's address^>:8000/login
-echo  Press Ctrl+C in this window to stop.
-echo.
-uv run cap serve --demo --host 0.0.0.0 --open
-pause
+rem ---- hand over to the copy that ships with the code (so this file never goes stale)
+call "%DIR%\tools\start.bat"
+exit /b
