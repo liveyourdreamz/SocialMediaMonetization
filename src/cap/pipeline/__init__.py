@@ -164,9 +164,10 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
             # binding and the approval token are real either way.
             path = deps.render_dir / f"{record.post_id}.render.txt"
             content = f"{record.draft.title}\n\n{record.draft.script}\n"
-            path.write_text(content, encoding="utf-8")
+            data = content.encode("utf-8")
+            path.write_bytes(data)  # bytes, not write_text: no newline translation on Windows
             record.asset.uri = str(path)
-            record.asset.sha256 = hashlib.sha256(content.encode()).hexdigest()
+            record.asset.sha256 = hashlib.sha256(data).hexdigest()  # the bytes on disk
             record.asset.kind = "text"
         record.status = PostStatus.AWAITING_APPROVAL
         prepare_card(record)  # D34: spot check and reading threshold fixed at queue time
