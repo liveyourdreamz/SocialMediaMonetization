@@ -24,6 +24,8 @@ def _local_settings(monkeypatch):
     monkeypatch.setenv("CAP_ENV", "test")
     monkeypatch.setenv("CAP_DEV_REVIEWER_HEADER", "true")
     monkeypatch.setenv("CAP_ARABIC_REVIEWERS", '["layla"]')
+    monkeypatch.setenv("CAP_RENDERER", "text")
+    monkeypatch.setenv("CAP_VOICE", "silent")
     monkeypatch.delenv("K_SERVICE", raising=False)
     get_settings.cache_clear()
     yield

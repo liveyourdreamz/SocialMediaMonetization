@@ -8,6 +8,7 @@ cap demo                   run one fake Patch episode through the pipeline (mock
 cap serve [--demo]         run the app locally (Portfolio, queue, card, digest, operator)
                            with demo posts queued; sign in at /login?name=hemant
 cap tokens build|check     compile design/proof/tokens.json to the app's tokens.css
+cap youtube auth           one-time browser sign-in for YouTube uploads (laptop)
 """
 
 from __future__ import annotations
@@ -42,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="three channels, a canary, example analytics, an Arabic reviewer",
     )
+    yt = sub.add_parser("youtube")
+    yt.add_argument("action", choices=["auth"])
     t = sub.add_parser("tokens")
     t.add_argument("action", choices=["build", "check"])
     args = p.parse_args(argv)
@@ -63,6 +66,11 @@ def main(argv: list[str] | None = None) -> int:
             assert "{nonce}" not in text, key
             assert "<role>" in text, key
         print(f"{len(SPECS)} prompt calls load from pack v{pack_version()}")
+    elif args.cmd == "youtube":
+        from cap.publisher.youtube import authorise
+
+        print("A browser window opens: sign in to the channel's Google account and allow uploads.")
+        print(f"saved: {authorise()}  (git-ignored; set CAP_PUBLISHER=youtube in .env)")
     elif args.cmd == "tokens":
         from cap.ui.tokens import TOKENS_CSS, build, is_current
 
@@ -117,8 +125,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.reset and data.exists():
             shutil.rmtree(data)
         store = FileStore(data)
-        store.publisher = LocalFolderAdapter(data / "published")
+        if settings.publisher == "youtube":
+            from cap.publisher.youtube import YouTubeAdapter
+
+            store.publisher = YouTubeAdapter()
+        else:
+            store.publisher = LocalFolderAdapter(data / "published")
         if not store.posts:
+            if settings.renderer == "video":
+                print("first run: rendering the demo posts (voice + video), about a minute...")
             seed_store(store, demo=args.demo, canary=args.canary or args.demo)
         print(
             f"records in {data.resolve()}: {len(store.posts)} posts, {len(store.queue())} waiting"

@@ -31,12 +31,26 @@ seeds three channels and a canary, starts the app and opens the browser at
 phone, use your laptop's address on the same Wi-Fi. Records live in `./cap-data` and
 survive restarts; `./run.sh --reset` starts clean.
 
-**The loop, end to end.** Operator tab → *File a brief* → the pipeline drafts,
-critiques, cuts, runs the four gates and renders → the card lands in your Queue → you
-approve (opening line, spot check) → the plain-code publisher verifies the token
-against the rendered file and writes the post to `cap-data/published/<post id>/`
-(the YouTube adapter replaces that last step) → the Operator tab lists it as
-published. With the mock backend the drafter returns the sample episode; set
+**The loop, end to end.** Operator tab → *File a brief* (topic, source URLs, your
+test-log notes) → in the background the sources are fetched, the drafter writes,
+the critic reviews, the platform cuts are made, the four gates run, the voice is
+synthesised and the video rendered → the card lands in your Queue → you approve
+(opening line, spot check) → the post waits in the Outbox with its token → you open
+the preview, watch the video, press Publish → the plain-code publisher verifies the
+token against the file and sends it: to `cap-data/published/<post id>/` by default,
+or to YouTube (unlisted) once `cap youtube auth` has run and `CAP_PUBLISHER=youtube`.
+
+What is scrappy, and what replaces it later (all behind one function each):
+
+| Stage | Now | Later (PRD) |
+| --- | --- | --- |
+| Sources | URLs you paste; a fetcher pulls the text | Trend-research agent (P4) |
+| Voice | Microsoft neural voices via `edge-tts`, free | ElevenLabs private voices (D21) |
+| Picture | Typographic explainer in Proof: title card, the spoken text on screen, the AI-character label, an end card of sources | Character animation and credited imagery |
+| Signing | none yet | C2PA manifest (D29) |
+| Publish | local folder, or YouTube via your OAuth client | YouTube, then Meta, by the scheduler |
+
+With the mock backend the drafter returns the sample episode; set
 `CAP_MODEL_BACKEND=anthropic` and the key in `.env` for real drafts.
 
 **Google sign-in.** `.env.example` says how: an OAuth client in your own Google Cloud

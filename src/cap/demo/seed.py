@@ -156,26 +156,48 @@ EXAMPLE_ANALYTICS: dict[str, Any] = {
 }
 
 
-def run_brief(store: Store, channel: str, topic: str) -> PostRecord:
-    """The whole pipeline on one brief. Mock backend: the sample episode with the brief's
-    topic recorded; Anthropic backend: a real draft of the topic."""
-    from cap.config import get_settings
-    from cap.models import get_client
-
+def new_brief(channel: str, topic: str) -> PostRecord:
+    """The record a brief starts as, visible on the Operator screen while it runs."""
     ch = Channel(channel)
     rec = PostRecord(channel_id=ch, brief=Brief(topic=topic, anchor_elements=["test log"]))
+    rec.status = PostStatus.DRAFTING
+    rec.log(f"brief filed: {topic}")
+    return rec
+
+
+def run_brief(
+    store: Store,
+    channel: str,
+    topic: str,
+    *,
+    urls: list[str] | None = None,
+    test_log: str = "",
+    record: PostRecord | None = None,
+) -> PostRecord:
+    """The whole pipeline on one brief. Mock backend: the sample episode with the brief's
+    topic recorded; Anthropic backend: a real draft of the topic from the fetched
+    sources and the test-log notes."""
+    from cap.config import get_settings
+    from cap.fetch import fetch_sources
+    from cap.models import get_client
+
+    rec = record or new_brief(channel, topic)
+    ch = rec.channel_id
+    sources = fetch_sources(urls) if urls else SOURCES
+    if urls:
+        rec.log(f"fetched {len(sources)} source(s)")
     client = get_client(happy_fixtures())
     deps = PipelineDeps(
         client=client,
         anchor_elements={ch.value: ["test log"]},
         character_blocks={ch.value: CHARACTER_BLOCK},
-        test_logs={rec.post_id: TEST_LOG},
+        test_logs={rec.post_id: test_log.strip() or TEST_LOG},
         render_dir=Path(get_settings().data_dir) / "renders",
     )
-    out = run_post(rec, SOURCES, deps)
+    out = run_post(rec, sources, deps)
     if get_settings().model_backend.value == "mock":
         out.log("drafted by the mock backend from the sample episode (no API key yet)")
-    if ch == Channel.C:
+    if ch == Channel.C and get_settings().model_backend.value == "mock":
         out = _falak_arabic(out)
         if out.status == PostStatus.AWAITING_APPROVAL:
             prepare_card(out)

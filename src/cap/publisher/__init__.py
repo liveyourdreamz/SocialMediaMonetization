@@ -58,6 +58,9 @@ class LocalFolderAdapter:
         out = self.directory / record.post_id
         out.mkdir(parents=True, exist_ok=True)
         shutil.copy2(asset, out / asset.name)
+        for extra in (record.asset.short_uri, record.asset.thumbnail_uri):
+            if extra and Path(extra).exists():
+                shutil.copy2(extra, out / Path(extra).name)
         manifest = {
             "post_id": record.post_id,
             "channel": record.channel_id.value,

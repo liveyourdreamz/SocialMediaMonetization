@@ -139,16 +139,38 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
         record = _rec(state)
         record.status = PostStatus.RENDERING
         deps.render_dir.mkdir(parents=True, exist_ok=True)
-        # Foundation stand-in for the media renderer: a text manifest of what would be
-        # rendered. The hash binding and the approval token are real from day one.
-        path = deps.render_dir / f"{record.post_id}.render.txt"
-        content = f"{record.draft.title}\n\n{record.draft.script}\n"
-        path.write_text(content, encoding="utf-8")
-        record.asset.uri = str(path)
-        record.asset.sha256 = hashlib.sha256(content.encode()).hexdigest()
+        if get_settings().renderer == "video":
+            from cap.render import RenderError, render, silent_voice, speak
+
+            voice_fn = speak if get_settings().voice == "edge" else silent_voice
+            try:
+                r = render(record, deps.render_dir, voice_fn=voice_fn)
+            except RenderError as e:
+                return _park(record, f"render failed: {e}")
+            except Exception as e:  # the voice service, ffmpeg: fail closed, say why
+                return _park(record, f"render failed: {type(e).__name__}: {str(e)[:200]}")
+            record.asset.uri = str(r.video)
+            record.asset.sha256 = r.sha256
+            record.asset.short_uri = str(r.short) if r.short else ""
+            record.asset.thumbnail_uri = str(r.thumbnail)
+            record.asset.duration_s = round(r.duration_s, 1)
+            record.asset.voice = r.voice
+            record.asset.kind = "video"
+            record.log(
+                f"rendered {r.duration_s:.0f}s long-form{' and a Short' if r.short else ''} with voice {r.voice}"
+            )
+        else:
+            # Foundation stand-in: a text manifest of what would be rendered. The hash
+            # binding and the approval token are real either way.
+            path = deps.render_dir / f"{record.post_id}.render.txt"
+            content = f"{record.draft.title}\n\n{record.draft.script}\n"
+            path.write_text(content, encoding="utf-8")
+            record.asset.uri = str(path)
+            record.asset.sha256 = hashlib.sha256(content.encode()).hexdigest()
+            record.asset.kind = "text"
         record.status = PostStatus.AWAITING_APPROVAL
         prepare_card(record)  # D34: spot check and reading threshold fixed at queue time
-        record.log("rendered (stand-in) and queued for approval")
+        record.log("queued for approval")
         return _put(record)
 
     def route_after(state: PipelineState) -> str:

@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 from enum import StrEnum
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -46,6 +47,17 @@ class Settings(BaseSettings):
 
     # Where the laptop build keeps its records (posts, verdicts, published files).
     data_dir: str = "cap-data"
+
+    # The media renderer: "video" (voice + typographic frames + ffmpeg) or "text" (the
+    # Foundation stand-in, used by the tests). The voice: "edge" (Microsoft neural
+    # voices, free) or "silent" (offline, for tests and dry runs).
+    renderer: Literal["video", "text"] = "video"
+    voice: Literal["edge", "silent"] = "edge"
+
+    # Where approved posts go: "local" (a folder under data_dir) or "youtube" (a real
+    # upload through the Google OAuth client; `cap youtube auth` first).
+    publisher: Literal["local", "youtube"] = "local"
+    youtube_privacy: Literal["unlisted", "private", "public"] = "unlisted"
 
     model_backend: ModelBackend = ModelBackend.MOCK
     anthropic_api_key: SecretStr | None = None

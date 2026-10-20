@@ -19,8 +19,25 @@
 
   <div class="stack-sm">
     <h1 style="font-size: 22px; line-height: 28px; font-weight: 600">What goes out</h1>
-    <p class="muted" style="font-size: 14px; line-height: 20px">This is the package the platform adapters receive, cut per platform. The video itself is not rendered yet: the media renderer (voice, imagery, edit) is the next build, and until it exists the "rendered file" is this package as text. Nothing here is a mock-up of a video.</p>
+    {% if record.asset.kind == 'video' %}
+    <p class="muted" style="font-size: 14px; line-height: 20px">The rendered video, as the token binds it: {{ record.asset.duration_s | round | int }} s, voice {{ record.asset.voice }} (a Microsoft neural voice for now; ElevenLabs replaces it), typographic frames in Proof, the AI-character label on every frame. Not yet C2PA-signed.</p>
+    {% else %}
+    <p class="muted" style="font-size: 14px; line-height: 20px">This post was rendered as text only (the renderer was off). The package below is what the adapters receive.</p>
+    {% endif %}
   </div>
+
+  {% if record.asset.kind == 'video' %}
+  <section class="stack-sm">
+    <video controls playsinline preload="metadata" style="width: 100%; border-radius: var(--radius-md); background: #000" poster="/assets/{{ record.post_id }}/thumbnail.png">
+      <source src="/assets/{{ record.post_id }}/long.mp4" type="video/mp4">
+    </video>
+    {% if record.asset.short_uri %}
+    <details><summary style="cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center">The Short (9:16)</summary>
+      <video controls playsinline preload="metadata" style="width: 60%; max-width: 240px; border-radius: var(--radius-md); background: #000; margin-top: 8px"><source src="/assets/{{ record.post_id }}/short.mp4" type="video/mp4"></video>
+    </details>
+    {% endif %}
+  </section>
+  {% endif %}
 
   {% for cut in pkg.cuts %}
   <section class="card stack">
@@ -52,7 +69,7 @@
     <span>Rendered file</span><span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all">{{ pkg.asset_name or '—' }}{% if not pkg.asset_exists %} (missing on disk){% endif %}</span>
     <span>Bound hash</span><span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all">{{ pkg.sha256[:16] }}…</span>
     <span>Approval token</span><span>{{ 'issued, held by the server' if pkg.token_present else 'none' }}</span>
-    <span>Destination</span><span>{{ 'local folder (cap-data/published); the YouTube adapter replaces this' }}</span>
+    <span>Destination</span><span>{% if settings.publisher == 'youtube' %}YouTube, {{ settings.youtube_privacy }}, synthetic-media flag on{% else %}local folder (cap-data/published); set CAP_PUBLISHER=youtube after `cap youtube auth`{% endif %}</span>
   </section>
 
   {% if approved and not paused %}

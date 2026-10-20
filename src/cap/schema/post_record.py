@@ -284,9 +284,14 @@ class Gates(Strict):
 
 
 class Asset(Strict):
-    uri: str = ""
+    uri: str = ""  # the long-form file the approval token binds to
     sha256: str = ""
     c2pa_manifest_uri: str = ""
+    short_uri: str = ""
+    thumbnail_uri: str = ""
+    duration_s: float = 0.0
+    voice: str = ""  # the voice id used (edge-tts now, ElevenLabs later)
+    kind: Literal["text", "video"] = "text"
 
 
 class SpotCheck(Strict):

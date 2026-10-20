@@ -279,10 +279,10 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
     store.publisher = LocalFolderAdapter(data / "published")
     api = Browser(create_app(store), follow_redirects=False)
     api.sign_in("hemant")
-    # file a brief from the operator screen: the pipeline runs and the card is queued
+    # file a brief from the operator screen: the pipeline runs in the background
     r = api.form("/operator/brief", channel="A", topic="A week with a note app")
-    assert r.status_code == 303 and r.headers["location"].startswith("/posts/")
-    post_id = r.headers["location"].split("/")[-1]
+    assert r.status_code == 303 and r.headers["location"] == "/operator"
+    post_id = _wait_for_brief(store, "A week with a note app")
     rec = store.get(post_id)
     assert (
         rec.status == PostStatus.AWAITING_APPROVAL and rec.brief.topic == "A week with a note app"
@@ -313,9 +313,8 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
     assert (data / "published" / post_id / "manifest.json").exists()
     assert "Publish now" not in api.get(f"/posts/{post_id}/preview").text
     # a changed render after approval is refused by the publisher
-    other = (
-        api.form("/operator/brief", channel="A", topic="Second").headers["location"].split("/")[-1]
-    )
+    api.form("/operator/brief", channel="A", topic="Second")
+    other = _wait_for_brief(store, "Second")
     api.get(f"/posts/{other}")
     api.form(
         f"/posts/{other}/verdict", decision="approve", opening_line="x", spot_check_supported="yes"
@@ -337,6 +336,71 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
         else None
     )
     assert canary is None or canary.status != PostStatus.PUBLISHED
+
+
+def _wait_for_brief(store, topic: str, timeout: float = 30.0) -> str:
+    """The brief runs in a thread; wait until it leaves the running states."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        for p in store.posts.values():
+            if p.brief.topic == topic and p.status.value not in ("drafting", "gated", "rendering"):
+                return p.post_id
+        time.sleep(0.1)
+    raise AssertionError(f"brief {topic!r} did not finish")
+
+
+def test_video_renderer_produces_the_file_the_token_binds_to(tmp_path, monkeypatch):
+    """The real renderer with the silent voice: an mp4, a thumbnail, a Short, the hash."""
+    monkeypatch.setenv("CAP_RENDERER", "video")
+    monkeypatch.setenv("CAP_VOICE", "silent")
+    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
+    from cap.config import get_settings
+
+    get_settings.cache_clear()
+    from cap.demo.seed import demo_post
+
+    rec = demo_post()
+    assert rec.status == PostStatus.AWAITING_APPROVAL and rec.asset.kind == "video"
+    from pathlib import Path
+
+    video = Path(rec.asset.uri)
+    assert video.suffix == ".mp4" and video.stat().st_size > 10_000
+    assert Path(rec.asset.thumbnail_uri).exists()
+    assert rec.asset.duration_s > 3 and rec.asset.voice
+    import hashlib
+
+    assert rec.asset.sha256 == hashlib.sha256(video.read_bytes()).hexdigest()
+    if rec.asset.short_uri:
+        assert Path(rec.asset.short_uri).exists()
+
+
+def test_fetcher_turns_pages_into_sources(monkeypatch):
+    import httpx
+
+    from cap import fetch
+
+    html = "<html><head><meta property='article:published_time' content='2026-09-01T00:00'></head><body><nav>menu</nav><article><h1>Sync</h1><p>Sync completes within 10 seconds.</p></article><script>x()</script></body></html>"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "dead" in str(request.url):
+            return httpx.Response(500)
+        return httpx.Response(200, text=html, headers={"content-type": "text/html"})
+
+    real_client = httpx.Client
+
+    def mock_client(**kw):
+        kw["transport"] = httpx.MockTransport(handler)
+        return real_client(**kw)
+
+    monkeypatch.setattr(fetch.httpx, "Client", mock_client)
+    docs = fetch.fetch_sources(["https://ok.example/a", "https://dead.example/b", "notaurl"])
+    assert len(docs) == 2
+    assert (
+        docs[0]["body"] == "Sync Sync completes within 10 seconds."
+        and docs[0]["page_date"] == "2026-09-01"
+    )
+    assert "menu" not in docs[0]["body"] and "x()" not in docs[0]["body"]
+    assert docs[1]["body"].startswith("[fetch failed")
 
 
 def test_google_sign_in_maps_a_verified_email_to_a_reviewer(world, monkeypatch):

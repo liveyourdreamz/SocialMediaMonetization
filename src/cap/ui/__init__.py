@@ -407,36 +407,55 @@ def ui_router(store: Store) -> APIRouter:
         request: Request,
         channel: str = Form(...),
         topic: str = Form(...),
+        urls: str = Form(default=""),
+        test_log: str = Form(default=""),
         reviewer: Reviewer = Depends(current_reviewer),
     ) -> Response:
-        """Brief -> draft -> critic -> adapt -> gates -> render -> queue, in one request.
-        On the mock backend the drafter returns the sample episode; with an API key it
-        drafts the topic. Either way the gates, the card and the publisher are real."""
+        """Brief -> draft -> critic -> adapt -> gates -> render -> queue, in the
+        background (a real draft plus a rendered video takes a few minutes). The record
+        appears on the Operator screen as 'drafting' at once; a fault parks it with the
+        reason on the record, never a blank 500."""
         _approver(reviewer)
-        from cap.demo.seed import run_brief
+        import threading
 
-        try:
-            record = run_brief(store, channel, topic.strip())
-        except Exception as e:  # a backend or config fault: show it, never a blank 500
-            return render(
-                request,
-                "operator.html",
-                reviewer,
-                500,
-                tab="operator",
-                error=f"The pipeline could not run: {type(e).__name__}: {e}",
-                parked=views.parked(store),
-                queue_state=store,
-                published=views.published(store),
-                recent=views.recent_briefs(store),
-                outbox=views.outbox(store),
-            )
-        return RedirectResponse(
-            f"/posts/{record.post_id}"
-            if record.status == PostStatus.AWAITING_APPROVAL
-            else "/operator",
-            status_code=303,
-        )
+        from cap.demo.seed import new_brief, run_brief
+
+        record = new_brief(channel, topic.strip())
+        store.put(record)
+        url_list = [u.strip() for u in urls.replace(",", "\n").splitlines() if u.strip()]
+
+        def work() -> None:
+            try:
+                run_brief(
+                    store, channel, topic.strip(), urls=url_list, test_log=test_log, record=record
+                )
+            except Exception as e:  # noqa: BLE001
+                record.status = PostStatus.PARKED
+                record.log(
+                    f"parked: the pipeline could not run: {type(e).__name__}: {str(e)[:300]}"
+                )
+                store.put(record)
+
+        threading.Thread(target=work, name=f"brief-{record.post_id[:8]}", daemon=True).start()
+        return RedirectResponse("/operator", status_code=303)
+
+    @r.get("/assets/{post_id}/{name}")
+    def asset(post_id: str, name: str, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
+        """The rendered files of one post, to the people who may see the post."""
+        from fastapi.responses import FileResponse
+
+        record = store.get(post_id)
+        if not visible_to(record, reviewer):
+            raise HTTPException(403, "channel C only")
+        candidates = {
+            Path(p).name: Path(p)
+            for p in (record.asset.uri, record.asset.short_uri, record.asset.thumbnail_uri)
+            if p
+        }
+        path = candidates.get(name)
+        if path is None or not path.exists():
+            raise HTTPException(404, "no such rendered file")
+        return FileResponse(path)
 
     @r.get("/operator", response_class=HTMLResponse)
     def operator(request: Request, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
@@ -451,6 +470,9 @@ def ui_router(store: Store) -> APIRouter:
             published=views.published(store),
             recent=views.recent_briefs(store),
             outbox=views.outbox(store),
+            running=any(
+                p.status.value in ("drafting", "gated", "rendering") for p in store.posts.values()
+            ),
         )
 
     return r

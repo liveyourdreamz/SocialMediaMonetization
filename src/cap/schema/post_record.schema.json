@@ -140,6 +140,35 @@
           "default": "",
           "title": "C2Pa Manifest Uri",
           "type": "string"
+        },
+        "short_uri": {
+          "default": "",
+          "title": "Short Uri",
+          "type": "string"
+        },
+        "thumbnail_uri": {
+          "default": "",
+          "title": "Thumbnail Uri",
+          "type": "string"
+        },
+        "duration_s": {
+          "default": 0.0,
+          "title": "Duration S",
+          "type": "number"
+        },
+        "voice": {
+          "default": "",
+          "title": "Voice",
+          "type": "string"
+        },
+        "kind": {
+          "default": "text",
+          "enum": [
+            "text",
+            "video"
+          ],
+          "title": "Kind",
+          "type": "string"
         }
       },
       "title": "Asset",
