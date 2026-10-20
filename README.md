@@ -19,7 +19,8 @@ cd SocialMediaMonetization && git checkout bootstrap
 Windows: download `install.bat` from the repository, double-click it. It installs Git
 and `uv` if missing, downloads the code to `%USERPROFILE%\SocialMediaMonetization`,
 asks for your Anthropic API key once (typed masked, saved only to the local `.env`,
-blank for mock mode), then starts the app. Run it again to update. `run.ps1` does the
+blank for mock mode), then starts the app. Run it again to update; `set-key.bat`
+changes the key. The console says which model backend is in use when it starts. `run.ps1` does the
 same from a clone you already have.
 
 `run.sh` asks for the key the same way on a Mac. The key never goes anywhere but

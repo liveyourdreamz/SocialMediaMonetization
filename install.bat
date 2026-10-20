@@ -54,21 +54,8 @@ if exist "%DIR%\.git" (
 cd /d "%DIR%"
 
 rem ---- .env and the API key ------------------------------------------------------
-if not exist ".env" copy /y ".env.example" ".env" >nul
-
-findstr /b /c:"CAP_ANTHROPIC_API_KEY=sk-" ".env" >nul 2>nul
-if errorlevel 1 (
-  echo.
-  echo  Anthropic API key. Typed masked; saved only to %DIR%\.env; leave blank for mock mode.
-  for /f "usebackq delims=" %%k in (`powershell -NoProfile -Command "$s = Read-Host '  API key' -AsSecureString; $p = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); [Runtime.InteropServices.Marshal]::PtrToStringAuto($p)"`) do set "KEY=%%k"
-  if defined KEY (
-    powershell -NoProfile -Command "$e = Get-Content .env | Where-Object { $_ -notmatch '^#?\s*CAP_ANTHROPIC_API_KEY=' -and $_ -notmatch '^CAP_MODEL_BACKEND=' }; $e += 'CAP_MODEL_BACKEND=anthropic'; $e += ('CAP_ANTHROPIC_API_KEY=' + $env:KEY); Set-Content .env $e"
-    echo  Saved. Drafts and judges will run on the real models.
-  ) else (
-    echo  No key: running in mock mode. Run this file again any time to add one.
-  )
-  set "KEY="
-)
+powershell -NoProfile -ExecutionPolicy Bypass -File "tools\setkey.ps1"
+if errorlevel 1 ( echo  Could not write .env. & pause & exit /b 1 )
 
 rem ---- run -----------------------------------------------------------------------
 echo.
@@ -77,6 +64,7 @@ uv sync --quiet
 if errorlevel 1 ( echo  Dependency install failed. & pause & exit /b 1 )
 
 echo.
+findstr /b /c:"CAP_MODEL_BACKEND=anthropic" ".env" >nul 2>nul && (echo  Model backend: anthropic ^(real drafts^)) || (echo  Model backend: mock ^(run set-key.bat to add your key^))
 echo  Starting. The browser opens at http://127.0.0.1:8000/login - sign in as hemant.
 echo  On your phone, same Wi-Fi: http://^<this laptop's address^>:8000/login
 echo  Press Ctrl+C in this window to stop.
