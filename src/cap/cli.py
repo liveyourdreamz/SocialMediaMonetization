@@ -35,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
         "--host", default="127.0.0.1", help="0.0.0.0 to open it on your phone over Wi-Fi"
     )
     sv.add_argument("--canary", action="store_true", help="queue a canary too (planted fault)")
+    sv.add_argument("--open", action="store_true", help="open the browser once the app is up")
+    sv.add_argument("--reset", action="store_true", help="delete the local records first")
     sv.add_argument(
         "--demo",
         action="store_true",
@@ -89,6 +91,10 @@ def main(argv: list[str] | None = None) -> int:
             print("  ", line)
     elif args.cmd == "serve":
         import os
+        import shutil
+        import threading
+        import webbrowser
+        from pathlib import Path
 
         os.environ.setdefault("CAP_DEV_REVIEWER_HEADER", "true")
         if args.demo:
@@ -97,25 +103,37 @@ def main(argv: list[str] | None = None) -> int:
         from cap.config import get_settings
 
         get_settings.cache_clear()
-        if get_settings().env not in ("local", "test"):
+        settings = get_settings()
+        if settings.env not in ("local", "test"):
             print("cap serve is for local runs only", file=sys.stderr)
             return 2
         import uvicorn
 
-        from cap.approval.app import Store, create_app
+        from cap.approval.app import FileStore, create_app
         from cap.demo.seed import seed_store
+        from cap.publisher import LocalFolderAdapter
 
-        store = Store()
-        seed_store(store, demo=args.demo, canary=args.canary or args.demo)
-        for rec in store.queue():
-            print(
-                f"queued {rec.channel_id.value} {rec.post_id} {'(canary)' if rec.flags.canary else ''}"
-            )
+        data = Path(settings.data_dir)
+        if args.reset and data.exists():
+            shutil.rmtree(data)
+        store = FileStore(data)
+        store.publisher = LocalFolderAdapter(data / "published")
+        if not store.posts:
+            seed_store(store, demo=args.demo, canary=args.canary or args.demo)
         print(
-            f"open http://127.0.0.1:{args.port}/login?name=hemant"
-            + ("  (or ?name=layla for channel C)" if args.demo else "")
+            f"records in {data.resolve()}: {len(store.posts)} posts, {len(store.queue())} waiting"
         )
-        uvicorn.run(create_app(store), host="127.0.0.1", port=args.port)
+        local_url = f"http://127.0.0.1:{args.port}/login"
+        if settings.google_enabled:
+            how = "Google sign-in is on"
+        else:
+            how = "sign in as hemant" + (" (or layla for channel C)" if args.demo else "")
+        print(f"open {local_url} and {how}")
+        if args.host == "0.0.0.0":  # noqa: S104
+            print(f"on your phone: http://<this laptop's address>:{args.port}/login")
+        if args.open:
+            threading.Timer(1.5, lambda: webbrowser.open(local_url)).start()
+        uvicorn.run(create_app(store), host=args.host, port=args.port)
     return 0
 
 
