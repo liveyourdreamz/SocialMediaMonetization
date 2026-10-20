@@ -6,7 +6,17 @@ cd /d "%~dp0.."
 echo.
 echo  Installing dependencies (first time takes a minute)...
 uv sync --quiet
-if errorlevel 1 ( echo  Dependency install failed. & pause & exit /b 1 )
+if errorlevel 1 ( echo  Dependency install failed. & goto :fail )
 echo.
+if defined CAP_SMOKE (
+  rem CI: run the whole loop through the real app instead of serving (see cap smoke)
+  uv run cap smoke
+  exit /b
+)
 uv run cap serve --demo --host 0.0.0.0 --open %*
 pause
+exit /b
+
+:fail
+if not defined CAP_SMOKE pause
+exit /b 1

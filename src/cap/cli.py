@@ -5,6 +5,7 @@ cap rulebook show          print the judge-facing rulebook text
 cap prompts check          verify the extracted prompts match the registry
 cap harness run [--runs N] run the regression sets (mock backend unless configured)
 cap demo                   run one fake Patch episode through the pipeline (mock)
+cap smoke                  the whole laptop loop through the real app, no browser (mock)
 cap serve [--demo]         run the app locally (Portfolio, queue, card, digest, operator)
                            with demo posts queued; asks for the API key on first run
 cap key                    enter or change the Anthropic API key (hidden; local .env only)
@@ -31,6 +32,8 @@ def main(argv: list[str] | None = None) -> int:
     h.add_argument("action", choices=["run"])
     h.add_argument("--runs", type=int, default=1)
     sub.add_parser("demo")
+    sm = sub.add_parser("smoke")
+    sm.add_argument("--dir", default="cap-data-smoke", help="scratch folder (wiped first)")
     sv = sub.add_parser("serve")
     sv.add_argument("--port", type=int, default=8000)
     sv.add_argument(
@@ -116,6 +119,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{out.post_id} -> {out.status.value}")
         for line in out.history:
             print("  ", line)
+    elif args.cmd == "smoke":
+        from pathlib import Path
+
+        from cap import smoke
+
+        return smoke.run(Path(args.dir).resolve())
     elif args.cmd == "serve":
         import os
         import shutil

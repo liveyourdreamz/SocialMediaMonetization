@@ -13,4 +13,5 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 uv sync --quiet
+if [ "${1:-}" = "--smoke" ]; then exec uv run cap smoke; fi   # CI: the loop, no browser
 exec uv run cap serve --demo --host 0.0.0.0 --open "$@"

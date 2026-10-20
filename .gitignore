@@ -18,3 +18,4 @@ renders/
 .coverage
 cap-data/
 published/
+cap-data-smoke/
