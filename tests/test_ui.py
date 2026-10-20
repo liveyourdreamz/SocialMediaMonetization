@@ -459,3 +459,19 @@ def test_dates_render_without_platform_specific_strftime(world):
 
     assert day(datetime(2026, 12, 8, 9, 5, tzinfo=UTC)) == "8 Dec 2026"
     assert day(datetime(2026, 12, 8, 9, 5, tzinfo=UTC), year=False, time=True) == "8 Dec 09:05"
+
+
+def test_a_post_that_has_not_reached_the_queue_shows_progress_not_a_crash(world):
+    """Clicking a running or parked-before-queue post on the Operator screen."""
+    from cap.demo.seed import new_brief
+
+    store, api = world
+    rec = new_brief("A", "Still running")
+    store.put(rec)
+    html = api.get(f"/posts/{rec.post_id}").text
+    assert "In the pipeline" in html and "Still running" in html and "refresh" in html
+    rec.status = PostStatus.PARKED
+    rec.log("parked: render failed: voice service unreachable")
+    html = api.get(f"/posts/{rec.post_id}").text
+    assert "did not reach the queue" in html and "voice service unreachable" in html
+    assert "refresh" not in html

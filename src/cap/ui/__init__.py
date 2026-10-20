@@ -208,6 +208,18 @@ def ui_router(store: Store) -> APIRouter:
         record = store.get(post_id)
         if not visible_to(record, reviewer):
             raise HTTPException(403, "channel C only")
+        if not record.flags.card_prepared:
+            # still in the pipeline, or parked before it reached the queue: no card yet
+            running = record.status.value in ("drafting", "gated", "rendering")
+            return render(
+                request,
+                "progress.html",
+                reviewer,
+                record=record,
+                running=running,
+                channel_label=views.channel_label(record.channel_id.value),
+                lines=[h.split(" ", 1) for h in record.history],
+            )
         prefetch = "prefetch" in (sec_purpose or "") or "prefetch" in (purpose or "")
         if (
             record.status == PostStatus.AWAITING_APPROVAL
