@@ -247,6 +247,7 @@ def run_brief(
         test_logs=logs,
         render_dir=Path(get_settings().data_dir) / "renders",
         research=research,
+        on_progress=store.put,
     )
     out = run_post(rec, sources, deps)
     if get_settings().model_backend.value == "mock":
@@ -292,7 +293,11 @@ def start_tour(store: Store) -> PostRecord:
             out.log("drafted from the worked example (fixtures), not the live model")
             store.put(out)
         except Exception as e:  # noqa: BLE001 - the tour page shows the reason
-            rec.status = PostStatus.PARKED
+            rec.stop(
+                "draft",
+                f"the tour pipeline could not run: {type(e).__name__}: {e}",
+                PostStatus.PARKED,
+            )
             rec.log(f"parked: the tour pipeline could not run: {type(e).__name__}: {e}")
             store.put(rec)
 

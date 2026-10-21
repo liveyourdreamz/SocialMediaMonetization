@@ -79,9 +79,11 @@ def hard_rules(record: PostRecord, variant: Variant, rulebook: Rulebook) -> list
                 evidence_span=f"{variant.platform.value} caption lacks the AI-role disclosure",
             )
         )
-    # R-12: a post with factual claims carries a source list; per-claim sourcing is
-    # gate 10's job, so this only asks whether the list exists at all.
-    if record.draft.claims and not record.draft.source_list:
+    # R-12: a post with factual claims carries a source list. After D41 the facts gate
+    # runs first, so the list holds only links that confirmed a claim; a test-log claim
+    # counts as sourced. Fires when claims exist and not one of them was confirmed.
+    confirmed = any(c.status == "supported" for c in record.draft.claims)
+    if record.draft.claims and not record.draft.source_list and not confirmed:
         findings.append(
             RuleFinding(
                 rule_id="R-12",

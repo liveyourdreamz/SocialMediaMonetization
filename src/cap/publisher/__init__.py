@@ -80,6 +80,8 @@ def publish(
 ) -> PostRecord:
     if record.flags.canary:
         raise PublishRefusedError("flagged record: canary")
+    if record.flags.tour and not isinstance(adapter, LocalFolderAdapter | DryRunAdapter):
+        raise PublishRefusedError("a guided-tour post never leaves this computer")
     if record.status != PostStatus.APPROVED:
         raise PublishRefusedError(f"record status is {record.status.value}")
     if not record.gates.all_passed:
@@ -123,6 +125,13 @@ def publish_to(
         except Exception as e:  # noqa: BLE001 - recorded per destination, shown on the Outbox
             record.publish.errors[adapter.name] = f"{type(e).__name__}: {str(e)[:200]}"
             record.log(f"{adapter.name} refused or failed: {type(e).__name__}")
+    if rest and not any(a.name in record.publish.platform_post_ids for a in rest):
+        # a platform was chosen and none took it: the local copy is a record, not a
+        # publication (review H3). Back to approved so a retry from the Outbox works.
+        record.publish.platform_post_ids.pop(first.name, None)
+        record.publish.published_at = None
+        record.status = PostStatus.APPROVED
+        record.log("not published: every chosen platform failed; fix it and retry")
     return record
 
 

@@ -212,7 +212,8 @@ def card_context(
         gates.append(_gate("Originality and anchor", o["pass"], _orig_line(o)))
         gates.append(_gate("Ethics, two judges", e["verdict"] == "pass", _ethics_line(e)))
         gates.append(_gate("Disclosure and labelling", d["pass"], _disc_line(d), near=_mfk_near(d)))
-        gates.append(_gate("Facts and claims", f["pass"], _facts_line(f)))
+        unconfirmed = any(c.get("final") != "supported" for c in f.get("claim_checks") or [])
+        gates.append(_gate("Facts and claims", f["pass"], _facts_line(f), near=unconfirmed))
     media = card.media_manifest
     media_rows = [
         (
@@ -659,7 +660,9 @@ def package(record: PostRecord) -> dict[str, Any]:
             {
                 c.source_url
                 for c in record.draft.claims
-                if c.source_url and not c.source_url.startswith("testlog://")
+                if c.source_url
+                and not c.source_url.startswith("testlog://")
+                and c.status == "supported"
             }
         ),
     }
@@ -769,10 +772,12 @@ def workflow(record: PostRecord) -> dict[str, Any]:
     shown, so 'where am I and what is left' always has one answer."""
     st = record.status.value
     hist = " ".join(record.history).lower()
+    closed = st in ("parked", "rejected", "discarded")
     if st == "published":
         current, stopped = "", ""
-    elif st in ("parked", "rejected", "discarded"):
-        current, stopped = _stopped_at(record), _stopped_at(record)
+    elif closed:
+        stopped = record.flags.stopped_at or _stopped_at(record)
+        current = stopped
     elif st == "drafting":
         current, stopped = "draft", ""
     elif st == "gated":
@@ -800,12 +805,20 @@ def workflow(record: PostRecord) -> dict[str, Any]:
             state = "todo"
         steps.append({"key": k, "label": label, "state": state})
     reason = ""
-    if stopped and record.history:
-        reason = record.history[-1].split(" ", 1)[-1]
-        reason = reason.removeprefix("parked: ").removeprefix("gates failed: ")
+    if stopped:
+        reason = record.flags.stop_reason
+        if not reason:  # records from before stop_reason existed
+            last = next(
+                (h for h in reversed(record.history) if "parked: " in h or "gates failed: " in h),
+                record.history[-1] if record.history else "",
+            )
+            reason = last.split(" ", 1)[-1].removeprefix("parked: ")
     pid = record.post_id
     if st == "published":
         headline, nxt, href = "Published", "See where it went", f"/posts/{pid}/preview#where"
+    elif stopped == "review":
+        headline = "Closed at your review"
+        nxt, href = "See the card", f"/posts/{pid}"
     elif stopped:
         label = dict(STEPS)[stopped]
         headline = f"Stopped at {label.lower()}"

@@ -114,6 +114,13 @@ class FileStore(Store):
         (self.root / "posts").mkdir(parents=True, exist_ok=True)
         for f in sorted((self.root / "posts").glob("*.json")):
             rec = PostRecord.model_validate_json(f.read_text(encoding="utf-8"))
+            if rec.status in _IN_FLIGHT:
+                # the thread that was working on it died with the app (review H4)
+                step = _IN_FLIGHT[rec.status]
+                rec.stop(step, "interrupted: the app restarted while this was running")
+                rec.status = PostStatus.PARKED
+                rec.log("parked: interrupted by a restart; file it again")
+                f.write_text(rec.model_dump_json(indent=1), encoding="utf-8")
             self.posts[rec.post_id] = rec
         state = self.root / "state.json"
         if state.exists():
@@ -144,8 +151,19 @@ class FileStore(Store):
         )
 
 
+_IN_FLIGHT = {
+    PostStatus.BRIEFED: "draft",
+    PostStatus.DRAFTING: "draft",
+    PostStatus.GATED: "checks",
+    PostStatus.RENDERING: "video",
+}
+
+
 def _atomic_write(path: Path, text: str) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    import uuid
+
+    # a unique temp name: two threads saving the same post never share one (review M6)
+    tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
 

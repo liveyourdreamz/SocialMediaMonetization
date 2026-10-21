@@ -105,9 +105,20 @@ def draft(
         {c.source_url for c in claims if c.source_url and not c.source_url.startswith("testlog://")}
     )
     covered = " ".join(c.text for c in claims)
-    missing = sorted(set(_numerals(record.draft.script)) - set(_numerals(covered)))
+    # every surface the viewer reads, not just the script (review M4)
+    seen = " ".join(
+        [
+            record.draft.script,
+            record.draft.title,
+            record.draft.thumbnail_text,
+            *record.draft.on_screen_text,
+        ]
+    )
+    missing = sorted(set(_numerals(seen)) - set(_numerals(covered)))
     if missing:
-        raise AgentBlockedError(f"P2: numerals in the script with no claim: {missing}")
+        raise AgentBlockedError(
+            f"P2: numerals on screen, in the title or the script with no claim: {missing}"
+        )
     record.log(f"drafted: {len(record.draft.claims)} claims")
     return record
 

@@ -364,6 +364,9 @@ class Flags(Strict):
     gate_blind: bool = True  # D33: gates hidden on the card until a verdict is recorded
     card_prepared: bool = False  # spot check and reading time set when queued (D34)
     tour: bool = False  # the guided tour's worked example; never counted, never published
+    # where the post stopped (a workflow step key) and why, written when it stops
+    stopped_at: str = ""
+    stop_reason: str = ""
 
 
 class PostRecord(Strict):
@@ -385,6 +388,13 @@ class PostRecord(Strict):
     metrics: Metrics = Field(default_factory=Metrics)
     flags: Flags = Field(default_factory=Flags)
     history: list[str] = Field(default_factory=list)  # audit trail lines, append only
+
+    def stop(self, step: str, reason: str, status: PostStatus | None = None) -> None:
+        """Record where and why the post stopped; the workflow bar reads these."""
+        self.flags.stopped_at = step
+        self.flags.stop_reason = reason
+        if status is not None:
+            self.status = status
 
     def log(self, event: str) -> None:
         self.history.append(f"{datetime.now(UTC).isoformat()} {event}")

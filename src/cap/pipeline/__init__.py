@@ -50,6 +50,17 @@ class PipelineDeps:
     # D41: called with the drafted record; returns source dicts that confirm or refute
     # its claims, plus log lines. None = the sources given up front are all there is.
     research: Any | None = None
+    # called with the record as each stage starts, so the progress page and a restart
+    # both see where it is (review H4). None = nothing outside watches.
+    on_progress: Any | None = None
+
+
+def _progress(deps: PipelineDeps, record: PostRecord) -> None:
+    if deps.on_progress is not None:
+        try:
+            deps.on_progress(record.model_copy(deep=True))
+        except Exception:  # noqa: BLE001 - a progress save never stops the post
+            pass
 
 
 def _rec(state: PipelineState) -> PostRecord:
@@ -66,6 +77,7 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
     def n_draft(state: PipelineState) -> PipelineState:
         record = _rec(state)
         record.status = PostStatus.DRAFTING
+        _progress(deps, record)
         try:
             record = draft(
                 record,
@@ -111,6 +123,7 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
     def n_gates(state: PipelineState) -> PipelineState:
         record = _rec(state)
         record.status = PostStatus.GATED
+        _progress(deps, record)
         sources = _sources(state)
         if deps.research is not None:
             found, lines = deps.research(record)
@@ -127,14 +140,8 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
                 for d in found
                 if d["url"] not in have
             ]
-            # the pages research found go in the description's source list (R-12)
-            record.draft.source_list = sorted(
-                set(record.draft.source_list) | {d["url"] for d in found}
-            )
-        anchors = deps.anchor_elements.get(record.channel_id.value, [])
-        record.gates.originality = _originality_over_variants(record, deps, anchors)
-        record.gates.ethics = check_ethics(record, deps.client)
-        record.gates.disclosure = check_disclosure(record, deps.client)
+        # facts first (D41): the claims are checked, and only links that confirmed a
+        # claim become the source list that R-12 and the published description use
         try:
             facts, injection = check_facts(
                 record, deps.client, sources, test_log=deps.test_logs.get(record.post_id, "")
@@ -142,9 +149,29 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
         except AgentBlockedError as e:
             return _park(record, str(e))
         record.gates.facts = facts
+        record.draft.source_list = confirmed_sources(record)
         if injection:
             record.flags.injection_suspected = True
             return _park(record, "injection suspected in fetched content; parked for review")
+        anchors = deps.anchor_elements.get(record.channel_id.value, [])
+        record.gates.originality = _originality_over_variants(record, deps, anchors)
+        record.gates.ethics = check_ethics(record, deps.client)
+        record.gates.disclosure = check_disclosure(record, deps.client)
+        # a gate that failed outright rejects, before any park (a failure is not a question)
+        hard = [
+            name
+            for name, failed in (
+                ("originality", not record.gates.originality.passed),
+                ("ethics", record.gates.ethics.verdict.value == "fail"),
+                ("facts", not record.gates.facts.passed),
+            )
+            if failed
+        ]
+        if hard:
+            record.status = PostStatus.REJECTED
+            record.stop("checks", "gates failed: " + ", ".join(hard))
+            record.log("gates failed: " + ", ".join(hard))
+            return _put(record, parked_reason="gates failed")
         if record.gates.ethics.verdict.value == "escalate":
             return _park(record, "ethics gate escalated")
         if record.gates.disclosure.mfk_band in ("doubtful", "unscored"):
@@ -153,6 +180,7 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
             )
         if not record.gates.all_passed:
             record.status = PostStatus.REJECTED
+            record.stop("checks", "gates failed: " + ", ".join(_failed_gates(record)))
             record.log("gates failed: " + ", ".join(_failed_gates(record)))
             return _put(record, parked_reason="gates failed")
         return _put(record)
@@ -160,6 +188,7 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
     def n_render(state: PipelineState) -> PipelineState:
         record = _rec(state)
         record.status = PostStatus.RENDERING
+        _progress(deps, record)
         deps.render_dir.mkdir(parents=True, exist_ok=True)
         if get_settings().renderer == "video":
             from cap.render import RenderError, render, silent_voice, speak
@@ -244,7 +273,28 @@ def _sources(state: PipelineState) -> list[SourceDoc]:
     ]
 
 
+_STEP_FOR_STATUS = {
+    PostStatus.DRAFTING: "draft",
+    PostStatus.GATED: "checks",
+    PostStatus.RENDERING: "video",
+}
+
+
+def confirmed_sources(record: PostRecord) -> list[str]:
+    """The links that confirmed at least one claim: what a description may list."""
+    return sorted(
+        {
+            c.source_url
+            for c in record.draft.claims
+            if c.status == "supported"
+            and c.source_url
+            and not c.source_url.startswith("testlog://")
+        }
+    )
+
+
 def _park(record: PostRecord, reason: str) -> PipelineState:
+    record.stop(_STEP_FOR_STATUS.get(record.status, "draft"), reason)
     record.status = PostStatus.PARKED
     record.log(f"parked: {reason}")
     return _put(record, parked_reason=reason)

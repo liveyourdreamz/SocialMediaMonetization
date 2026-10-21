@@ -200,6 +200,10 @@ def check_facts(
         cc, inj = check_claim(client, claim, all_sources, test_log, record.brief.fast_moving)
         injection = injection or inj
         claim.status = cc.final
+        if cc.final != "supported":
+            # nothing confirmed it: no quote or link may make it look sourced (review H1)
+            claim.source_quote = None
+            claim.source_url = None
         gate.claim_checks.append(cc)
     record.draft.claims = claims
     gate.checked = len(claims)

@@ -132,7 +132,12 @@ def build_card(record: PostRecord) -> CardView:
         on_screen_text=list(record.draft.on_screen_text),
         thumbnail_text=record.draft.thumbnail_text,
         claims=[
-            {"text": c.text, "source_url": c.source_url, "source_quote": c.source_quote}
+            {
+                "text": c.text,
+                "source_url": c.source_url,
+                "source_quote": c.source_quote,
+                "status": c.status,
+            }
             for c in record.draft.claims
         ],
         media_manifest=record.media_manifest.model_dump(),
@@ -283,6 +288,12 @@ def finalise(
         Decision.ESCALATE: PostStatus.PARKED,
     }[decision]
     a.decided_at = datetime.now(UTC)
+    if decision != Decision.APPROVE:
+        chip = a.reason_code.value.replace("_", " ") if a.reason_code else "no reason chip"
+        record.stop(
+            "review",
+            f"{'rejected' if decision == Decision.REJECT else 'escalated'} by {reviewer}: {chip}",
+        )
     if decision == Decision.ESCALATE:
         record.log(
             f"parked: escalated by {reviewer}: {a.reason_code.value if a.reason_code else 'no chip'}"
@@ -318,6 +329,10 @@ def _finalise_canary(record: PostRecord) -> PostRecord:
     missed = decision == Decision.APPROVE or wrong_tap or not matched
     record.flags.canary_outcome = "missed" if missed else "caught"
     record.status = PostStatus.DISCARDED
+    record.stop(
+        "review",
+        f"a canary (a planted fault): you {'missed' if missed else 'caught'} it; never published",
+    )
     a.decided_at = datetime.now(UTC)
     record.log(
         f"canary {record.flags.canary_outcome.upper()}: fault={fault.value if fault else None} "

@@ -86,7 +86,9 @@ def description_for(record: PostRecord) -> str:
         {
             c.source_url
             for c in record.draft.claims
-            if c.source_url and not c.source_url.startswith("testlog://")
+            if c.source_url
+            and not c.source_url.startswith("testlog://")
+            and c.status == "supported"  # never publish a link that confirmed nothing
         }
     )
     lines = [record.draft.caption.strip(), ""]

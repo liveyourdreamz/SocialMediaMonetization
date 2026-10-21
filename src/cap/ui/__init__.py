@@ -532,7 +532,11 @@ def ui_router(store: Store) -> APIRouter:
                     store, channel, topic.strip(), urls=url_list, test_log=test_log, record=record
                 )
             except Exception as e:  # noqa: BLE001
-                record.status = PostStatus.PARKED
+                record.stop(
+                    "draft",
+                    f"the pipeline could not run: {type(e).__name__}: {str(e)[:300]}",
+                    PostStatus.PARKED,
+                )
                 record.log(
                     f"parked: the pipeline could not run: {type(e).__name__}: {str(e)[:300]}"
                 )
