@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     # Foundation stand-in, used by the tests). The voice: "edge" (Microsoft neural
     # voices, free) or "silent" (offline, for tests and dry runs).
     renderer: Literal["video", "text"] = "video"
+    # D41 (21 Oct 2026): the drafter writes from the topic and its own knowledge; the
+    # research step then looks for a source for each claim. "flag": a claim no source
+    # confirms is shown on the card as unconfirmed and Hemant decides. "block": any
+    # unconfirmed claim rejects the post (the PRD's original agent-10 guardrail).
+    fact_mode: Literal["flag", "block"] = "flag"
     voice: Literal["edge", "silent"] = "edge"
 
     # Where approved posts go: "local" (a folder under data_dir) or "youtube" (a real

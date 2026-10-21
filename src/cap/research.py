@@ -96,7 +96,9 @@ def _domain_ok(url: str, channel: str) -> bool:
     return any(host == d or host.endswith("." + d) for d in SCIENCE_DOMAINS)
 
 
-def _search_with_model(topic: str, channel: str) -> tuple[list[str], str]:
+def _search_with_model(
+    topic: str, channel: str, claims: list[str] | None = None
+) -> tuple[list[str], str]:
     """The scout: the model with the web-search tool, domain-restricted. Returns the
     URLs it chose (only ones its searches returned) and its one-line note."""
     import anthropic
@@ -134,7 +136,7 @@ def _search_with_model(topic: str, channel: str) -> tuple[list[str], str]:
                 model=SONNET,
                 max_tokens=2000,
                 system=system,
-                messages=[{"role": "user", "content": f"Topic: {topic}\nChannel: {channel}"}],
+                messages=[{"role": "user", "content": _scout_request(topic, channel, claims)}],
                 tools=[tool],  # type: ignore[list-item]
             )
             break
@@ -186,7 +188,20 @@ def _search_wikipedia(topic: str, limit: int = 2) -> list[str]:
     return ["https://en.wikipedia.org/wiki/" + str(h["title"]).replace(" ", "_") for h in hits]
 
 
-def find_sources(topic: str, channel: str) -> tuple[list[dict[str, Any]], list[str]]:
+def _scout_request(topic: str, channel: str, claims: list[str] | None) -> str:
+    out = f"Topic: {topic}\nChannel: {channel}"
+    if claims:
+        listed = "\n".join(f"- {c}" for c in claims[:20])
+        out += (
+            "\nThe script makes these factual claims. Choose pages that state the same "
+            f"facts (or contradict them), so each can be checked:\n{listed}"
+        )
+    return out
+
+
+def find_sources(
+    topic: str, channel: str, claims: list[str] | None = None
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Sources for a topic and the log lines that explain how they were found. Never
     raises: an empty list and the reason is the answer when nothing could be found."""
     log: list[str] = []
@@ -194,7 +209,7 @@ def find_sources(topic: str, channel: str) -> tuple[list[dict[str, Any]], list[s
     s = get_settings()
     if s.model_backend.value == "anthropic" and s.anthropic_api_key is not None:
         try:
-            urls, note = _search_with_model(topic, channel)
+            urls, note = _search_with_model(topic, channel, claims)
             log.append(
                 f"research: the scout searched the source library and chose {len(urls)} page(s)"
             )

@@ -38,7 +38,7 @@ def test_the_console_is_switched_to_utf8_so_arabic_titles_print(monkeypatch, cap
     assert sys.stdout.encoding.lower() == "utf-8"
 
 
-def test_a_real_brief_gets_its_channels_character_and_parks_without_material(tmp_path, monkeypatch):
+def test_a_real_brief_gets_its_channels_character_and_drafts_from_the_topic(tmp_path, monkeypatch):
     """With the real backend a brief must not be handed the demo's Notely sources and
     Patch's stub block: Falak gets Falak's block, and a brief with nothing to draft
     from parks with a reason that says what to add."""
@@ -77,13 +77,15 @@ def test_a_real_brief_gets_its_channels_character_and_parks_without_material(tmp
     try:
         store = Store()
         monkeypatch.setattr(
-            "cap.research.find_sources", lambda topic, ch: ([], ["research failed: no network"])
+            "cap.research.find_sources",
+            lambda topic, ch, claims=None: ([], ["research failed: no network"]),
         )
+        # D41: no sources found is no longer a park; the draft goes ahead from knowledge
         rec = run_brief(store, "B", "desalination")
-        assert (
-            rec.status == PostStatus.PARKED and "no source page could be found" in rec.history[-1]
-        )
+        assert rec.status != PostStatus.PARKED, rec.history[-1]
+        assert any("research: looking for sources" in h for h in rec.history)
         rec = run_brief(store, "B", "desalination", urls=["https://example.org/desal"])
+        assert "drafting_mode" in seen[0]  # the drafter is told to write from knowledge
         assert seen and 'character="Falak"' in seen[0] and "Notely" not in seen[0]
         assert (
             rec.brief.anchor_elements[:1] == ["from orbit"] and rec.brief.format_id == "from_orbit"
@@ -147,7 +149,7 @@ def test_fetch_failures_say_why_and_wikipedia_uses_its_rest_api(monkeypatch):
     assert fetch.failed_reason(docs[0]) is None
 
 
-def test_a_brief_whose_pages_all_failed_parks_with_the_reasons(tmp_path, monkeypatch):
+def test_a_pinned_page_that_fails_is_reported_and_the_draft_still_runs(tmp_path, monkeypatch):
     from cap.approval.app import Store
     from cap.config import get_settings
     from cap.demo.seed import new_brief, run_brief
@@ -158,9 +160,15 @@ def test_a_brief_whose_pages_all_failed_parks_with_the_reasons(tmp_path, monkeyp
     monkeypatch.setenv("CAP_MODEL_BACKEND", "anthropic")
     monkeypatch.setenv("CAP_ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
     get_settings.cache_clear()
-    calls: list[str] = []
+    from cap.demo import happy_fixtures
+    from cap.models import MockClient
+
+    monkeypatch.setenv("CAP_RENDERER", "text")
+    get_settings.cache_clear()
+    monkeypatch.setattr("cap.models.get_client", lambda fixtures=None: MockClient(happy_fixtures()))
     monkeypatch.setattr(
-        "cap.models.get_client", lambda fixtures=None: calls.append("model") or None
+        "cap.research.find_sources",
+        lambda topic, ch, claims=None: ([], ["research: nothing found"]),
     )
     monkeypatch.setattr(
         "cap.fetch.fetch_sources",
@@ -177,9 +185,8 @@ def test_a_brief_whose_pages_all_failed_parks_with_the_reasons(tmp_path, monkeyp
     try:
         store = Store()
         rec = run_brief(store, "B", "Rainbows", urls=["https://x.example/a"])
-        assert rec.status == PostStatus.PARKED and calls == []
-        assert any("HTTP 403" in h for h in rec.history)
-        assert "no source page could be found" in rec.history[-1]
+        assert rec.status != PostStatus.PARKED, rec.history[-1]  # D41: the draft goes ahead
+        assert any("could not fetch https://x.example/a: HTTP 403" in h for h in rec.history)
         b = new_brief("B", "Rainbows").brief
         assert (
             b.format_id == "from_orbit" and b.claims_allowed and "from orbit" in b.anchor_elements
@@ -208,7 +215,7 @@ def test_a_topic_alone_is_enough_the_system_finds_the_sources(tmp_path, monkeypa
     monkeypatch.setattr("cap.models.get_client", lambda fixtures=None: MockClient(happy_fixtures()))
     asked: list[tuple[str, str]] = []
 
-    def scout(topic, channel):
+    def scout(topic, channel, claims=None):
         asked.append((topic, channel))
         return [
             "https://www.nasa.gov/rainbows",
@@ -279,6 +286,8 @@ def test_without_a_key_the_scout_uses_wikipedia_search(tmp_path, monkeypatch):
             "https://en.wikipedia.org/wiki/Rainbow",
             "https://en.wikipedia.org/wiki/Refraction",
         ]
-        assert docs[0]["body"] == "Light bends." and any("no API key" in ln for ln in log)
+        assert docs[0]["body"] == "Light bends." and any(
+            "Wikipedia search for 'rainbows'" in ln for ln in log
+        )
     finally:
         get_settings.cache_clear()

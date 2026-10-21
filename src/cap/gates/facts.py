@@ -205,5 +205,14 @@ def check_facts(
     gate.checked = len(claims)
     gate.unsupported_claims = [cc.claim_text for cc in gate.claim_checks if cc.final != "supported"]
     gate.unsupported_claims += [f"endorsement wording: {w}" for w in endorsement_wording]
-    gate.passed = not gate.unsupported_claims
+    from cap.config import get_settings
+
+    unconfirmed = [cc.claim_text for cc in gate.claim_checks if cc.final != "supported"]
+    if get_settings().fact_mode == "flag":
+        # D41: unconfirmed claims go to Hemant on the card; endorsement wording still fails
+        gate.passed = not endorsement_wording
+        if unconfirmed:
+            record.log(f"facts: {len(unconfirmed)} claim(s) unconfirmed, flagged on the card")
+    else:
+        gate.passed = not gate.unsupported_claims
     return gate, injection

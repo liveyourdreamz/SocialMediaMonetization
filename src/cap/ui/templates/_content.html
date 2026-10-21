@@ -41,7 +41,7 @@
     {% for c in card.claims %}
     <div class="card tight claim" {% if content_rtl %}dir="rtl" lang="ar"{% endif %}>
       <span>{{ c.text }}</span>
-      {% if c.source_quote %}<span class="src">{% if c.source_url and c.source_url.startswith('testlog://') %}{{ L.test_log }}: {% elif c.source_url %}{{ c.source_url }}: {% endif %}"{{ c.source_quote }}"</span>{% else %}<span class="src">{{ L.no_quote }}</span>{% endif %}
+      {% if c.source_quote %}<span class="src">{% if c.source_url and c.source_url.startswith('testlog://') %}{{ L.test_log }}: {% elif c.source_url %}{{ c.source_url }}: {% endif %}"{{ c.source_quote }}"</span>{% else %}<span class="src word-signal">{{ L.no_quote }}</span>{% endif %}
     </div>
     {% endfor %}
   </div>

@@ -47,6 +47,9 @@ class PipelineDeps:
     render_dir: Path = field(default_factory=lambda: Path("renders"))
     test_logs: dict[str, str] = field(default_factory=dict)  # post_id -> logged test
     checkpointer: Any | None = None  # built once at app start; MemorySaver if None
+    # D41: called with the drafted record; returns source dicts that confirm or refute
+    # its claims, plus log lines. None = the sources given up front are all there is.
+    research: Any | None = None
 
 
 def _rec(state: PipelineState) -> PostRecord:
@@ -109,6 +112,25 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
         record = _rec(state)
         record.status = PostStatus.GATED
         sources = _sources(state)
+        if deps.research is not None:
+            found, lines = deps.research(record)
+            for ln in lines:
+                record.log(ln)
+            have = {s.url for s in sources}
+            sources += [
+                SourceDoc(
+                    url=d["url"],
+                    body=d["body"],
+                    fetched_at=d.get("fetched_at", ""),
+                    page_date=d.get("page_date"),
+                )
+                for d in found
+                if d["url"] not in have
+            ]
+            # the pages research found go in the description's source list (R-12)
+            record.draft.source_list = sorted(
+                set(record.draft.source_list) | {d["url"] for d in found}
+            )
         anchors = deps.anchor_elements.get(record.channel_id.value, [])
         record.gates.originality = _originality_over_variants(record, deps, anchors)
         record.gates.ethics = check_ethics(record, deps.client)

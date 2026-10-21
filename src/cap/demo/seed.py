@@ -204,8 +204,9 @@ def run_brief(
     record: PostRecord | None = None,
 ) -> PostRecord:
     """The whole pipeline on one brief. Mock backend: the sample episode with the brief's
-    topic recorded; Anthropic backend: a real draft of the topic from the fetched
-    sources and the test-log notes."""
+    topic recorded; Anthropic backend: a real draft of the topic from the model's own
+    knowledge, any pinned page and the test log, then sources found for its claims
+    (D41)."""
     from cap.characters import ANCHOR_ELEMENTS, CHARACTER_BLOCKS, needs
     from cap.config import get_settings
     from cap.fetch import fetch_sources
@@ -215,9 +216,12 @@ def run_brief(
     ch = rec.channel_id
     real = get_settings().model_backend.value != "mock"
     test_log = test_log.strip()
+    research = None
     if real:
-        # A real drafter may use only what the brief supplies: fetched pages and the
-        # test log. Nothing from the sample episode, nothing from memory.
+        # D41: the drafter writes from the topic and its own knowledge (plus any pinned
+        # page and the test log); the research step then looks for a source for each
+        # claim it made, and the facts gate checks them before Hemant sees the card.
+        from cap.characters import KNOWLEDGE_NOTE
         from cap.fetch import failed_reason
         from cap.research import find_sources
 
@@ -229,30 +233,21 @@ def run_brief(
         sources = [s for s in sources if not failed_reason(s)]
         if urls:
             rec.log(f"fetched {len(sources)} of {len(urls)} pinned source(s)")
-        if not sources:
-            # agent 1: the system finds its own sources; a pinned URL only adds to them
-            found, lines = find_sources(topic, ch.value)
-            for ln in lines:
-                rec.log(ln)
-            sources = found
-            store.put(rec)
-        if not sources and not test_log:
-            rec.log(
-                "parked: no source page could be found or fetched for this topic (the "
-                "lines above say what was tried); the drafter may not use facts from "
-                "memory. Try a more specific topic, or pin a page URL on the brief."
-            )
-            rec.status = PostStatus.PARKED
-            store.put(rec)
-            return rec
         if ch == Channel.A and not test_log:
             rec.log(
                 f"note: no test log on the brief; Patch's format needs {needs('A')} for any "
-                "first-hand result, so this episode can only describe the vendor's pages"
+                "first-hand result, so this episode describes the tool, not a test of it"
             )
         rec.brief.anchor_elements = ANCHOR_ELEMENTS[ch.value][:2]
-        blocks, anchors = CHARACTER_BLOCKS, ANCHOR_ELEMENTS
+        blocks = {k: v + "\n\n" + KNOWLEDGE_NOTE for k, v in CHARACTER_BLOCKS.items()}
+        anchors = ANCHOR_ELEMENTS
         logs = {rec.post_id: test_log} if test_log else {}
+
+        def research(drafted: PostRecord):  # type: ignore[no-untyped-def]
+            claims = [c.text for c in drafted.draft.claims if not c.in_test_log]
+            found, lines = find_sources(topic, ch.value, claims)
+            return found, [f"research: looking for sources for {len(claims)} claim(s)", *lines]
+
     else:
         sources = fetch_sources(urls) if urls else SOURCES
         blocks, anchors = {ch.value: CHARACTER_BLOCK}, {ch.value: ["test log"]}
@@ -264,6 +259,7 @@ def run_brief(
         character_blocks=blocks,
         test_logs=logs,
         render_dir=Path(get_settings().data_dir) / "renders",
+        research=research,
     )
     out = run_post(rec, sources, deps)
     if get_settings().model_backend.value == "mock":

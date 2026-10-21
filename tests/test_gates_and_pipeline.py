@@ -174,7 +174,11 @@ def _one_claim(fixtures, record, text, url):
     )
 
 
-def test_fact_quote_must_be_exact_substring(fixtures, record):
+def test_fact_quote_must_be_exact_substring(fixtures, record, monkeypatch):
+    monkeypatch.setenv("CAP_FACT_MODE", "block")
+    from cap.config import get_settings
+
+    get_settings.cache_clear()
     fixtures[("P10", "B")] = ok(
         claim_status="supported", supporting_quote="Sync completes within ten seconds", note=""
     )
@@ -194,7 +198,11 @@ def test_quote_check_accepts_json_escapes_and_curly_quotes():
     assert not quote_in_source("", body)
 
 
-def test_second_verifier_disagreement_blocks(fixtures, record):
+def test_second_verifier_disagreement_blocks(fixtures, record, monkeypatch):
+    monkeypatch.setenv("CAP_FACT_MODE", "block")
+    from cap.config import get_settings
+
+    get_settings.cache_clear()
     fixtures[("P10", "C")] = ok(claim_status="unsupported", supporting_quote="", note="stretch")
     _one_claim(fixtures, record, "Notely stores notes locally first, then syncs", SOURCES[0]["url"])
     gate, _ = check_facts(record, MockClient(fixtures), source_docs())

@@ -149,3 +149,39 @@ def test_a_cocoons_brief_reaches_the_queue(keyed, monkeypatch):
     rec = run_brief(Store(), "B", "Cocoons")
     assert rec.status != PostStatus.PARKED, rec.history[-1]
     assert any("source: https://www.britannica.com/animal/cocoon" in h for h in rec.history)
+
+
+def test_flag_mode_unconfirmed_claims_reach_the_card_block_mode_rejects(keyed, monkeypatch):
+    """D41: with nothing found to confirm the claims, flag mode queues the post with each
+    claim marked unconfirmed on the card; block mode (the old guardrail) rejects it."""
+    from cap.approval.app import Store
+    from cap.config import get_settings
+    from cap.demo import happy_fixtures
+    from cap.demo.seed import run_brief
+    from cap.models import MockClient
+    from cap.schema.post_record import PostStatus
+
+    monkeypatch.setenv("CAP_RENDERER", "text")
+    monkeypatch.setattr("cap.models.get_client", lambda fixtures=None: MockClient(happy_fixtures()))
+    monkeypatch.setattr(
+        "cap.research.find_sources",
+        lambda topic, ch, claims=None: (
+            [
+                {
+                    "url": "https://en.wikipedia.org/wiki/Cloud",
+                    "body": "Clouds are water.",
+                    "fetched_at": "",
+                    "page_date": None,
+                }
+            ],
+            ["research: one unrelated page"],
+        ),
+    )
+    for mode, expect in (("flag", PostStatus.AWAITING_APPROVAL), ("block", PostStatus.REJECTED)):
+        monkeypatch.setenv("CAP_FACT_MODE", mode)
+        get_settings.cache_clear()
+        rec = run_brief(Store(), "A", "Notely 7-day test", test_log="Day 3: sync failed twice.")
+        assert rec.status == expect, (mode, rec.history[-3:])
+        if mode == "flag":
+            assert any("unconfirmed, flagged on the card" in h for h in rec.history)
+            assert any(c.status != "supported" for c in rec.draft.claims)
