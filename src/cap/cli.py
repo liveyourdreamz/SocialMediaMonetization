@@ -20,7 +20,15 @@ import argparse
 import sys
 
 
+def utf8_console() -> None:
+    """Windows consoles default to cp1252; Falak's Arabic titles are printed to them."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower() != "utf-8":
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+
+
 def main(argv: list[str] | None = None) -> int:
+    utf8_console()
     p = argparse.ArgumentParser(prog="cap")
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("schema")

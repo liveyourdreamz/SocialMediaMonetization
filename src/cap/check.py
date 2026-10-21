@@ -29,24 +29,28 @@ class Skip(Exception):  # noqa: N818 - a signal, not an error
 
 
 def _console() -> str:
+    """Falak's Arabic titles are printed to the console; a cp1252 Windows console would
+    raise UnicodeEncodeError in the pipeline thread. cli.main() switches stdout to
+    UTF-8; this proves it held."""
+    from cap.cli import utf8_console
+
+    utf8_console()
     enc = (sys.stdout.encoding or "").lower()
-    # Falak's Arabic and the en dash in captions must survive a Windows console
     try:
-        "Falak — فلك".encode(sys.stdout.encoding or "utf-8")
-    except (UnicodeEncodeError, LookupError):
-        return f"console encoding {enc or '?'} cannot show Arabic; set PYTHONUTF8=1"
-    return f"encoding {enc}"
+        "Falak — فلك".encode(sys.stdout.encoding or "ascii")
+    except (UnicodeEncodeError, LookupError) as e:
+        raise RuntimeError(f"console encoding {enc or '?'} cannot print Arabic ({e})") from e
+    return f"encoding {enc}; Arabic prints"
 
 
 def _env() -> str:
     from cap.config import get_settings
-    from cap.setup import read_key
+    from cap.setup import ensure_env, read_key
 
+    ensure_env(Path(".env"), out=lambda _: None)  # creates .env; asks for the key on a laptop
     get_settings.cache_clear()
     s = get_settings()
     p = Path(".env")
-    if not p.exists():
-        raise RuntimeError("no .env here; run from the code folder (install.bat does)")
     key = read_key(p)
     if s.model_backend.value == "anthropic" and not key:
         raise RuntimeError("backend anthropic but no key in .env; run set-key.bat")
