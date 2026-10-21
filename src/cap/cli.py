@@ -186,6 +186,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         if settings.model_backend.value != model:
             print(f"note: CAP_MODEL_BACKEND in the environment overrides .env ({model})")
+        from cap.version import build_id
+
+        print(f"build: {build_id()}")
         if settings.model_backend.value == "anthropic":
             print("model backend: anthropic (real drafts and judges)")
         else:

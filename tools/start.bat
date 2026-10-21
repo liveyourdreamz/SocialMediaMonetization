@@ -7,6 +7,7 @@ echo.
 echo  Installing dependencies (first time takes a minute)...
 uv sync --quiet
 if errorlevel 1 ( echo  Dependency install failed. & goto :fail )
+for /f "delims=" %%v in ('git log -1 "--format=%%h %%cd" "--date=format:%%d %%b %%H:%%M"') do echo  Code updated to build %%v
 echo.
 if defined CAP_SMOKE (
   rem CI: run the whole loop through the real app instead of serving (see cap smoke)

@@ -694,6 +694,7 @@ def ui_router(store: Store) -> APIRouter:
             recent=views.recent_briefs(store),
             outbox=views.outbox(store),
             connections_summary=_connections_summary(),
+            build=__import__("cap.version", fromlist=["build_id"]).build_id(),
             running=any(
                 p.status.value in ("drafting", "gated", "rendering") for p in store.posts.values()
             ),

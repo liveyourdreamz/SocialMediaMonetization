@@ -84,6 +84,7 @@
 
   <section class="stack">
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Queue state</h2>
+    <p class="meta">Running build: <span style="font-family: var(--font-mono)">{{ build }}</span> · restart the app (run install.bat again) to pick up a newer one</p>
     <div class="card tight stack-sm">
       {% if paused %}
       <span class="word-signal">Paused: {{ queue_state.paused_reason }}</span>
