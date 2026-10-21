@@ -360,6 +360,7 @@ class Flags(Strict):
     canary_outcome: Literal["", "caught", "missed"] = ""
     gate_blind: bool = True  # D33: gates hidden on the card until a verdict is recorded
     card_prepared: bool = False  # spot check and reading time set when queued (D34)
+    tour: bool = False  # the guided tour's worked example; never counted, never published
 
 
 class PostRecord(Strict):

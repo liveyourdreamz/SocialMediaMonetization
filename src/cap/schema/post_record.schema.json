@@ -700,6 +700,11 @@
           "default": false,
           "title": "Card Prepared",
           "type": "boolean"
+        },
+        "tour": {
+          "default": false,
+          "title": "Tour",
+          "type": "boolean"
         }
       },
       "title": "Flags",

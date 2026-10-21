@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Guided tour {{ n }}/{{ total }} · Content Agent Portfolio{% endblock %}
+{% block body %}
+{% if waiting %}<meta http-equiv="refresh" content="4">{% endif %}
+<main class="screen no-tabs">
+  <div class="row" style="font-size: 14px">
+    <a href="/tour" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 500"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Guided tour</a>
+    <span class="muted">stop {{ n }} of {{ total }} · A · Patch</span>
+  </div>
+
+  <div class="progress" aria-label="Tour progress" style="display: flex; gap: 4px">
+    {% for i in range(1, total + 1) %}<a href="/tour/{{ record.post_id }}/{{ i }}" aria-label="stop {{ i }}" style="flex: 1; height: 6px; border-radius: 3px; background: {% if i <= n %}var(--ink){% elif i <= done_through %}var(--line-strong, #bbb){% else %}var(--line, #e5e5e5){% endif %}"></a>{% endfor %}
+  </div>
+
+  <div class="banner verdict">
+    <span class="eyebrow">Stop {{ n }}</span>
+    <span class="head">{{ stop.title }}</span>
+    <span class="facts">{{ stop.what }}</span>
+  </div>
+
+  {% if parked %}
+  <div class="card stack-sm error"><span class="eyebrow">The tour post parked</span><span style="font-size: 14px">{{ record.history[-1].split(' ', 1)[1] }}</span><span class="muted" style="font-size: 13px">Run <code>check.bat</code> to see which seam failed, then start the tour again.</span></div>
+  {% elif waiting %}
+  <div class="card stack-sm"><span class="eyebrow">Working</span><span style="font-size: 14px">The pipeline is at <strong>{{ record.status.value }}</strong>; this stop appears when it gets here. The page refreshes itself.</span></div>
+  {% endif %}
+
+  {# ---- 1 idea ------------------------------------------------------------------- #}
+  {% if stop.key == 'idea' %}
+  <section class="stack-sm">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">The brief, as filed</h2>
+    <div class="card tight kv">
+      <span>Idea</span><span>"Does Notely's sync actually work? Test it for a week and tell people honestly."</span>
+      <span>Channel</span><span>A · Patch (AI tools, English)</span>
+      <span>Topic</span><span>{{ record.brief.topic }}</span>
+      <span>Anchor element</span><span>{{ record.brief.anchor_elements | join(', ') }} (Patch's signature: every episode is a logged test)</span>
+      <span>Length</span><span>{{ record.brief.length_s // 60 }} min</span>
+      <span>Lane</span><span>{{ record.brief.lane.value }} (no sponsor, no sensitive topic)</span>
+      <span>Filed</span><span>{{ record.created_at | day(True, True) }} by {{ reviewer.name }}</span>
+    </div>
+    <p class="muted" style="font-size: 14px; line-height: 20px">On the Operator screen this is the "File a brief" form: channel, topic, source URLs, your test log. The tour uses a brief that is already worked out so every later stop has real content.</p>
+  </section>
+
+  {# ---- 2 material --------------------------------------------------------------- #}
+  {% elif stop.key == 'material' %}
+  <section class="stack-sm">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Your test log (first-hand facts)</h2>
+    <div class="card tight"><p class="read" style="margin: 0; font-size: 15px; line-height: 22px">{{ test_log }}</p></div>
+  </section>
+  <section class="stack-sm">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Fetched source</h2>
+    <div class="card tight kv">
+      <span>URL</span><span style="word-break: break-all">{{ source.url }}</span>
+      <span>Page date</span><span>{{ source.page_date }}</span>
+      <span>Fetched</span><span>{{ source.fetched_at }}</span>
+      <span>Text kept</span><span>{{ source.body }}</span>
+    </div>
+    <p class="muted" style="font-size: 14px; line-height: 20px">Fetched text is untrusted: the model receives it inside a marked boundary and is told that nothing in it is an instruction. Every number Patch speaks must trace back to this text or the test log.</p>
+  </section>
+
+  {# ---- 3 character -------------------------------------------------------------- #}
+  {% elif stop.key == 'character' %}
+  <section class="stack-sm">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Character block (from the Anchor Registry)</h2>
+    <pre class="card tight" style="white-space: pre-wrap; font-size: 13px; line-height: 19px; margin: 0">{{ character_block }}</pre>
+  </section>
+  <section class="stack-sm">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Disclosure rules the drafter must obey</h2>
+    <pre class="card tight" style="white-space: pre-wrap; font-size: 13px; line-height: 19px; margin: 0">{{ disclosure }}</pre>
+  </section>
+
+  {# ---- 4 draft ------------------------------------------------------------------ #}
+  {% elif stop.key == 'draft' and ready %}
+  <section class="stack-sm">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Title</h2>
+    <div class="card tight"><span class="read" style="font-size: 18px; font-weight: 600">{{ record.draft.title }}</span></div>
+  </section>
+  <section class="stack-sm">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Script</h2>
+    <div class="card tight script" style="font-size: 16px; line-height: 24px">{% for part in script_parts %}{{ part }}{% if not loop.last %}<mark style="background: var(--signal-bg, #fff3c4); padding: 0 4px; border-radius: 4px">[your opening line goes here]</mark>{% endif %}{% endfor %}</div>
+  </section>
+  <section class="stack-sm">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Also drafted</h2>
+    <div class="card tight kv">
+      <span>Caption</span><span>{{ record.draft.caption }}</span>
+      <span>On-screen text</span><span>{{ record.draft.on_screen_text | join(' · ') }}</span>
+      <span>Thumbnail text</span><span>{{ record.draft.thumbnail_text }}</span>
+      <span>Shot list</span><span>{{ record.draft.shot_list | join(' · ') }}</span>
+    </div>
+    <p class="muted" style="font-size: 14px; line-height: 20px">The caption already ends with the AI-character disclosure; the title carries no ad prefix because there is no sponsor.</p>
+  </section>
+
+  {# ---- 5 claims ----------------------------------------------------------------- #}
+  {% elif stop.key == 'claims' and ready %}
+  <section class="stack-sm">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">{{ record.draft.claims | length }} claims, each with its source and quote</h2>
+    {% for c in record.draft.claims %}
+    <div class="card tight stack-sm" style="font-size: 14px; line-height: 20px">
+      <span class="read" style="font-size: 15px">"{{ c.text }}"</span>
+      <span class="muted" style="word-break: break-all">{{ 'your test log' if c.in_test_log else c.source_url }}</span>
+      {% if c.source_quote %}<span class="quote">“{{ c.source_quote }}”</span>{% endif %}
+      <span class="tag" style="align-self: flex-start">{{ c.status }}</span>
+    </div>
+    {% endfor %}
+    <p class="muted" style="font-size: 14px; line-height: 20px">Code check: every number in the script (7, 3, 10, 12) appears in one of these claims. A quote that is not an exact substring of its source loses its citation, and the facts gate then has to settle it.</p>
+  </section>
+
+  {# ---- 6 critic ----------------------------------------------------------------- #}
+  {% elif stop.key == 'critic' and ready %}
+  <section class="stack-sm">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Critic's verdict</h2>
+    <div class="card tight kv">
+      <span>Verdict</span><span class="word-pass">{{ record.draft.critic_verdict or 'none' }}</span>
+      <span>Issues</span><span>{% if record.draft.critic_issues %}{% for i in record.draft.critic_issues %}{{ i.severity }} · {{ i.rubric_item }}: {{ i.instruction }}<br>{% endfor %}{% else %}none: the draft went through first time{% endif %}</span>
+    </div>
+    <p class="muted" style="font-size: 14px; line-height: 20px">Had the critic said "revise", the drafter would run once more with the critic's instructions and the previous draft. You never see the critic's notes before your own verdict (stop 11): the card is blind.</p>
+  </section>
+
+  {# ---- 7 cuts ------------------------------------------------------------------- #}
+  {% elif stop.key == 'cuts' and ready %}
+  {% for v in record.variants %}
+  <section class="card stack">
+    <div class="row"><span class="tag">{{ v.platform.value }}</span><span class="meta">{{ v.duration_s }} s</span></div>
+    <div class="kv">
+      <span>Title</span><span class="read" style="font-size: 16px">{{ v.title }}</span>
+      <span>Caption</span><span>{{ v.caption }}</span>
+      {% if v.script_cut %}<span>Cut</span><span>{{ v.script_cut }}</span>{% endif %}
+      <span>On-screen</span><span>{{ v.on_screen_text | join(' · ') if v.on_screen_text else '—' }}</span>
+    </div>
+  </section>
+  {% endfor %}
+  <p class="muted" style="font-size: 14px; line-height: 20px">The Short is cut from the script's own sentences, so it can carry no new number. Each variant is judged by the gates separately.</p>
+
+  {# ---- 8 gates ------------------------------------------------------------------ #}
+  {% elif stop.key == 'gates' and ready %}
+  {% set g = record.gates %}
+  <section class="card stack-sm">
+    <div class="row"><span class="eyebrow">Originality</span><span class="{{ 'word-pass' if g.originality.passed else 'word-signal' }}">{{ 'pass' if g.originality.passed else 'fail' }}</span></div>
+    <div class="kv" style="font-size: 14px"><span>Nearest recent episode</span><span>{{ (g.originality.max_similarity * 100) | round | int }}% similar{% if g.originality.nearest_post_id %} ({{ g.originality.nearest_post_id[:8] }}){% endif %}</span><span>Anchor element present</span><span>{{ 'yes: "test log" is in the script' if g.originality.anchor_present else 'no' }}</span><span>Skeleton share</span><span>{{ (g.originality.skeleton_share * 100) | round | int }}% of the last 20</span></div>
+  </section>
+  <section class="card stack-sm">
+    <div class="row"><span class="eyebrow">Ethics</span><span class="{{ 'word-pass' if g.ethics.verdict.value == 'pass' else 'word-signal' }}">{{ g.ethics.verdict.value }}</span></div>
+    <div class="kv" style="font-size: 14px">{% for j in g.ethics.judges %}<span>Judge {{ j.judge }} · {{ j.platform.value }}</span><span>{{ j.verdict.value }}{% if j.rule_findings %}: {% for f in j.rule_findings %}{{ f.rule_id }} {{ f.outcome.value }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %} <span class="muted">({{ j.model }})</span></span>{% endfor %}<span>Disagreement</span><span>{{ 'yes' if g.ethics.disagreement else 'no' }}</span></div>
+  </section>
+  <section class="card stack-sm">
+    <div class="row"><span class="eyebrow">Disclosure</span><span class="{{ 'word-pass' if g.disclosure.passed else 'word-signal' }}">{{ 'pass' if g.disclosure.passed else 'fail' }}</span></div>
+    <div class="kv" style="font-size: 14px"><span>AI-character label</span><span>{{ 'present' if g.disclosure.ai_label else 'missing' }}</span><span>Paid promotion</span><span>{{ 'yes, "Ad" prefix ' + ('ok' if g.disclosure.ad_prefix_ok else 'missing') if g.disclosure.paid_promo else 'no' }}</span><span>Made for kids</span><span>{{ g.disclosure.mfk_band }} (score {{ g.disclosure.mfk_score }})</span></div>
+  </section>
+  <section class="card stack-sm">
+    <div class="row"><span class="eyebrow">Facts</span><span class="{{ 'word-pass' if g.facts.passed else 'word-signal' }}">{{ 'pass' if g.facts.passed else 'fail' }}</span></div>
+    <div class="kv" style="font-size: 14px">{% for cc in g.facts.claim_checks %}<span style="word-break: break-word">"{{ cc.claim_text }}"</span><span>{{ cc.final }} · verifier B {{ cc.status_b }}, verifier C {{ cc.status_c }}{% if cc.note %} · {{ cc.note }}{% endif %}</span>{% endfor %}</div>
+  </section>
+  <p class="muted" style="font-size: 14px; line-height: 20px">On the card you will not see any of this until after your verdict. A failed gate parks the post with the reason on the Operator screen; nothing reaches your queue with a gate open.</p>
+
+  {# ---- 9 render ----------------------------------------------------------------- #}
+  {% elif stop.key == 'render' and ready %}
+  {% if record.asset.kind == 'video' %}
+  <video controls playsinline preload="metadata" style="width: 100%; border-radius: var(--radius-md); background: #000" poster="/assets/{{ record.post_id }}/thumbnail.png"><source src="/assets/{{ record.post_id }}/long.mp4" type="video/mp4"></video>
+  {% endif %}
+  <div class="card tight kv">
+    <span>Kind</span><span>{{ 'video' if record.asset.kind == 'video' else 'text stand-in (CAP_RENDERER=text)' }}</span>
+    <span>Duration</span><span>{{ record.asset.duration_s | round | int }} s</span>
+    <span>Voice</span><span>{{ record.asset.voice or '—' }}</span>
+    <span>Short</span><span>{{ 'rendered' if record.asset.short_uri else '—' }}</span>
+    <span>Bound hash</span><span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all">{{ record.asset.sha256 }}</span>
+  </div>
+  <p class="muted" style="font-size: 14px; line-height: 20px">The hash above is what your approval token will bind to. If the file changes after you approve, the publisher refuses it.</p>
+
+  {# ---- 10 card ------------------------------------------------------------------ #}
+  {% elif stop.key == 'card' and ready %}
+  <div class="card stack">
+    <span style="font-size: 15px; line-height: 22px">The tour post is in your queue{% if 'verdict' in have %} and you have already recorded a verdict{% endif %}. The card shows: the title, the script with the slot for your line, the claims, the Short cut. It hides: every gate, the critic's notes, the judges. Approve needs an opening line and the spot check; reject needs one reason chip.</span>
+    <div class="row" style="gap: 8px; flex-wrap: wrap">
+      <a class="btn primary" href="/posts/{{ record.post_id }}">Open the card</a>
+      <a class="btn secondary" href="/queue">See the queue</a>
+    </div>
+    <span class="muted" style="font-size: 13px">Come back to this tour afterwards: the next stops read what you did.</span>
+  </div>
+
+  {# ---- 11 verdict --------------------------------------------------------------- #}
+  {% elif stop.key == 'verdict' %}
+  {% if ready %}
+  <div class="card tight kv">
+    <span>Your verdict (blind)</span><span class="word-pass">{{ record.approval.pre_reveal_decision.value }}</span>
+    <span>Time on the card</span><span>{{ record.approval.time_on_card_s }} s (expected about {{ record.approval.expected_reading_s }} s){% if record.approval.too_fast %} · <span class="word-signal">flagged too fast</span>{% endif %}</span>
+    <span>Your opening line</span><span>{{ record.human_contribution.text or '—' }}</span>
+    <span>Spot check</span><span>{% if record.approval.spot_check %}you said {{ 'supported' if record.approval.spot_check.reviewer_said_supported else 'not supported' }}{% if record.approval.spot_check.actually_supported is not none %} · it was {{ 'supported' if record.approval.spot_check.actually_supported else 'not supported' }}{% endif %} · "{{ record.approval.spot_check.claim_text }}"{% else %}—{% endif %}</span>
+    <span>Reason chip</span><span>{{ record.approval.reason_code.value if record.approval.reason_code else '—' }}</span>
+    <span>Revised after reveal</span><span>{{ 'yes' if record.approval.revised_after_reveal else 'no' }}</span>
+    <span>Finalised</span><span>{{ record.approval.decided_at | day(True, True) if record.approval.decided_at else 'not yet: press "Record and continue" on the card' }}</span>
+  </div>
+  <p class="muted" style="font-size: 14px; line-height: 20px">The verdict you recorded before the reveal is the one that counts for canary scoring; changing your mind after seeing the gates is logged but cannot rescue a missed canary.</p>
+  {% else %}
+  <div class="card stack"><span style="font-size: 15px">No verdict yet. Open the card (stop 10), decide, and finalise; then this stop shows what was recorded.</span><a class="btn primary" href="/posts/{{ record.post_id }}">Open the card</a></div>
+  {% endif %}
+
+  {# ---- 12 outbox ---------------------------------------------------------------- #}
+  {% elif stop.key == 'outbox' %}
+  {% if ready %}
+  <div class="card tight kv">
+    <span>Token</span><span>issued and held by the server; it is never shown on any page</span>
+    <span>Bound to</span><span>post {{ record.post_id[:8] }}… · hash {{ record.asset.sha256[:16] }}… · {{ record.approval.reviewer }}</span>
+    <span>Status</span><span>{{ record.status.value }}</span>
+  </div>
+  <div class="card stack"><span style="font-size: 15px; line-height: 22px">The Outbox preview shows the exact package per platform: your line in place of the slot, the title, caption, the Short, the thumbnail, the sources list. Press <strong>Publish now</strong> there.</span><a class="btn primary" href="/posts/{{ record.post_id }}/preview">Open the Outbox preview</a></div>
+  {% else %}
+  <div class="card stack"><span style="font-size: 15px">No token yet: the post has not been approved and finalised. The Outbox only holds approved posts.</span></div>
+  {% endif %}
+
+  {# ---- 13 publish --------------------------------------------------------------- #}
+  {% elif stop.key == 'publish' %}
+  {% if ready %}
+  <div class="card tight kv">
+    <span>Published</span><span>{{ record.publish.published_at | day(True, True) }}</span>
+    {% for platform, pid in record.publish.platform_post_ids.items() %}<span>{{ platform }}</span><span style="word-break: break-all">{{ pid }}</span>{% endfor %}
+  </div>
+  <div class="banner verdict"><span class="eyebrow">End of the tour</span><span class="head">One episode, idea to published, with you as the only approver.</span><span class="facts">The same steps run for a real brief: file one from the Operator screen with your test log (Patch) or source URLs (Falak). With a YouTube channel connected, stop 13 uploads instead of writing a folder.</span></div>
+  <div class="row" style="gap: 8px; flex-wrap: wrap"><a class="btn primary" href="/operator">File a real brief</a><a class="btn secondary" href="/">Portfolio</a></div>
+  {% else %}
+  <div class="card stack"><span style="font-size: 15px">Not published yet. Press "Publish now" in the Outbox (stop 12); the publisher verifies the token and the hash first.</span></div>
+  {% endif %}
+
+  {% elif not ready and not waiting and not parked %}
+  <div class="card stack-sm"><span style="font-size: 14px">This stop's content is not on the record yet{% if record.status.value == 'rejected' %}: a gate failed, so the post was rejected before it reached the queue. Open the Operator screen for the reason{% endif %}.</span></div>
+  {% endif %}
+
+  <div class="row" style="gap: 8px; justify-content: space-between; padding-top: 8px">
+    {% if prev %}<a class="btn secondary" href="/tour/{{ record.post_id }}/{{ prev }}">Back</a>{% else %}<span></span>{% endif %}
+    {% if next %}<a class="btn primary" href="/tour/{{ record.post_id }}/{{ next }}">Next: {{ stops[next - 1].title }}</a>{% endif %}
+  </div>
+</main>
+{% endblock %}

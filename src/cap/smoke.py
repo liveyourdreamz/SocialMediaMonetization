@@ -154,6 +154,25 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
         step("Digest renders", r.status_code == 200)
         r = api.get("/paused")
         step("Paused renders", r.status_code == 200)
+        r = form("/tour/start")
+        step("guided tour starts a tour post", r.status_code == 303)
+        tour_id = r.headers["location"].split("/")[2]
+        deadline = time.time() + 90
+        while time.time() < deadline and store.get(tour_id).status.value in (
+            "drafting",
+            "gated",
+            "rendering",
+        ):
+            time.sleep(0.2)
+        tour_rec = store.get(tour_id)
+        r = api.get(f"/tour/{tour_id}/9")
+        step(
+            "tour reaches the render stop with the video",
+            r.status_code == 200
+            and bool(tour_rec.asset.sha256)
+            and tour_rec.asset.sha256 in r.text,
+            f"status {tour_rec.status.value}",
+        )
         r = form("/logout")
         step("sign out", r.status_code == 303)
         r = api.post("/login", data={"name": "layla"})

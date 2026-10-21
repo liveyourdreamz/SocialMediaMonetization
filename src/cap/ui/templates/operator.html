@@ -11,7 +11,7 @@
 
   {% if error %}<div class="error" role="alert"><strong>Not run.</strong> {{ error }}</div>{% endif %}
   <section class="stack">
-    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">File a brief</h2>
+    <div class="row"><h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em; margin: 0">File a brief</h2><a href="/tour" class="linkbtn" style="font-size: 14px">Guided tour first?</a></div>
     <form method="post" action="/operator/brief" class="card stack"><input type="hidden" name="csrf" value="{{ csrf }}">
       <p class="muted" style="font-size: 14px; line-height: 20px">Runs the whole pipeline in the background: sources fetched, draft, critic, platform cuts, the four gates, voice and video rendered, then the card lands in the queue. A real draft with a rendered video takes a few minutes; this page refreshes itself. {% if settings.model_backend.value == 'mock' %}The drafter is the mock backend until an API key is in <code>.env</code>, so the draft is the sample episode.{% else %}The drafter may only use what you give it here: Patch (A) needs your test log; Falak (B, C) needs one or more source URLs. A brief with neither parks at once.{% endif %}</p>
       <div class="field">

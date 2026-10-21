@@ -227,6 +227,45 @@ def run_brief(
     return out
 
 
+def start_tour(store: Store) -> PostRecord:
+    """The record the guided tour follows: the worked Patch example (Notely, 7 days),
+    drafted from the fixtures whatever the model backend, rendered by the real renderer.
+    Returns at once with the record in the store as 'drafting'; the pipeline runs in a
+    thread and the tour pages refresh until each stage is there."""
+    import threading
+
+    from cap.config import get_settings
+
+    rec = PostRecord(
+        channel_id=Channel.A,
+        brief=Brief(topic="Notely 7-day test", anchor_elements=["test log"]),
+    )
+    rec.status = PostStatus.DRAFTING
+    rec.flags.tour = True
+    rec.log("guided tour started: the worked example, Patch tests Notely for 7 days")
+    store.put(rec)
+
+    def work() -> None:
+        try:
+            deps = PipelineDeps(
+                client=MockClient(happy_fixtures()),
+                anchor_elements={"A": ["test log"]},
+                character_blocks={"A": CHARACTER_BLOCK},
+                test_logs={rec.post_id: TEST_LOG},
+                render_dir=Path(get_settings().data_dir) / "renders",
+            )
+            out = run_post(rec, SOURCES, deps)
+            out.log("drafted from the worked example (fixtures), not the live model")
+            store.put(out)
+        except Exception as e:  # noqa: BLE001 - the tour page shows the reason
+            rec.status = PostStatus.PARKED
+            rec.log(f"parked: the tour pipeline could not run: {type(e).__name__}: {e}")
+            store.put(rec)
+
+    threading.Thread(target=work, name=f"tour-{rec.post_id[:8]}", daemon=True).start()
+    return rec
+
+
 def seed_store(store: Store, demo: bool = False, canary: bool = False) -> None:
     a = demo_post(Channel.A)
     a.created_at = datetime.now(UTC) - timedelta(days=2)

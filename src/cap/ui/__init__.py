@@ -36,7 +36,7 @@ from cap.approval.identity import (
 )
 from cap.config import get_settings
 from cap.schema.post_record import Decision, PostStatus, ReasonCode
-from cap.ui import views
+from cap.ui import tour, views
 
 HERE = Path(__file__).resolve().parent
 STATIC = StaticFiles(directory=str(HERE / "static"))
@@ -450,6 +450,46 @@ def ui_router(store: Store) -> APIRouter:
 
         threading.Thread(target=work, name=f"brief-{record.post_id[:8]}", daemon=True).start()
         return RedirectResponse("/operator", status_code=303)
+
+    # ---- guided tour: one worked Patch episode, idea to published ----------------
+    @r.get("/tour", response_class=HTMLResponse)
+    def tour_intro(request: Request, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
+        _approver(reviewer)
+        current = [p for p in store.posts.values() if p.flags.tour]
+        current.sort(key=lambda p: p.created_at, reverse=True)
+        return render(
+            request,
+            "tour_intro.html",
+            reviewer,
+            stops=tour.STOPS,
+            current=current[0] if current else None,
+        )
+
+    @r.post("/tour/start", dependencies=[Depends(check_csrf)])
+    def tour_start(reviewer: Reviewer = Depends(current_reviewer)) -> Response:
+        _approver(reviewer)
+        from cap.demo.seed import start_tour
+
+        rec = start_tour(store)
+        return RedirectResponse(f"/tour/{rec.post_id}/1", status_code=303)
+
+    @r.get("/tour/{post_id}/{n}", response_class=HTMLResponse)
+    def tour_stop(
+        request: Request, post_id: str, n: int, reviewer: Reviewer = Depends(current_reviewer)
+    ) -> Response:
+        _approver(reviewer)
+        record = store.get(post_id)
+        if not record.flags.tour:
+            raise HTTPException(404, "not a tour post")
+        pkg = views.package(record) if record.approval.token else None
+        return render(
+            request,
+            "tour.html",
+            reviewer,
+            record=record,
+            stops=tour.STOPS,
+            **tour.context(record, n, pkg),
+        )
 
     @r.get("/assets/{post_id}/{name}")
     def asset(post_id: str, name: str, reviewer: Reviewer = Depends(current_reviewer)) -> Response:

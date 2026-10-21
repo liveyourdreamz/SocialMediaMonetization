@@ -61,6 +61,16 @@ console, two values in `.env`, and your e-mail mapped to your reviewer name. The
 login page then offers "Sign in with Google"; the local name box stays as a fallback
 on the laptop and is refused outside local.
 
+## Guided tour
+
+The Portfolio screen has a **Guided tour**: one worked Patch episode (a seven-day
+test of a note app) in thirteen stops, idea to published. The first nine show what
+each agent produced (brief, material, character block, script, claims, critic,
+platform cuts, the four gates, the rendered video); the last four you do for real
+on that post: open the blind card, give your verdict, see the Outbox, publish to
+the local folder. It needs no API key; the drafter uses prepared output, the voice
+and video are rendered for real.
+
 ## Testing the solution
 
 Three layers; each one takes a minute and needs no credentials.
