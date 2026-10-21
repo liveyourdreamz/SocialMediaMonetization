@@ -39,8 +39,7 @@ class AgentBlockedError(RuntimeError):
 
 
 def _blocked(name: str, result: ModelResult) -> AgentBlockedError:
-    reason = result.output.blocked_reason if result.output else result.stop_reason
-    return AgentBlockedError(f"{name}: {reason}")
+    return AgentBlockedError(f"{name}: {result.reason}")
 
 
 def draft(

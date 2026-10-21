@@ -95,27 +95,66 @@ def test_envelope_requires_every_field():
     assert schema["properties"]["status"]["enum"] == ["ok", "blocked"]
 
 
-def test_prompt_version_mismatch_is_rejected():
-    class Stale(MockClient):
-        def _complete(self, call):
-            return Completion(
-                raw=json.dumps(
-                    {
-                        "prompt_id": "P1",
-                        "prompt_version": "0.9",
-                        "status": "ok",
-                        "blocked_reason": None,
-                        "injection_suspected": False,
-                        "explanation": "",
-                        "verdict": "pass",
-                        "rule_findings": [],
-                    }
-                ),
-                stop_reason="end_turn",
-            )
+def _envelope(**extra):
+    base = {
+        "prompt_id": "P1",
+        "prompt_version": pack_version(),
+        "status": "ok",
+        "blocked_reason": None,
+        "injection_suspected": False,
+        "explanation": "",
+        "verdict": "pass",
+        "rule_findings": [],
+    }
+    base.update(extra)
+    return base
 
-    res = Stale().run(spec("P1", "A"), "x", P1Output)
-    assert res.output is None and res.attempts == 2
+
+def _client_returning(raw: str, stop_reason: str = "end_turn", error: str = ""):
+    class C(MockClient):
+        def _complete(self, call):
+            return Completion(raw=raw, stop_reason=stop_reason, error=error)
+
+    return C()
+
+
+def test_the_model_is_told_the_envelope_values_it_must_echo():
+    """The first real-model run parked every post: nothing told the model the pack
+    version, so it guessed and the parser rejected it. The system prompt now states
+    prompt_id and prompt_version, and the pipeline stamps them regardless."""
+    seen = {}
+
+    class Spy(MockClient):
+        def _complete(self, call):
+            seen["system"] = "".join(b["text"] for b in call.system)
+            return Completion(raw=json.dumps(_envelope()), stop_reason="end_turn")
+
+    Spy().run(spec("P1", "A"), "x", P1Output)
+    assert f'"prompt_version" to "{pack_version()}"' in seen["system"]
+    assert '"prompt_id" to "P1"' in seen["system"]
+
+
+def test_a_wrong_envelope_version_is_stamped_not_rejected():
+    res = _client_returning(json.dumps(_envelope(prompt_version="0.9", prompt_id="P9"))).run(
+        spec("P1", "A"), "x", P1Output
+    )
+    assert res.output is not None and res.attempts == 1
+    assert res.output.prompt_version == pack_version() and res.output.prompt_id == "P1"
+
+
+def test_an_unusable_output_names_the_reason_for_the_park():
+    res = _client_returning(json.dumps(_envelope(verdict="maybe"))).run(
+        spec("P1", "A"), "x", P1Output
+    )
+    assert res.output is None and res.reason.startswith("schema: verdict:")
+    res = _client_returning("Sure! Here is the JSON you asked for: {").run(
+        spec("P1", "A"), "x", P1Output
+    )
+    assert res.output is None and res.reason.startswith("not JSON")
+    res = _client_returning("", "error", "AuthenticationError: invalid x-api-key").run(
+        spec("P1", "A"), "x", P1Output
+    )
+    assert res.output is None and "AuthenticationError" in res.reason
 
 
 def test_max_tokens_retries_with_a_larger_limit_then_parks():

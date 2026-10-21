@@ -80,7 +80,7 @@ def discover_claims(
         user_tail=f"<drafter_claims>{json.dumps(hints, ensure_ascii=False)}</drafter_claims>",
     )
     if res.output is None or res.output.status == "blocked":
-        reason = res.output.blocked_reason if res.output else res.stop_reason
+        reason = res.reason
         raise AgentBlockedError(f"P10 call A: {reason}")
     by_text = {c.text: c for c in record.draft.claims}
     claims: list[Claim] = []

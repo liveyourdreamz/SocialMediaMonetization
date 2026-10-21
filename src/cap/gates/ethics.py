@@ -135,7 +135,7 @@ def run_judge(
             platform=variant.platform,
             verdict=Verdict.ESCALATE,
             status=status,
-            explanation=f"no valid output ({result.stop_reason})",
+            explanation=f"no valid output ({result.reason})",
         )
     out = result.output
     if out.status == "blocked":
