@@ -705,6 +705,16 @@
           "default": false,
           "title": "Tour",
           "type": "boolean"
+        },
+        "stopped_at": {
+          "default": "",
+          "title": "Stopped At",
+          "type": "string"
+        },
+        "stop_reason": {
+          "default": "",
+          "title": "Stop Reason",
+          "type": "string"
         }
       },
       "title": "Flags",
