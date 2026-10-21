@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw
 
 from cap.render.characters import draw_falak, draw_patch
 
-FPS = 24
+FPS = 15  # typographic scenes and a bobbing robot: 15 fps is smooth and 40% cheaper
 GROUND = (0xF6, 0xF4, 0xEF)
 SURFACE = (0xFF, 0xFF, 0xFF)
 INK = (0x1B, 0x1A, 0x17)

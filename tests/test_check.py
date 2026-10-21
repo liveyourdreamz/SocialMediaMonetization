@@ -94,7 +94,32 @@ def test_a_real_brief_gets_its_channels_character_and_drafts_from_the_topic(tmp_
         get_settings.cache_clear()
 
 
+def _public_names_only(monkeypatch):
+    """The sandbox cannot resolve outside names; treat names as public, keep the real
+    check for IP literals (what an attacker would use)."""
+    import ipaddress
+
+    from cap import fetch
+
+    real = fetch.check_public
+
+    def check(url):
+        from urllib.parse import urlparse
+
+        host = urlparse(url).hostname or ""
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            if host in ("localhost",):
+                return real(url)
+            return None
+        return real(url)
+
+    monkeypatch.setattr(fetch, "check_public", check)
+
+
 def test_fetch_failures_say_why_and_wikipedia_uses_its_rest_api(monkeypatch):
+    _public_names_only(monkeypatch)
     import httpx
 
     from cap import fetch
@@ -248,6 +273,7 @@ def test_a_topic_alone_is_enough_the_system_finds_the_sources(tmp_path, monkeypa
 
 
 def test_without_a_key_the_scout_uses_wikipedia_search(tmp_path, monkeypatch):
+    _public_names_only(monkeypatch)
     import httpx
 
     from cap import research
@@ -291,3 +317,46 @@ def test_without_a_key_the_scout_uses_wikipedia_search(tmp_path, monkeypatch):
         )
     finally:
         get_settings.cache_clear()
+
+
+def test_the_fetcher_refuses_internal_addresses_and_redirects_to_them(monkeypatch):
+    """Review finding 4: a pinned or model-chosen URL could reach the laptop's own
+    services, the router or a cloud metadata server, directly or by a redirect."""
+    import httpx
+
+    from cap import fetch
+
+    _public_names_only(monkeypatch)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "redirector.example":
+            return httpx.Response(
+                302, headers={"location": "http://169.254.169.254/latest/meta-data"}
+            )
+        if request.url.host == "big.example":
+            return httpx.Response(
+                200, headers={"content-type": "text/plain"}, content=b"x" * 5_000_000
+            )
+        return httpx.Response(200, headers={"content-type": "text/plain"}, text="internal secret")
+
+    real = httpx.Client
+
+    class Patched(real):
+        def __init__(self, *a, **kw):
+            kw["transport"] = httpx.MockTransport(handler)
+            super().__init__(*a, **kw)
+
+    monkeypatch.setattr(httpx, "Client", Patched)
+    docs = fetch.fetch_sources(
+        [
+            "http://127.0.0.1:8000/connections",
+            "http://localhost/admin",
+            "http://192.168.1.1/",
+            "http://redirector.example/x",
+            "http://big.example/huge",
+        ]
+    )
+    reasons = [fetch.failed_reason(d) for d in docs]
+    assert all(r and r.startswith("refused:") for r in reasons[:4]), reasons
+    assert "internal secret" not in str(docs)
+    assert fetch.failed_reason(docs[4]) is None and len(docs[4]["body"]) <= fetch.MAX_CHARS

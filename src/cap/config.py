@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     # Approval token signing key (HMAC). Local default is for tests only; the validator
     # below refuses it outside local.
     approval_signing_key: SecretStr = SecretStr(LOCAL_DEFAULT_KEY)
+    # Sign-in from another device on the network (the phone) needs this passcode; the
+    # laptop itself (127.0.0.1) does not. Generated into .env on first run.
+    local_passcode: SecretStr | None = None
+    # The address the platforms send OAuth callbacks to; set when the app is reached
+    # through a proxy or a public host. Empty: built from the request.
+    public_base_url: str = ""
 
     # D17: generation pauses when the queue has been idle this long.
     queue_idle_pause_hours: int = 72

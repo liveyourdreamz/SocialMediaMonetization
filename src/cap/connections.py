@@ -373,6 +373,35 @@ def fetch_account(platform: str, token: dict[str, Any]) -> dict[str, Any]:
         return {"name": u.get("display_name", "TikTok account"), "id": u.get("open_id", "")}
 
 
+def safe_error(e: Exception, platform: str, extra: list[str] | None = None) -> str:
+    """An error message fit for a page, a URL or a log: the platform's own reason for
+    an HTTP error (never the request URL, which can carry the secret), and every saved
+    credential or token value replaced by [redacted]."""
+    if isinstance(e, httpx.HTTPStatusError):
+        reason = ""
+        try:
+            body = e.response.json()
+            err = body.get("error")
+            reason = (
+                err.get("message", "")
+                if isinstance(err, dict)
+                else str(body.get("error_description") or err or "")
+            )
+        except Exception:  # noqa: BLE001 - a non-JSON body: the status alone
+            reason = ""
+        text = f"HTTP {e.response.status_code}" + (f": {reason}" if reason else "")
+    else:
+        text = f"{type(e).__name__}: {e}"
+    secrets_ = [v for v in credentials(platform).values() if v]
+    tok = load(platform).get("token") or {}
+    secrets_ += [str(v) for v in tok.values() if isinstance(v, str) and v]
+    secrets_ += [s for s in (extra or []) if s]
+    for s in sorted(set(secrets_), key=len, reverse=True):
+        if len(s) >= 6:
+            text = text.replace(s, "[redacted]")
+    return text[:200]
+
+
 def complete(platform: str, code: str, redirect_uri: str) -> dict[str, Any]:
     """Callback: exchange, look the account up, store both. Returns the account."""
     from datetime import UTC, datetime
@@ -382,9 +411,9 @@ def complete(platform: str, code: str, redirect_uri: str) -> dict[str, Any]:
         token = exchange(platform, code, redirect_uri)
         account = fetch_account(platform, token)
     except Exception as e:  # noqa: BLE001 - shown on the screen, never raised to a 500
-        data["last_error"] = f"{type(e).__name__}: {str(e)[:200]}"
+        data["last_error"] = safe_error(e, platform, [code])
         save(platform, data)
-        raise
+        raise ConnectionError(data["last_error"]) from None
     data["token"] = token
     data["account"] = account
     data["connected_at"] = datetime.now(UTC).isoformat()

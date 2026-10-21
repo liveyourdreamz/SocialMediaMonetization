@@ -64,6 +64,8 @@ def wikipedia_rest(url: str) -> str | None:
 
 
 def _why(e: Exception) -> str:
+    if isinstance(e, BlockedURLError):
+        return f"refused: {e}"
     if isinstance(e, httpx.HTTPStatusError):
         return f"HTTP {e.response.status_code} from the site"
     if isinstance(e, httpx.ConnectTimeout | httpx.ReadTimeout):
@@ -71,6 +73,62 @@ def _why(e: Exception) -> str:
     if isinstance(e, httpx.ConnectError):
         return f"could not connect ({str(e)[:80] or 'network'})"
     return f"{type(e).__name__}: {str(e)[:100]}"
+
+
+MAX_BYTES = 2_000_000  # stop reading a page after this; 20k characters are kept anyway
+MAX_HOPS = 5
+
+
+class BlockedURLError(RuntimeError):
+    pass
+
+
+def check_public(url: str) -> None:
+    """Refuse anything that is not a public http(s) address: loopback, private,
+    link-local (cloud metadata), reserved, or a name that resolves to one of those."""
+    import ipaddress
+    import socket
+
+    u = urlparse(url)
+    if u.scheme not in ("http", "https") or not u.hostname:
+        raise BlockedURLError("only public http(s) pages")
+    host = u.hostname
+    try:
+        infos = socket.getaddrinfo(host, u.port or (443 if u.scheme == "https" else 80))
+    except socket.gaierror as e:
+        raise httpx.ConnectError(f"cannot resolve {host}") from e
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise BlockedURLError(f"{host} is not a public address")
+
+
+def _get(c: httpx.Client, url: str, headers: dict[str, str]) -> httpx.Response:
+    """GET with redirects followed by hand, every hop checked, the body capped."""
+    for _ in range(MAX_HOPS + 1):
+        check_public(url)
+        with c.stream("GET", url, headers=headers) as r:
+            if r.is_redirect and r.headers.get("location"):
+                url = str(r.url.join(r.headers["location"]))
+                continue
+            r.raise_for_status()
+            chunks, size = [], 0
+            for chunk in r.iter_bytes():
+                chunks.append(chunk)
+                size += len(chunk)
+                if size >= MAX_BYTES:
+                    break
+            body = b"".join(chunks)
+            out = httpx.Response(r.status_code, headers=r.headers, content=body, request=r.request)
+            return out
+    raise BlockedURLError("too many redirects")
 
 
 def fetch_one(c: httpx.Client, url: str) -> tuple[str, str | None]:
@@ -84,12 +142,13 @@ def fetch_one(c: httpx.Client, url: str) -> tuple[str, str | None]:
     last: Exception | None = None
     for target, headers in attempts:
         try:
-            r = c.get(target, headers=headers)
-            r.raise_for_status()
+            r = _get(c, target, headers)
             ctype = r.headers.get("content-type", "")
             if "html" in ctype or "xml" in ctype:
                 return extract_text(r.text)
             return r.text[:MAX_CHARS], None
+        except BlockedURLError:
+            raise  # never retried with another User-Agent
         except httpx.HTTPStatusError as e:
             last = e
             if e.response.status_code not in (401, 403, 406, 429, 503):
@@ -103,7 +162,7 @@ def fetch_one(c: httpx.Client, url: str) -> tuple[str, str | None]:
 def fetch_sources(urls: list[str], timeout: float = 20.0) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     now = datetime.now(UTC).isoformat()
-    with httpx.Client(follow_redirects=True, timeout=timeout) as c:
+    with httpx.Client(follow_redirects=False, timeout=timeout) as c:
         for url in urls:
             url = url.strip()
             if not url.startswith(("http://", "https://")):

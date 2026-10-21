@@ -51,6 +51,13 @@ def authorise() -> Path:
     out = token_path()
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(creds.to_json(), encoding="utf-8")
+    try:
+        import os
+        import stat
+
+        os.chmod(out, stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
     return out
 
 

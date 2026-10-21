@@ -50,6 +50,30 @@ def write_key(path: Path, key: str | None) -> None:
     path.write_text("\n".join(kept) + "\n", encoding="utf-8")
 
 
+def ensure_local_secrets(path: Path) -> None:
+    """A random approval-signing key and a phone passcode, written once into .env. The
+    public default key would let anyone on the Wi-Fi forge a sign-in cookie."""
+    import secrets
+
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    have = {ln.split("=", 1)[0] for ln in text.splitlines() if "=" in ln and not ln.startswith("#")}
+    add: list[str] = []
+    if "CAP_APPROVAL_SIGNING_KEY" not in have:
+        add.append(f"CAP_APPROVAL_SIGNING_KEY={secrets.token_hex(32)}")
+    if "CAP_LOCAL_PASSCODE" not in have:
+        add.append(f"CAP_LOCAL_PASSCODE={secrets.randbelow(900000) + 100000}")
+    if add:
+        sep = "" if not text or text.endswith("\n") else "\n"
+        path.write_text(text + sep + "\n".join(add) + "\n", encoding="utf-8")
+
+
+def read_passcode(path: Path) -> str:
+    for ln in path.read_text(encoding="utf-8").splitlines() if path.exists() else []:
+        if ln.startswith("CAP_LOCAL_PASSCODE="):
+            return ln.split("=", 1)[1].strip()
+    return ""
+
+
 def ensure_env(
     path: Path = Path(".env"),
     *,
@@ -64,6 +88,7 @@ def ensure_env(
     if not path.exists():
         example = path.with_name(".env.example")
         path.write_text(example.read_text(encoding="utf-8") if example.exists() else "")
+    ensure_local_secrets(path)
     have = read_key(path)
     if have and not force:
         out(f"API key: saved in {path.resolve()} (run `uv run cap key` to change it)")

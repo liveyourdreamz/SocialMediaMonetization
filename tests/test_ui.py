@@ -378,6 +378,9 @@ def test_fetcher_turns_pages_into_sources(monkeypatch):
     import httpx
 
     from cap import fetch
+    from tests.test_check import _public_names_only
+
+    _public_names_only(monkeypatch)
 
     html = "<html><head><meta property='article:published_time' content='2026-09-01T00:00'></head><body><nav>menu</nav><article><h1>Sync</h1><p>Sync completes within 10 seconds.</p></article><script>x()</script></body></html>"
 

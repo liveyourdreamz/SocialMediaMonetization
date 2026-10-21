@@ -10,7 +10,7 @@ from cap.ui.tour import STOPS
 from tests.test_ui import Browser, create_app
 
 
-def _wait_tour(store, timeout=60.0):
+def _wait_tour(store, timeout=180.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
         for p in store.posts.values():

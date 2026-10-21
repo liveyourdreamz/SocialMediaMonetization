@@ -16,6 +16,7 @@ Identity: cap.approval.identity (header or signed cookie, opt-in, local only).
 
 from __future__ import annotations
 
+import html
 import json
 import os
 from dataclasses import asdict
@@ -179,7 +180,9 @@ def finalise_and_issue(store: Store, record: PostRecord, reviewer: str, **kw: An
         return False
     issued = False
     if record.status == PostStatus.APPROVED:
-        t = tok.issue(record.post_id, record.asset.sha256, reviewer, "approve", canary=False)
+        t = tok.issue(
+            record.post_id, record.asset.sha256, reviewer, "approve", canary=record.flags.canary
+        )
         record.approval.token = t.encode()
         issued = True
         record.log("approved: token issued; waiting in the outbox for the publisher")
@@ -201,11 +204,14 @@ def publish_now(
     if not record.approval.token:
         return "no approval token on the record"
     chosen = [] if record.flags.tour else list(destinations or [])
-    if store.publisher is not None and not destinations:
+    if store.publisher is not None and destinations is None and not record.flags.tour:
+        # a programmatic call (the scheduler, a test) uses the configured publisher;
+        # the Outbox always passes a list, so the ticked boxes decide there
         adapters: list[PlatformAdapter] = [store.publisher]
+        record.publish.destinations = [store.publisher.name]
     else:
         adapters = adapters_for(chosen, store.local_published_dir())
-    record.publish.destinations = ["local", *chosen]
+        record.publish.destinations = ["local", *chosen]
     try:
         publish_to(
             record,
@@ -386,8 +392,9 @@ def create_app(store: Store | None = None) -> FastAPI:
             "<!doctype html><meta charset='utf-8'><title>Something broke</title>"
             "<body style='font: 15px/1.5 system-ui; max-width: 640px; margin: 48px auto; padding: 0 16px'>"
             "<h1 style='font-size: 22px'>Something broke on this page</h1>"
-            f"<p><b>{type(exc).__name__}</b>: {str(exc)[:500]}</p>"
-            f"<p style='color:#5c5955'>at cap{where} · {request.method} {request.url.path}</p>"
+            f"<p><b>{type(exc).__name__}</b>: {html.escape(str(exc)[:500])}</p>"
+            f"<p style='color:#5c5955'>at cap{html.escape(where)} · {request.method} "
+            f"{html.escape(request.url.path)}</p>"
             "<p>Copy this page's text into the chat and it gets fixed. Nothing was published.</p>"
             "<p><a href='/'>Portfolio</a> · <a href='/queue'>Queue</a></p></body>"
         )

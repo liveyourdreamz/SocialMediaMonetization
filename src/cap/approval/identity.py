@@ -76,14 +76,30 @@ def _with_role(name: str) -> Reviewer:
     return Reviewer(name, role)
 
 
+def is_loopback(request: Request) -> bool:
+    host = request.client.host if request.client else ""
+    return host in ("127.0.0.1", "::1", "localhost", "testclient")
+
+
+def sign_in_configured() -> bool:
+    s = get_settings()
+    return bool(s.dev_reviewer_header or s.google_enabled)
+
+
 def reviewer_identity(
+    request: Request,
     x_reviewer: str | None = Header(default=None),
     cap_reviewer: str | None = Cookie(default=None),
 ) -> Reviewer:
-    """The JSON API's dependency: header or cookie, always with a role."""
-    if not get_settings().dev_reviewer_header:
+    """The JSON API's dependency: the signed cookie, or (dev only, from this machine
+    only) an X-Reviewer header; always with a role."""
+    s = get_settings()
+    if not sign_in_configured():
         raise HTTPException(503, "reviewer sign-in not configured for this environment")
-    name = x_reviewer or (read_cookie(cap_reviewer) if cap_reviewer else None)
+    header_ok = s.dev_reviewer_header and is_loopback(request)
+    name = (x_reviewer if header_ok else None) or (
+        read_cookie(cap_reviewer) if cap_reviewer else None
+    )
     if not name:
         raise HTTPException(401, "sign in required")
     return _with_role(name)
@@ -91,7 +107,7 @@ def reviewer_identity(
 
 def current_reviewer(cap_reviewer: str | None = Cookie(default=None)) -> Reviewer:
     """The HTML app's dependency: the signed cookie only, with a role."""
-    if not get_settings().dev_reviewer_header:
+    if not sign_in_configured():
         raise HTTPException(503, "reviewer sign-in not configured for this environment")
     name = read_cookie(cap_reviewer) if cap_reviewer else None
     if not name:

@@ -109,6 +109,9 @@ def ui_router(store: Store) -> APIRouter:
             error="",
             google=s.google_enabled,
             local=s.dev_reviewer_header,
+            need_passcode=not __import__("cap.approval.identity", fromlist=["x"]).is_loopback(
+                request
+            ),
         )
 
     @r.get("/auth/google")
@@ -150,9 +153,31 @@ def ui_router(store: Store) -> APIRouter:
         return _signed_in(google.reviewer_for_email(email))
 
     @r.post("/login")
-    def login(request: Request, name: str = Form(default="")) -> Response:
-        if not get_settings().dev_reviewer_header:
+    def login(
+        request: Request, name: str = Form(default=""), passcode: str = Form(default="")
+    ) -> Response:
+        s = get_settings()
+        if not s.dev_reviewer_header:
             raise HTTPException(503, "sign-in not configured for this environment")
+        import secrets as _secrets
+
+        from cap.approval.identity import is_loopback
+
+        if not is_loopback(request):
+            # another device on the network: the passcode printed in the console
+            want = s.local_passcode.get_secret_value() if s.local_passcode else ""
+            if not want or not _secrets.compare_digest(passcode.strip(), want):
+                return render(
+                    request,
+                    "login.html",
+                    None,
+                    403,
+                    error="Passcode needed: it is printed in the app's console window on the laptop.",
+                    name=name.strip(),
+                    google=s.google_enabled,
+                    local=True,
+                    need_passcode=True,
+                )
         name = name.strip()
         if not name or role_for(name) is None:
             return render(
@@ -219,7 +244,12 @@ def ui_router(store: Store) -> APIRouter:
                 record=record,
                 running=running,
                 channel_label=views.channel_label(record.channel_id.value),
-                lines=[h.split(" ", 1) for h in record.history],
+                lines=[
+                    h.split(" ", 1)
+                    for h in record.history
+                    if reviewer.is_approver
+                    or not any(k in h for k in ("gate", "ethics", "facts", "critic", "judge"))
+                ],
             )
         prefetch = "prefetch" in (sec_purpose or "") or "prefetch" in (purpose or "")
         if (
@@ -452,6 +482,10 @@ def ui_router(store: Store) -> APIRouter:
 
         from cap.demo.seed import new_brief, run_brief
 
+        topic = topic.strip()[:140]
+        test_log = test_log[:20_000]
+        if not topic:
+            raise HTTPException(422, "a topic is needed")
         auto = channel == "auto"
         how = ""
         if auto:
@@ -467,15 +501,23 @@ def ui_router(store: Store) -> APIRouter:
             )
         # screenshots from the test: the renderer shows them in the screen panel, in order
         saved = 0
-        for i, up in enumerate(media):
-            name = Path(up.filename or "").name
+        for i, up in enumerate(media[:10]):  # at most ten screenshots per brief
+            name = Path((up.filename or "").replace("\\", "/")).name
             if not name or Path(name).suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp"):
+                continue
+            data = up.file.read(15_000_001)  # never read past the limit
+            if not data or len(data) > 15_000_000:
+                continue
+            try:  # the contents must be an image, not just the name
+                import io
+
+                from PIL import Image
+
+                Image.open(io.BytesIO(data)).verify()
+            except Exception:  # noqa: BLE001 - not an image: skipped
                 continue
             folder = Path(get_settings().data_dir) / "media" / record.post_id
             folder.mkdir(parents=True, exist_ok=True)
-            data = up.file.read()
-            if not data or len(data) > 15_000_000:
-                continue
             (folder / f"{i:02d}-{name}").write_bytes(data)
             saved += 1
         if saved:
@@ -513,6 +555,9 @@ def ui_router(store: Store) -> APIRouter:
     conn_state_cookie = "cap_conn_state"
 
     def _conn_redirect(request: Request, platform: str) -> str:
+        base = get_settings().public_base_url.rstrip("/")
+        if base:  # behind a proxy or on a public host: the address the platform can reach
+            return f"{base}/connections/{platform}/callback"
         return str(request.url_for("connection_callback", platform=platform))
 
     @r.get("/connections", response_class=HTMLResponse)
@@ -606,9 +651,9 @@ def ui_router(store: Store) -> APIRouter:
             )
         try:
             conn.complete(platform, code, _conn_redirect(request, platform))
-        except Exception as e:  # noqa: BLE001 - the screen shows why
+        except Exception:  # noqa: BLE001 - the card shows the cleaned reason (last_error)
             resp = RedirectResponse(
-                f"/connections?error={quote(f'{platform}: {type(e).__name__}: {str(e)[:160]}')}",
+                f"/connections?error={quote(f'{platform}: connecting failed; the reason is on its card')}",
                 status_code=303,
             )
             resp.delete_cookie(conn_state_cookie)

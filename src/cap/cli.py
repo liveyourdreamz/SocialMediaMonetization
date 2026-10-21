@@ -189,6 +189,10 @@ def main(argv: list[str] | None = None) -> int:
         from cap.version import build_id
 
         print(f"build: {build_id()}")
+        from cap.setup import read_passcode
+
+        if read_passcode(Path(".env")) and args.host not in ("127.0.0.1", "localhost"):
+            print(f"phone sign-in passcode: {read_passcode(Path('.env'))} (the laptop needs none)")
         if settings.model_backend.value == "anthropic":
             print("model backend: anthropic (real drafts and judges)")
         else:

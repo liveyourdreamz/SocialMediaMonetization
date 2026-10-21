@@ -21,6 +21,11 @@
     <div class="field">
       <label for="name">Reviewer name</label>
       <input class="input" id="name" name="name" value="{{ name }}" autocomplete="username" required>
+      {% if need_passcode %}
+      <label for="passcode" class="eyebrow" style="margin-top: 8px">Passcode</label>
+      <input class="input" id="passcode" name="passcode" inputmode="numeric" autocomplete="one-time-code" required>
+      <span class="meta">Shown in the app's console window on the laptop.</span>
+      {% endif %}
     </div>
     <button class="btn {{ 'secondary' if google else 'primary' }}" type="submit">Continue</button>
     {% if not google %}<p class="meta">Google sign-in switches on when a client id and secret are in <code>.env</code>.</p>{% endif %}
