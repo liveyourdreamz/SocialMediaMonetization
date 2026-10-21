@@ -19,6 +19,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import threading
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -159,13 +160,31 @@ _IN_FLIGHT = {
 }
 
 
+_WRITE_LOCKS: dict[Path, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
 def _atomic_write(path: Path, text: str) -> None:
+    """Write, then rename. One lock per file: two threads saving the same post take
+    turns (on Windows a rename onto a file another rename is replacing is refused,
+    review M6), and each uses its own temp name."""
+    import time
     import uuid
 
-    # a unique temp name: two threads saving the same post never share one (review M6)
-    tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    with _LOCKS_GUARD:
+        lock = _WRITE_LOCKS.setdefault(path.resolve(), threading.Lock())
+    with lock:
+        tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+        tmp.write_text(text, encoding="utf-8")
+        for attempt in range(5):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:  # Windows: a reader (or antivirus) holds it briefly
+                if attempt == 4:
+                    tmp.unlink(missing_ok=True)
+                    raise
+                time.sleep(0.05 * (attempt + 1))
 
 
 class StageOneIn(BaseModel):
