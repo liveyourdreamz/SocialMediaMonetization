@@ -257,6 +257,13 @@ def plan(
                 sc.days = {"seven": 7, "five": 5, "ten": 10, "three": 3}.get(word) or int(
                     float(word)
                 )
+            if sc.kind == "talk" and nums and not re.search(r"\btask\b", low):
+                # D42: Patch explains anything; a number gets the measured-figure panel
+                sc.kind, sc.number, sc.mood = "figure", nums[0], "measure"
+                m = re.search(_NUM + r"\s*([%\w]+)", p)
+                sc.unit = m.group(2) if m else ""
+            elif sc.kind == "talk" and on_screen and "take it apart" in low:
+                sc.kind, sc.items = "steps", on_screen[: min(4, len(on_screen))]
         else:  # Falak
             if i == 1 or "from orbit" in low or "من المدار" in p:
                 sc.kind = "orbit"

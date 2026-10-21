@@ -1,8 +1,10 @@
 """Which channel a topic belongs to, when the brief says "Auto".
 
-Patch (A) reviews AI tools and software by testing them; Falak (B) explains science
-and engineering in English. Channel C (Falak in Arabic) is chosen only explicitly.
-With the API key a fast model decides in one word; without one, keywords decide.
+D42: both characters explain anything. Patch (A) takes things apart up close: objects,
+technology, everyday how-it-works. Falak (B) sees things from orbit: earth, sky,
+weather, oceans, cities, space, large-scale engineering. Channel C (Falak in Arabic)
+is chosen only explicitly. With the API key a fast model decides in one word;
+without one, keywords decide.
 """
 
 from __future__ import annotations
@@ -11,16 +13,17 @@ import re
 
 from cap.config import get_settings
 
-_TOOL_WORDS = re.compile(
-    r"\b(app|apps|tool|tools|software|saas|plugin|extension|chatgpt|claude|gemini|copilot|"
-    r"notion|slack|zoom|excel|figma|canva|api|sdk|ide|editor|browser|chrome|ai\s+\w+|"
-    r"version|update|release|subscription|pricing|tested|review|vs\.?)\b",
+_ORBIT_WORDS = re.compile(
+    r"\b(earth|planet|space|orbit|satellite|moon|sun|star|stars|sky|weather|climate|"
+    r"rain|rainbow|rainbows|cloud|clouds|storm|hurricane|monsoon|ocean|oceans|sea|tide|"
+    r"tides|river|desert|glacier|volcano|earthquake|forest|city|cities|desalination|"
+    r"dam|bridge|canal|port|aurora|eclipse|season|seasons|wind|el nino)\b",
     re.I,
 )
 
 
 def _heuristic(topic: str) -> str:
-    return "A" if _TOOL_WORDS.search(topic) else "B"
+    return "B" if _ORBIT_WORDS.search(topic) else "A"
 
 
 def route(topic: str) -> tuple[str, str]:
@@ -40,10 +43,11 @@ def route(topic: str) -> tuple[str, str]:
                 model=HAIKU,
                 max_tokens=5,
                 system=(
-                    "Classify a video topic for two channels. A: reviews of a specific AI "
-                    "tool, app or piece of software, tested by the presenter. B: science, "
-                    "nature, engineering or how-things-work explainers. Answer with the "
-                    "single letter A or B."
+                    "Two explainer channels. A (Patch, a repair robot) takes things apart "
+                    "up close: objects, devices, technology, the body's machinery, everyday "
+                    "how-it-works. B (Falak, a satellite) explains what is best seen from "
+                    "above: earth, weather, oceans, space, cities, large engineering. Pick "
+                    "the better fit for the topic. Answer with the single letter A or B."
                 ),
                 messages=[{"role": "user", "content": topic[:300]}],
             )

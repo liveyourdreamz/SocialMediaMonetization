@@ -156,21 +156,13 @@ EXAMPLE_ANALYTICS: dict[str, Any] = {
 }
 
 
-FORMATS = {"A": "tested_7_days", "B": "from_orbit", "C": "from_orbit"}
-CLAIMS_SCOPE = {
-    "A": [
-        "features and behaviour of the tool as logged in the test",
-        "the vendor's own stated claims",
-    ],
-    "B": [
-        "the mechanism as the cited sources describe it",
-        "figures cited from the sources, with dates",
-    ],
-    "C": [
-        "the mechanism as the cited sources describe it",
-        "figures cited from the sources, with dates",
-    ],
-}
+FORMATS = {"A": "take_it_apart", "B": "from_orbit", "C": "from_orbit"}
+SCIENCE_SCOPE = [
+    "the mechanism as the sources describe it",
+    "figures cited from the sources, with dates",
+    "first-hand results only from a test log, when one is given",
+]
+CLAIMS_SCOPE = {"A": SCIENCE_SCOPE, "B": SCIENCE_SCOPE, "C": SCIENCE_SCOPE}
 
 
 def new_brief(channel: str, topic: str) -> PostRecord:
@@ -207,7 +199,7 @@ def run_brief(
     topic recorded; Anthropic backend: a real draft of the topic from the model's own
     knowledge, any pinned page and the test log, then sources found for its claims
     (D41)."""
-    from cap.characters import ANCHOR_ELEMENTS, CHARACTER_BLOCKS, needs
+    from cap.characters import ANCHOR_ELEMENTS, CHARACTER_BLOCKS
     from cap.config import get_settings
     from cap.fetch import fetch_sources
     from cap.models import get_client
@@ -233,11 +225,6 @@ def run_brief(
         sources = [s for s in sources if not failed_reason(s)]
         if urls:
             rec.log(f"fetched {len(sources)} of {len(urls)} pinned source(s)")
-        if ch == Channel.A and not test_log:
-            rec.log(
-                f"note: no test log on the brief; Patch's format needs {needs('A')} for any "
-                "first-hand result, so this episode describes the tool, not a test of it"
-            )
         rec.brief.anchor_elements = ANCHOR_ELEMENTS[ch.value][:2]
         blocks = {k: v + "\n\n" + KNOWLEDGE_NOTE for k, v in CHARACTER_BLOCKS.items()}
         anchors = ANCHOR_ELEMENTS

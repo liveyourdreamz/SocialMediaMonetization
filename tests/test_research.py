@@ -187,17 +187,15 @@ def test_flag_mode_unconfirmed_claims_reach_the_card_block_mode_rejects(keyed, m
             assert any(c.status != "supported" for c in rec.draft.claims)
 
 
-def test_auto_routes_science_to_falak_and_patch_without_a_log_stops_at_the_brief(
-    keyed, monkeypatch
-):
-    """21 Oct: 'How rainbows work' went to Patch because the form pre-selected A."""
+def test_auto_routes_by_subject_and_patch_needs_no_test_log(keyed, monkeypatch):
+    """21 Oct: 'How rainbows work' went to Patch because the form pre-selected A; and
+    D42 makes Patch a general explainer, so no test log is required."""
     from cap import routing
     from cap.approval.app import Store
-    from cap.ui.views import workflow
     from tests.test_ui import Browser, create_app
 
     assert routing._heuristic("How rainbows work") == "B"
-    assert routing._heuristic("I tested the Notion AI app for a week") == "A"
+    assert routing._heuristic("How a lithium battery works") == "A"
     monkeypatch.setattr(routing, "route", lambda topic: ("B", "chosen by the model"))
     started: list[str] = []
     monkeypatch.setattr("cap.demo.seed.run_brief", lambda *a, **k: started.append(a[1]))
@@ -210,9 +208,13 @@ def test_auto_routes_science_to_falak_and_patch_without_a_log_stops_at_the_brief
     assert rec.channel_id.value == "B" and any(
         "B · Falak (chosen by the model)" in h for h in rec.history
     )
-    # Patch with no test log: stops at step 1 with the reason, no model call
-    r = api.form("/operator/brief", channel="A", topic="Notion AI")
-    rec = next(p for p in store.posts.values() if p.brief.topic == "Notion AI")
-    f = workflow(rec)
-    assert f["stopped"] and f["steps"][0]["state"] == "stopped" and "test log" in f["reason"]
-    assert r.headers["location"] == f"/posts/{rec.post_id}"
+    api.form("/operator/brief", channel="A", topic="How a lithium battery works")
+    rec = next(p for p in store.posts.values() if p.brief.topic == "How a lithium battery works")
+    assert rec.status.value == "drafting" and rec.brief.format_id == "take_it_apart"
+    import time
+
+    for _ in range(50):
+        if len(started) == 2:
+            break
+        time.sleep(0.05)
+    assert started == ["B", "A"]

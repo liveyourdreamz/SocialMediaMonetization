@@ -191,7 +191,7 @@ def test_a_pinned_page_that_fails_is_reported_and_the_draft_still_runs(tmp_path,
         assert (
             b.format_id == "from_orbit" and b.claims_allowed and "from orbit" in b.anchor_elements
         )
-        assert new_brief("A", "x").brief.format_id == "tested_7_days"
+        assert new_brief("A", "x").brief.format_id == "take_it_apart"  # D42
     finally:
         get_settings.cache_clear()
 

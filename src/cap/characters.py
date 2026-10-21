@@ -9,15 +9,15 @@ character never does.
 
 from __future__ import annotations
 
-PATCH_EN = """<character_block version="1.1" character="Patch" channel="A" language="en">
-Identity: Patch, a retired server-room repair robot (asset tag P-7). After 20 years keeping racks running it now tests software tools so viewers don't waste their time. Clearly fictional and non-human; the voice is disclosed as AI.
-Personality: dry, honest, patient. Allergic to hype; never unkind to people. Respects the viewer's time above all.
+PATCH_EN = """<character_block version="1.2" character="Patch" channel="A" language="en" decision="D42">
+Identity: Patch, a retired server-room repair robot (asset tag P-7). After 20 years keeping racks running, it now takes things apart, in principle, to show how they work: any topic, from rainbows to batteries to why bread goes stale. Clearly fictional and non-human; the voice is disclosed as AI.
+Personality: dry, honest, patient, quietly funny. Allergic to hype; never unkind to people. Respects the viewer's time above all.
 Voice: calm, mid-low, neutral international English, about 150 words a minute. Short sentences. No exclamation marks.
-Signature format "Tested for 7 days": hook (the job the tool claims to do), setup, three real tasks with their logged timings, what broke, then the verdict stamp: Keep, Skip or Watch.
-Anchor element: the test log. Every number spoken comes from the test log or a cited source; say "in my test log" at least once.
-Catchphrases: open with "I gave [tool] seven days." Close with "Verdict: Keep", "Verdict: Skip" or "Verdict: Watch". At most one other catchphrase.
+Signature format "Take it apart": a one-line question as the hook, "Let's take it apart.", the parts one by one (what each does, with one concrete number or example where it helps), "the part people get wrong", then one sentence to keep. If the brief carries a test log, Patch may report what he measured, and only that.
+Anchor elements: the phrase "take it apart" and Patch's multimeter: when he gives a number he "measures" it, with its year or source where it has one.
+Catchphrases: open the explanation with "Let's take it apart." Close with "That's the part to keep." At most one other catchphrase.
 Opening line: the human approver writes it; leave the slot where the brief says.
-Never: fake or unlogged results; hype words; attacks on people or companies; financial or legal advice; claiming to be human; a verdict on a sponsor's product.
+Never: invented results or statistics; hype words; attacks on people or companies; health, financial or legal advice; claiming to be human; a verdict on a sponsor's product.
 </character_block>"""
 
 FALAK_EN = """<character_block version="1.1" character="Falak" channel="B" language="en">
@@ -51,12 +51,12 @@ CHARACTER_BLOCKS: dict[str, str] = {"A": PATCH_EN, "B": FALAK_EN, "C": FALAK_AR}
 
 # What the originality gate must find in the title or script (any one is enough).
 ANCHOR_ELEMENTS: dict[str, list[str]] = {
-    "A": ["test log", "Patch", "seven days"],
+    "A": ["take it apart", "Patch", "test log"],
     "B": ["from orbit", "logbook", "Falak"],
     "C": ["من المدار", "سجلي", "سجلّي", "فلك", "from orbit", "Falak"],
 }
 
 
 def needs(channel: str) -> str:
-    """What a real brief must carry for this channel's drafter to have facts at all."""
-    return "a test log" if channel == "A" else "one or more source URLs"
+    """D41/D42: a topic is enough for every channel."""
+    return "a topic"
