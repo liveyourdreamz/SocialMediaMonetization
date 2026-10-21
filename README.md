@@ -77,7 +77,7 @@ have not yet been run against live accounts by us: the first publish is the test
 ## Guided tour
 
 The Portfolio screen has a **Guided tour**: one worked Patch episode (a seven-day
-test of a note app) in fourteen stops, idea to published. The first nine show what
+test of Driftpad, a fictional AI meeting-notes tool) in fourteen stops, idea to published. The first nine show what
 each agent produced (brief, material, character block, script, claims, critic,
 platform cuts, the four gates, the rendered video); then your channels and their
 credentials (Connections); the last four you do for real on that post: open the

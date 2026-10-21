@@ -107,6 +107,11 @@ class Scene:
     media: Path | None = None
     items: list[str] = field(default_factory=list)
     label: str = ""
+    index: int = 0  # task number for the checklist
+    total: int = 0  # the "of N" in a ratio
+    extra: float | None = None  # "invented 2": the figure that counts against
+    hold: bool = False  # a follow-on sentence keeps the previous panel, finished
+    action: str = "Sync"  # the verb the status row names: Sync, Export, Upload, ...
 
 
 # ------------------------------------------------------------------ planning
@@ -114,6 +119,24 @@ class Scene:
 
 def _sentences(p: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?؟])\s+", p) if s.strip()]
+
+
+def _action(low: str) -> str:
+    """The thing the app was doing, for the status row: Sync, Export, Transcript..."""
+    for verb, word in (
+        ("sync", "Sync"),
+        ("export", "Export"),
+        ("upload", "Upload"),
+        ("transcri", "Transcript"),
+        ("import", "Import"),
+        ("save", "Save"),
+        ("login", "Sign-in"),
+        ("render", "Render"),
+        ("search", "Search"),
+    ):
+        if verb in low:
+            return word
+    return "Task"
 
 
 def tool_name(title: str, topic: str) -> str:
@@ -151,6 +174,11 @@ def plan(
     scenes: list[Scene] = []
     media_left = list(media)
     claimed: float | None = None  # "within 10 seconds" remembered for the measurement
+    tasks: list[str] = []
+    for p in sentences:  # the checklist, from every "Task n: ..." sentence
+        m = re.match(r"\s*task\s+(?:one|two|three|four|\d)\s*[:,-]\s*(.+?)(?:[.;]|$)", p, re.I)
+        if m:
+            tasks.append(m.group(1).strip())
     for i, p in enumerate(sentences):
         low = p.lower()
         sc = Scene(kind="talk", text=p, sentences=[p], tool=tool)
@@ -159,6 +187,8 @@ def plan(
         if media_left and i > 0:
             sc.kind, sc.media = "media", media_left.pop(0)
         elif character == "Patch":
+            task = re.search(r"\btask\s+(one|two|three|four|1|2|3|4)\b", low)
+            ratio = re.search(_NUM + r"\s+of\s+(?:the\s+)?" + _NUM, low)
             if re.search(r"\bverdict\b", low):
                 sc.kind = "verdict"
                 sc.mood = (
@@ -168,32 +198,65 @@ def plan(
                     if re.search(r"\b(watch|caveat)\b", low)
                     else "keep"
                 )
+            elif task:
+                sc.kind = "task"
+                sc.index = {"one": 1, "two": 2, "three": 3, "four": 4}.get(task.group(1)) or int(
+                    task.group(1)
+                )
+                sc.items = tasks
             elif re.search(r"\b(fail|failed|crash|crashed|broke|error|errors)\b", low):
                 sc.kind = "app_fail"
+                sc.action = _action(low)
                 sc.times = 2 if "twice" in low else 3 if "three times" in low else 1
                 m = re.search(r"\bday\s+" + _NUM, low)
                 sc.day = int(float(m.group(1))) if m else None
-            elif re.search(r"\b(locally|local|cloud|syncs|stores)\b", low) and not re.search(
-                r"\b(measured|took|average|averaged)\b", low
-            ):
+            elif ratio:
+                sc.kind = "ratio"
+                sc.number, sc.total = float(ratio.group(1)), int(float(ratio.group(2)))
+                m = re.search(r"\b(invented|made up|wrong|missed)\s+" + _NUM, low)
+                sc.extra = float(m.group(2)) if m else None
+            elif timed and re.search(r"\b(measured|took|average|averaged)\b", low):
+                sc.kind, sc.mood = "timer", "measure"
+                sc.action = _action(low)
+                # the reading follows took/measured; the claim follows under/within/says
+                meas = re.search(
+                    r"\b(?:measured|took|averaged?)\b[^.;]*?"
+                    + _NUM
+                    + r"\s*(seconds?|secs?|minutes?|ms)",
+                    low,
+                )
+                clm = re.search(
+                    r"\b(?:under|within|says|claims|promises)\b[^.;]*?"
+                    + _NUM
+                    + r"\s*(seconds?|secs?|minutes?|ms)",
+                    low,
+                )
+                if meas:
+                    sc.number, sc.unit = float(meas.group(1).replace(",", "")), meas.group(2)
+                else:
+                    sc.number, sc.unit = float(timed[-1][0].replace(",", "")), timed[-1][1]
+                if clm:
+                    claimed = float(clm.group(1).replace(",", ""))
+                sc.claimed = claimed
+            elif re.search(r"\b(locally|local|cloud|syncs|stores)\b", low):
                 sc.kind = "flow"
                 if timed:
                     claimed = float(timed[-1][0].replace(",", ""))
                     sc.label = f"claimed: within {claimed:g} {timed[-1][1]}"
-            elif timed:
-                sc.kind, sc.mood, sc.unit = "timer", "measure", timed[-1][1]
-                sc.number = float(timed[-1][0].replace(",", ""))
-                if re.search(r"\b(within|says|claims|promises)\b", low) and not re.search(
-                    r"\b(measured|took|average|averaged)\b", low
-                ):
-                    claimed, sc.kind, sc.number = sc.number, "talk", None  # a claim, not a reading
-                    sc.mood = "idle"
-                else:
-                    sc.claimed = claimed
-            elif re.search(r"\b" + _NUM + r"[- ]days?\b", low):
+            elif timed and re.search(r"\b(within|under|says|claims|promises)\b", low):
+                claimed = float(timed[-1][0].replace(",", ""))
+                sc.kind, sc.label = "claim", f"the claim: {timed[-1][0]} {timed[-1][1]}"
+            elif re.search(r"\b(says|claims|promises)\b", low) and sc.tool.lower() in low:
+                sc.kind = "claim"
+                m = re.search(r"\b(?:says|claims|promises)\b\s*(?:it\s+)?(.{12,90}?)(?:[.;,]|$)", p)
+                sc.label = m.group(1).strip() if m else "the claim"
+            elif re.search(r"\b(" + _NUM + r"|seven|five|ten|three)[- ]days?\b", low):
                 sc.kind = "calendar"
-                m = re.search(_NUM + r"[- ]days?", low)
-                sc.days = int(float(m.group(1))) if m else 7
+                m = re.search(r"\b(" + _NUM + r"|seven|five|ten|three)[- ]days?", low)
+                word = m.group(1) if m else "7"
+                sc.days = {"seven": 7, "five": 5, "ten": 10, "three": 3}.get(word) or int(
+                    float(word)
+                )
         else:  # Falak
             if i == 1 or "from orbit" in low or "من المدار" in p:
                 sc.kind = "orbit"
@@ -203,6 +266,16 @@ def plan(
                 sc.unit = m.group(2) if m else ""
             elif on_screen and i < len(on_screen) + 2:
                 sc.kind, sc.items = "steps", on_screen[: min(4, len(on_screen))]
+        if sc.kind == "talk" and scenes and scenes[-1].kind not in ("talk", "media") and i > 1:
+            # a follow-on remark keeps the picture it comments on, in its finished state
+            prev = scenes[-1]
+            sc = Scene(
+                kind=prev.kind, text=p, sentences=[p], tool=tool, mood=prev.mood,
+                number=prev.number, unit=prev.unit, claimed=prev.claimed, day=prev.day,
+                days=prev.days, times=prev.times, items=prev.items, label=prev.label,
+                index=prev.index, total=prev.total, extra=prev.extra, hold=True,
+                action=prev.action,
+            )  # fmt: skip
         scenes.append(sc)
     return scenes
 
@@ -257,8 +330,8 @@ def layout(size: tuple[int, int]) -> Layout:
         return Layout(
             size,
             False,
-            (m, top, int(w * 0.27), int(h * 0.67)),
-            (int(w * 0.32), top, w - m - int(w * 0.32), int(h * 0.66)),
+            (m, top, int(w * 0.25), int(h * 0.67)),
+            (int(w * 0.33), top, w - m - int(w * 0.33), int(h * 0.66)),
             (m, int(h * 0.82), w - 2 * m, int(h * 0.13)),
             m,
         )
@@ -347,8 +420,26 @@ def _notes(
         yy += int(h * 0.15)
 
 
+_VERBS = {
+    "Sync": "Syncing…",
+    "Export": "Exporting…",
+    "Upload": "Uploading…",
+    "Transcript": "Transcribing…",
+    "Import": "Importing…",
+    "Save": "Saving…",
+    "Sign-in": "Signing in…",
+    "Render": "Rendering…",
+    "Search": "Searching…",
+}
+
+
 def _sync_bar(
-    d: ImageDraw.ImageDraw, area: tuple[int, int, int, int], progress: float, state: str, t: float
+    d: ImageDraw.ImageDraw,
+    area: tuple[int, int, int, int],
+    progress: float,
+    state: str,
+    t: float,
+    action: str = "Sync",
 ) -> None:
     """A sync status row at the bottom of the app: syncing (spinner + bar), ok, failed."""
     x, y, w, h = area
@@ -360,16 +451,19 @@ def _sync_bar(
         d.rounded_rectangle(
             [x + pad, by, x + w - pad, by + int(h * 0.12)], radius=int(h * 0.02), fill=BAD
         )
-        d.text((x + pad * 2, by + int(h * 0.025)), "Sync failed · retrying", font=f, fill=SURFACE)
+        d.text(
+            (x + pad * 2, by + int(h * 0.025)), f"{action} failed · retrying", font=f, fill=SURFACE
+        )
         return
     if state == "ok":
-        d.text((x + pad, by + int(h * 0.02)), "Synced", font=f, fill=OK)
+        d.text((x + pad, by + int(h * 0.02)), f"{action} done", font=f, fill=OK)
         return
     # syncing: spinner and a bar that stalls
     cx, cy, r = x + pad + int(h * 0.05), by + int(h * 0.06), int(h * 0.04)
     a0 = (t * 300) % 360
     d.arc([cx - r, cy - r, cx + r, cy + r], a0, a0 + 250, fill=ACCENT, width=max(2, int(h * 0.012)))
-    d.text((cx + r * 2, by + int(h * 0.02)), "Syncing…", font=f, fill=INK)
+    verb = _VERBS.get(action, "Working…")
+    d.text((cx + r * 2, by + int(h * 0.02)), verb, font=f, fill=INK)
     bx0, bx1 = x + pad, x + w - pad
     d.rectangle([bx0, by + int(h * 0.14), bx1, by + int(h * 0.16)], fill=LINE)
     d.rectangle(
@@ -420,7 +514,7 @@ def _draw_panel(
         # the bar creeps, then the failure lands (once per "time"), then retries
         phase = (f * (sc.times + 0.5)) % 1.0 if sc.times > 1 else f
         state = "failed" if 0.55 < phase < 0.95 else "syncing"
-        _sync_bar(d, area, phase * 1.6, state, t)
+        _sync_bar(d, area, phase * 1.6, state, t, sc.action)
         if sc.day:
             ft = _font(int(h * 0.07), bold=True)
             d.text(
@@ -475,7 +569,7 @@ def _draw_panel(
                 over = f"+{val - sc.claimed:.1f} {sc.unit} over the claim"
                 fo = _font(int(ah * 0.075), bold=True)
                 d.text((ax + aw * 0.47, ay + ah * 0.66), over, font=fo, fill=BAD)
-        _sync_bar(d, area, f, "syncing" if f < 0.98 else "ok", t)
+        _sync_bar(d, area, f, "syncing" if f < 0.98 else "ok", t, sc.action)
         return
     if sc.kind == "flow":
         area = _app_window(d, inner, sc.tool)
@@ -661,6 +755,147 @@ def _draw_panel(
             )
             yy += int(h * 0.21)
         return
+    if sc.kind == "task":
+        area = _app_window(d, inner, sc.tool)
+        ax, ay, aw, ah = area
+        fh = _font(int(ah * 0.085), bold=True)
+        d.text((ax + pad, ay + pad * 0.8), "The test: three tasks", font=fh, fill=INK)
+        items = sc.items or ["task one", "task two", "task three"]
+        fi = _font(int(ah * 0.075))
+        yy = ay + pad * 0.8 + int(ah * 0.16)
+        for k, item in enumerate(items, start=1):
+            done, now = k < sc.index, k == sc.index
+            box = int(ah * 0.075)
+            d.rounded_rectangle(
+                [ax + pad, yy, ax + pad + box, yy + box],
+                radius=int(box * 0.2),
+                fill=OK if done else (ACCENT if now else SURFACE),
+                outline=LINE if not (done or now) else None,
+                width=2,
+            )
+            if done:
+                d.line(
+                    [
+                        (ax + pad + box * 0.25, yy + box * 0.55),
+                        (ax + pad + box * 0.45, yy + box * 0.75),
+                        (ax + pad + box * 0.78, yy + box * 0.3),
+                    ],
+                    fill=SURFACE,
+                    width=max(2, int(box * 0.12)),
+                )
+            if now:
+                pulse = 0.5 + 0.5 * math.sin(t * 4)
+                d.ellipse(
+                    [
+                        ax + pad + box * (0.5 - 0.18 * pulse),
+                        yy + box * (0.5 - 0.18 * pulse),
+                        ax + pad + box * (0.5 + 0.18 * pulse),
+                        yy + box * (0.5 + 0.18 * pulse),
+                    ],
+                    fill=SURFACE,
+                )
+            d.text(
+                (ax + pad + box + pad * 0.6, yy + box * 0.1),
+                f"Task {k}: {item}",
+                font=fi,
+                fill=INK if (done or now) else MUTED,
+            )
+            yy += int(ah * 0.14)
+        return
+    if sc.kind == "ratio":
+        area = _app_window(d, inner, sc.tool)
+        ax, ay, aw, ah = area
+        found, total = sc.number or 0.0, max(1, sc.total)
+        prog = _ease(f * 1.3)
+        fh = _font(int(ah * 0.085), bold=True)
+        d.text((ax + pad, ay + pad * 0.8), "Action items", font=fh, fill=INK)
+        # a row of boxes: found (teal), missed (hollow), invented (red, struck)
+        n_show = total + int(sc.extra or 0)
+        bw = min(int(ah * 0.13), int((aw - 2 * pad) / max(1, n_show) * 0.8))
+        gap = int(bw * 0.25)
+        yy = ay + ah * 0.33
+        lit = int(round(n_show * prog))
+        for k in range(n_show):
+            x0 = ax + pad + k * (bw + gap)
+            on = k < lit
+            if k < found:
+                d.rounded_rectangle(
+                    [x0, yy, x0 + bw, yy + bw],
+                    radius=int(bw * 0.2),
+                    fill=OK if on else (0xF1, 0xEF, 0xE9),
+                )
+            elif k < total:
+                d.rounded_rectangle(
+                    [x0, yy, x0 + bw, yy + bw],
+                    radius=int(bw * 0.2),
+                    outline=MUTED if on else LINE,
+                    width=2,
+                )
+            else:
+                d.rounded_rectangle(
+                    [x0, yy, x0 + bw, yy + bw],
+                    radius=int(bw * 0.2),
+                    fill=BAD if on else (0xF1, 0xEF, 0xE9),
+                )
+                if on:
+                    d.line(
+                        [(x0 + bw * 0.25, yy + bw * 0.25), (x0 + bw * 0.75, yy + bw * 0.75)],
+                        fill=SURFACE,
+                        width=3,
+                    )
+                    d.line(
+                        [(x0 + bw * 0.75, yy + bw * 0.25), (x0 + bw * 0.25, yy + bw * 0.75)],
+                        fill=SURFACE,
+                        width=3,
+                    )
+        big = _font(int(ah * 0.16), bold=True)
+        d.text((ax + pad, yy + bw + ah * 0.08), f"{found:g} of {total}", font=big, fill=INK)
+        fs = _font(int(ah * 0.07))
+        d.text(
+            (ax + pad, yy + bw + ah * 0.26),
+            "found, of the items written down by hand",
+            font=fs,
+            fill=MUTED,
+        )
+        if sc.extra:
+            fb = _font(int(ah * 0.09), bold=True)
+            msg = f"{sc.extra:g} invented"
+            d.text(
+                (ax + aw - pad - d.textlength(msg, font=fb), yy + bw + ah * 0.1),
+                msg,
+                font=fb,
+                fill=BAD,
+            )
+        return
+    if sc.kind == "claim":
+        area = _app_window(d, inner, sc.tool)
+        ax, ay, aw, ah = area
+        _notes(d, area, sc.tool, rows=3)
+        fc = _font(int(ah * 0.075), bold=True)
+        lines = _wrap(d, f"\u201c{sc.label}\u201d", fc, aw - 2 * pad - int(ah * 0.1))
+        bh = int(len(lines) * fc.size * 1.3 + pad)
+        d.rounded_rectangle(
+            [
+                ax + pad,
+                ay + ah - pad - bh - int(ah * 0.02),
+                ax + aw - pad,
+                ay + ah - pad - int(ah * 0.02),
+            ],
+            radius=int(ah * 0.02),
+            fill=(0xFF, 0xF3, 0xC4),
+        )
+        yy = ay + ah - pad - bh + pad * 0.4 - int(ah * 0.02)
+        for ln in lines:
+            d.text((ax + pad * 1.5, yy), ln, font=fc, fill=INK)
+            yy += fc.size * 1.3
+        ft = _font(int(ah * 0.055))
+        d.text(
+            (ax + pad, ay + ah - pad - bh - int(ah * 0.02) - ft.size * 1.4),
+            "the vendor's claim, from the help page",
+            font=ft,
+            fill=MUTED,
+        )
+        return
     # talk: the key sentence large on the panel, the character does the work
     fs = _font(int(h * (0.1 if len(sc.sentences[0]) < 60 else 0.08)), bold=True, arabic=arabic)
     key = sc.sentences[0] if sc.sentences else sc.text
@@ -710,7 +945,7 @@ def frame(
     im = Image.new("RGB", lay.size, GROUND)
     d = ImageDraw.Draw(im)
     _chrome(d, lay, character, channel)
-    f = i / max(1, n - 1)
+    f = 1.0 if sc.hold else i / max(1, n - 1)
     inner = _panel_frame(d, lay)
     if sc.kind == "sources":
         _sources_panel(d, inner, sources or [])
@@ -785,15 +1020,15 @@ def thumbnail(
     w, h = size
     lay = layout(size)
     _chrome(d, lay, character, channel)
-    box = (int(w * 0.03), int(h * 0.16), int(w * 0.34), int(h * 0.76))
+    box = (int(w * 0.02), int(h * 0.16), int(w * 0.3), int(h * 0.76))
     (draw_falak if character == "Falak" else draw_patch)(
         im, box, 1.3, 0.6, "keep" if character == "Patch" else "idle"
     )
     fs = _font(int(h * 0.15), bold=True, arabic=arabic)
-    lines = _wrap(d, text, fs, int(w * 0.56), arabic)[:3]
+    lines = _wrap(d, text, fs, int(w * 0.5), arabic)[:3]
     block = len(lines) * fs.size * 1.12 + (h * 0.09 if tool else 0)
     yy = h * 0.52 - block / 2
-    x_text = int(w * 0.41)
+    x_text = int(w * 0.46)
     for ln in lines:
         txt = _shape(ln, arabic)
         xx = w - int(w * 0.05) - d.textlength(txt, font=fs, **_kw(arabic)) if arabic else x_text

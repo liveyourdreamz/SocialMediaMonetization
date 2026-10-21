@@ -9,7 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from cap.demo import CHARACTER_BLOCK, SOURCES, TEST_LOG
+from cap.characters import CHARACTER_BLOCKS
+from cap.demo import tour_example as ex
 from cap.policy import disclosure_block
 from cap.schema.post_record import PostRecord, PostStatus
 
@@ -30,8 +31,10 @@ STOPS: list[Stop] = [
         "idea",
         "The idea becomes a brief",
         "Everything starts with you. From the Operator screen you file a brief: the "
-        "channel, the topic, and the material the drafter may use. For Patch that "
-        "material is a test log you wrote. Nothing is drafted from memory.",
+        "channel, the topic, the pages the drafter may cite and the test log you wrote. "
+        "Nothing is drafted from memory. The worked example is a seven-day test of "
+        "Driftpad, an AI meeting-notes tool. Driftpad is fictional: a real product would "
+        "need a real test, and every number Patch speaks has to trace to a log or a page.",
     ),
     Stop(
         "material",
@@ -67,8 +70,9 @@ STOPS: list[Stop] = [
         "critic",
         "The critic",
         "A separate model reads the draft against the rubric and either accepts it or "
-        "sends it back with instructions. A revise verdict loops once through the "
-        "drafter; what the critic said is hidden from you until after your verdict.",
+        "sends it back with instructions. Here it sent the first draft back: the verdict "
+        "came before the evidence. The drafter revised once; what the critic said stays "
+        "hidden from you until after your verdict.",
         needs="draft",
     ),
     Stop(
@@ -93,10 +97,11 @@ STOPS: list[Stop] = [
         "Voice and video",
         "Patch is on screen, speaking the script (the lens brightens with the voice) "
         "beside a reconstruction of what each sentence describes: the seven-day strip, "
-        "the app's sync failing on day 3, local-then-cloud with the vendor's claim, the "
-        "stopwatch to the measured 12 seconds, the verdict stamp. Screenshots uploaded "
-        "with a brief take the panel instead. ffmpeg assembles the long video, the "
-        "Short and a thumbnail; the file's hash is recorded for the approval token.",
+        "the vendor's claim, the three-task checklist, the stopwatch to 58 seconds "
+        "against the promised 30, the 11-of-14 action items with 2 invented, the export "
+        "failing twice on day 5, the verdict stamp. Screenshots uploaded with a brief "
+        "take the panel instead. ffmpeg assembles the long video, the Short and a "
+        "thumbnail; the file's hash is recorded for the approval token.",
         needs="asset",
     ),
     Stop(
@@ -171,7 +176,12 @@ def context(record: PostRecord, n: int, pkg: dict[str, Any] | None = None) -> di
     have = _state(record)
     running = record.status.value in RUNNING
     ready = not stop.needs or stop.needs in have
-    source = SOURCES[0]
+    import re
+
+    script_numbers = sorted(
+        set(re.findall(r"\d(?:[\d,.]*\d)?", record.draft.script)),
+        key=lambda n: float(n.replace(",", "").split(".")[0]),
+    )
     size = ""
     if record.asset.uri:
         from pathlib import Path
@@ -190,9 +200,13 @@ def context(record: PostRecord, n: int, pkg: dict[str, Any] | None = None) -> di
         "waiting": running and not ready,  # refresh until the pipeline gets there
         "parked": record.status == PostStatus.PARKED,
         "have": have,
-        "test_log": TEST_LOG,
-        "source": source,
-        "character_block": CHARACTER_BLOCK,
+        "test_log": ex.TEST_LOG,
+        "sources": ex.SOURCES,
+        "tool": ex.TOOL,
+        "script_v1": ex.SCRIPT_V1,
+        "script_numbers": script_numbers,
+        "revised": any("critic: revise" in h for h in record.history),
+        "character_block": CHARACTER_BLOCKS["A"],
         "disclosure": disclosure_block(),
         "script_parts": record.draft.script.split("[[HEMANT_OPENING_LINE]]"),
         "pkg": pkg or {},

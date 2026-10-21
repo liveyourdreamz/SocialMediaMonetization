@@ -59,7 +59,7 @@ def draw_patch(
     d = ImageDraw.Draw(im)
     x, y, w, h = box
     u = h / 100.0  # one unit = 1% of the box height
-    cx = x + w * 0.45
+    cx = x + w * 0.4
     bob = math.sin(t * 2.1) * 0.8 * u
     floor = y + h
 
@@ -161,7 +161,7 @@ def draw_patch(
     lift = 1.0 if mood == "measure" else 0.0
     ang = math.radians(-20 - 55 * lift + 3 * math.sin(t * 1.7))
     sx, sy = bx0 + body_w * 0.95, by0 + body_h * 0.35 + bob * 0
-    seg1 = 17 * u
+    seg1 = 15 * u
     ex1, ey1 = sx + math.cos(ang) * seg1, sy + math.sin(ang) * seg1
     d.line([(sx, sy), (ex1, ey1)], fill=STEEL_DARK, width=int(6 * u))
     d.ellipse([sx - 4 * u, sy - 4 * u, sx + 4 * u, sy + 4 * u], fill=STEEL_DARK)

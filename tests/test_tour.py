@@ -42,8 +42,11 @@ def test_the_tour_runs_idea_to_published_on_a_real_post(tmp_path, monkeypatch):
     post_id = r.headers["location"].split("/")[2]
     # the first stops render at once, while the pipeline is still running
     html = api.get(f"/tour/{post_id}/1").text
-    assert "Notely 7-day test" in html and "Stop 1" in html
-    assert "Day 3: sync failed twice" in api.get(f"/tour/{post_id}/2").text
+    assert "Driftpad" in html and "Stop 1" in html and "fictional" in html
+    assert (
+        "On day 5 the export failed twice" in api.get(f"/tour/{post_id}/2").text
+        and "changelog" in api.get(f"/tour/{post_id}/2").text
+    )
     assert "character_block" in api.get(f"/tour/{post_id}/3").text
 
     rec = _wait_tour(store)
@@ -52,8 +55,12 @@ def test_the_tour_runs_idea_to_published_on_a_real_post(tmp_path, monkeypatch):
         html = api.get(f"/tour/{post_id}/{n}").text
         assert stop.title in html and "refresh" not in html, n
     assert "[your opening line goes here]" in api.get(f"/tour/{post_id}/4").text
-    assert "5 claims" in api.get(f"/tour/{post_id}/5").text
-    assert "went through first time" in api.get(f"/tour/{post_id}/6").text
+    assert (
+        "10 claims" in api.get(f"/tour/{post_id}/5").text
+        and "2.4.1" in api.get(f"/tour/{post_id}/5").text
+    )
+    html6 = api.get(f"/tour/{post_id}/6").text
+    assert "revise" in html6 and "Verdict first: Watch." in html6 and "revised once" in html6
     assert "youtube_short" in api.get(f"/tour/{post_id}/7").text
     assert "Judge A" in api.get(f"/tour/{post_id}/8").text
     assert rec.asset.sha256 in api.get(f"/tour/{post_id}/9").text
@@ -67,12 +74,12 @@ def test_the_tour_runs_idea_to_published_on_a_real_post(tmp_path, monkeypatch):
     api.form(
         f"/posts/{post_id}/verdict",
         decision="approve",
-        opening_line="Seven days with Notely.",
+        opening_line="Seven days with Driftpad.",
         spot_check_supported="yes",
     )
     assert api.form(f"/posts/{post_id}/finalise").status_code == 303
     html = api.get(f"/tour/{post_id}/12").text
-    assert "approve" in html and "Seven days with Notely." in html
+    assert "approve" in html and "Seven days with Driftpad." in html
     assert "Open the Outbox preview" in api.get(f"/tour/{post_id}/13").text
     assert api.form(f"/posts/{post_id}/publish").status_code == 303
     html = api.get(f"/tour/{post_id}/14").text

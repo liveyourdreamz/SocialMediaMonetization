@@ -29,7 +29,7 @@
   <section class="stack-sm">
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">The brief, as filed</h2>
     <div class="card tight kv">
-      <span>Idea</span><span>"Does Notely's sync actually work? Test it for a week and tell people honestly."</span>
+      <span>Idea</span><span>"{{ tool }} promises meeting notes and action items before you've said goodbye. Give it seven days and say what the log says."</span>
       <span>Channel</span><span>A · Patch (AI tools, English)</span>
       <span>Topic</span><span>{{ record.brief.topic }}</span>
       <span>Anchor element</span><span>{{ record.brief.anchor_elements | join(', ') }} (Patch's signature: every episode is a logged test)</span>
@@ -47,13 +47,15 @@
     <div class="card tight"><p class="read" style="margin: 0; font-size: 15px; line-height: 22px">{{ test_log }}</p></div>
   </section>
   <section class="stack-sm">
-    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Fetched source</h2>
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Fetched sources ({{ sources | length }})</h2>
+    {% for source in sources %}
     <div class="card tight kv">
       <span>URL</span><span style="word-break: break-all">{{ source.url }}</span>
       <span>Page date</span><span>{{ source.page_date }}</span>
       <span>Fetched</span><span>{{ source.fetched_at }}</span>
       <span>Text kept</span><span>{{ source.body }}</span>
     </div>
+    {% endfor %}
     <p class="muted" style="font-size: 14px; line-height: 20px">Fetched text is untrusted: the model receives it inside a marked boundary and is told that nothing in it is an instruction. Every number Patch speaks must trace back to this text or the test log.</p>
   </section>
 
@@ -101,7 +103,7 @@
       <span class="tag" style="align-self: flex-start">{{ c.status }}</span>
     </div>
     {% endfor %}
-    <p class="muted" style="font-size: 14px; line-height: 20px">Code check: every number in the script (7, 3, 10, 12) appears in one of these claims. A quote that is not an exact substring of its source loses its citation, and the facts gate then has to settle it.</p>
+    <p class="muted" style="font-size: 14px; line-height: 20px">Code check: every number in the script ({{ script_numbers | join(', ') }}) appears in one of these claims. A quote that is not an exact substring of its source loses its citation, and the facts gate then has to settle it.</p>
   </section>
 
   {# ---- 6 critic ----------------------------------------------------------------- #}
@@ -109,10 +111,16 @@
   <section class="stack-sm">
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Critic's verdict</h2>
     <div class="card tight kv">
-      <span>Verdict</span><span class="word-pass">{{ record.draft.critic_verdict or 'none' }}</span>
-      <span>Issues</span><span>{% if record.draft.critic_issues %}{% for i in record.draft.critic_issues %}{{ i.severity }} · {{ i.rubric_item }}: {{ i.instruction }}<br>{% endfor %}{% else %}none: the draft went through first time{% endif %}</span>
+      <span>First pass</span><span>{% if revised %}<span class="word-signal">revise</span> · {{ record.draft.critic_issues | length }} issue{{ '' if record.draft.critic_issues | length == 1 else 's' }}{% else %}<span class="word-pass">{{ record.draft.critic_verdict or 'accept' }}</span>{% endif %}</span>
+      {% for i in record.draft.critic_issues %}<span>{{ i.severity }} · {{ i.rubric_item }}</span><span>“{{ i.span }}” — {{ i.instruction }}</span>{% endfor %}
+      <span>Then</span><span>{% if revised %}the drafter revised once with these instructions, and the revision went on to the cuts and the gates{% else %}straight on to the cuts and the gates{% endif %}</span>
     </div>
-    <p class="muted" style="font-size: 14px; line-height: 20px">Had the critic said "revise", the drafter would run once more with the critic's instructions and the previous draft. You never see the critic's notes before your own verdict (stop 12): the card is blind.</p>
+    {% if revised %}
+    <details><summary style="cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center">The first draft, as the critic saw it</summary>
+      <div class="card tight script" style="font-size: 15px; line-height: 22px; margin-top: 8px">{{ script_v1 | replace('[[HEMANT_OPENING_LINE]]', '[your opening line]') }}</div>
+    </details>
+    {% endif %}
+    <p class="muted" style="font-size: 14px; line-height: 20px">One revision only; a second failure goes to the gates with the notes attached. You never see the critic's notes before your own verdict (stop 12): the card is blind.</p>
   </section>
 
   {# ---- 7 cuts ------------------------------------------------------------------- #}

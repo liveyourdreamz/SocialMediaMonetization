@@ -234,27 +234,29 @@ def start_tour(store: Store) -> PostRecord:
     thread and the tour pages refresh until each stage is there."""
     import threading
 
+    from cap.characters import ANCHOR_ELEMENTS, CHARACTER_BLOCKS
     from cap.config import get_settings
+    from cap.demo import tour_example as ex
 
     rec = PostRecord(
         channel_id=Channel.A,
-        brief=Brief(topic="Notely 7-day test", anchor_elements=["test log"]),
+        brief=Brief(topic=ex.TOPIC, anchor_elements=["test log"]),
     )
     rec.status = PostStatus.DRAFTING
     rec.flags.tour = True
-    rec.log("guided tour started: the worked example, Patch tests Notely for 7 days")
+    rec.log(f"guided tour started: the worked example, Patch tests {ex.TOOL} for 7 days")
     store.put(rec)
 
     def work() -> None:
         try:
             deps = PipelineDeps(
-                client=MockClient(happy_fixtures()),
-                anchor_elements={"A": ["test log"]},
-                character_blocks={"A": CHARACTER_BLOCK},
-                test_logs={rec.post_id: TEST_LOG},
+                client=MockClient(ex.fixtures()),
+                anchor_elements={"A": ANCHOR_ELEMENTS["A"]},
+                character_blocks={"A": CHARACTER_BLOCKS["A"]},
+                test_logs={rec.post_id: ex.TEST_LOG},
                 render_dir=Path(get_settings().data_dir) / "renders",
             )
-            out = run_post(rec, SOURCES, deps)
+            out = run_post(rec, ex.SOURCES, deps)
             out.log("drafted from the worked example (fixtures), not the live model")
             store.put(out)
         except Exception as e:  # noqa: BLE001 - the tour page shows the reason
