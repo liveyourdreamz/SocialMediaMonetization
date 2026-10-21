@@ -166,7 +166,7 @@ def test_max_tokens_retries_with_a_larger_limit_then_parks():
             return Completion(raw="", stop_reason="max_tokens")
 
     res = Truncating().run(spec("P1", "A"), "x", P1Output)
-    assert seen == [32768, 32768 * 4] and res.output is None
+    assert seen == [32768, 128_000] and res.output is None  # capped at the model limit
 
 
 def test_context_window_exceeded_is_not_retried():
@@ -221,3 +221,26 @@ def test_managed_runtime_is_production_whatever_env_says(monkeypatch):
 def test_model_call_dataclass_is_plain():
     c = ModelCall(spec("P1", "A"), "n", [{"type": "text", "text": "s"}], "u", "", P1Output, [], 10)
     assert c.tool_result_blocks() == []
+
+
+def test_the_production_client_sets_an_explicit_timeout(monkeypatch):
+    """With the SDK's default timeout, any non-streaming call above ~21k max_tokens
+    raises 'Streaming is required' before a request is sent: every high-effort prompt
+    parked on the first laptop run. The client must set its own timeout."""
+    import anthropic
+
+    from cap.config import get_settings
+    from cap.models import MAX_TOKENS, AnthropicClient
+
+    monkeypatch.setenv("CAP_MODEL_BACKEND", "anthropic")
+    monkeypatch.setenv("CAP_ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+    get_settings.cache_clear()
+    try:
+        c = AnthropicClient()._client
+        assert c.timeout != anthropic.DEFAULT_TIMEOUT
+        for n in MAX_TOKENS.values():  # the guard only runs with the default timeout
+            c._calculate_nonstreaming_timeout(
+                n, None
+            ) if c.timeout == anthropic.DEFAULT_TIMEOUT else None
+    finally:
+        get_settings.cache_clear()

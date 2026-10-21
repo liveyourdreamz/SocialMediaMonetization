@@ -47,7 +47,7 @@ def _env() -> str:
     from cap.config import get_settings
     from cap.setup import ensure_env, read_key
 
-    ensure_env(Path(".env"), out=lambda _: None)  # creates .env; asks for the key on a laptop
+    ensure_env(Path(".env"), out=lambda s: print(f"       {s}"))  # creates .env; asks for the key
     get_settings.cache_clear()
     s = get_settings()
     p = Path(".env")

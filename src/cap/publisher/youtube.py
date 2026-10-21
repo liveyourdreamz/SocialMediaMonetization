@@ -20,6 +20,7 @@ from cap.config import get_settings
 from cap.policy import AI_ROLE_DISCLOSURE
 from cap.schema.post_record import PostRecord
 
+YOUTUBE_AUTH_PORT = 8765  # register http://localhost:8765/ on the OAuth client
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 
@@ -41,11 +42,12 @@ def authorise() -> Path:
             "client_secret": s.google_client_secret.get_secret_value(),
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": ["http://localhost"],
+            "redirect_uris": [f"http://localhost:{YOUTUBE_AUTH_PORT}/"],
         }
     }
     flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
-    creds = flow.run_local_server(port=0, prompt="consent")
+    # a fixed port: a Web OAuth client needs this exact redirect URI registered
+    creds = flow.run_local_server(port=YOUTUBE_AUTH_PORT, prompt="consent")
     out = token_path()
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(creds.to_json(), encoding="utf-8")

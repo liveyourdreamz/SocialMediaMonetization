@@ -19,7 +19,7 @@ from cap.agents.outputs import (
     P14Output,
 )
 from cap.models import ModelClient, ModelResult, SourceDoc
-from cap.policy import disclosure_block
+from cap.policy import AI_ROLE_DISCLOSURE_KEY, disclosure_block
 from cap.prompts import spec
 from cap.schema.post_record import (
     Claim,
@@ -160,8 +160,8 @@ def adapt(record: PostRecord, client: ModelClient, platforms: list[Platform]) ->
         if new_numbers:
             record.log(f"variant {v.platform} dropped: introduced numerals {sorted(new_numbers)}")
             continue
-        if not v.disclosure_preserved:
-            record.log(f"variant {v.platform} dropped: disclosure not preserved")
+        if AI_ROLE_DISCLOSURE_KEY not in (v.caption or record.draft.caption).lower():
+            record.log(f"variant {v.platform} dropped: disclosure not preserved in the caption")
             continue
         record.variants.append(
             Variant(
@@ -211,4 +211,6 @@ def write_canary(
 
 
 def _numerals(text: str) -> list[str]:
-    return re.findall(r"\d[\d,.]*", text)
+    """Numbers as written, without the sentence punctuation that follows them ("2024."
+    is 2024) and without thousands separators, so "4,000" and "4000" are one numeral."""
+    return [n.replace(",", "") for n in re.findall(r"\d(?:[\d,.]*\d)?", text)]

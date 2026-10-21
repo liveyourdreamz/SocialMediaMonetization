@@ -177,21 +177,43 @@ def run_brief(
     """The whole pipeline on one brief. Mock backend: the sample episode with the brief's
     topic recorded; Anthropic backend: a real draft of the topic from the fetched
     sources and the test-log notes."""
+    from cap.characters import ANCHOR_ELEMENTS, CHARACTER_BLOCKS, needs
     from cap.config import get_settings
     from cap.fetch import fetch_sources
     from cap.models import get_client
 
     rec = record or new_brief(channel, topic)
     ch = rec.channel_id
-    sources = fetch_sources(urls) if urls else SOURCES
-    if urls:
-        rec.log(f"fetched {len(sources)} source(s)")
+    real = get_settings().model_backend.value != "mock"
+    test_log = test_log.strip()
+    if real:
+        # A real drafter may use only what the brief supplies: fetched pages and the
+        # test log. Nothing from the sample episode, nothing from memory.
+        if not urls and not test_log:
+            rec.log(f"parked: brief has no material; add {needs(ch.value)}")
+            rec.status = PostStatus.PARKED
+            store.put(rec)
+            return rec
+        sources = fetch_sources(urls) if urls else []
+        dead = [s["url"] for s in sources if s["body"].startswith("[fetch failed")]
+        if dead:
+            rec.log(f"could not fetch: {', '.join(dead)}")
+        sources = [s for s in sources if not s["body"].startswith("[fetch failed")]
+        if urls:
+            rec.log(f"fetched {len(sources)} source(s)")
+        rec.brief.anchor_elements = ANCHOR_ELEMENTS[ch.value][:1]
+        blocks, anchors = CHARACTER_BLOCKS, ANCHOR_ELEMENTS
+        logs = {rec.post_id: test_log} if test_log else {}
+    else:
+        sources = fetch_sources(urls) if urls else SOURCES
+        blocks, anchors = {ch.value: CHARACTER_BLOCK}, {ch.value: ["test log"]}
+        logs = {rec.post_id: test_log or TEST_LOG}
     client = get_client(happy_fixtures())
     deps = PipelineDeps(
         client=client,
-        anchor_elements={ch.value: ["test log"]},
-        character_blocks={ch.value: CHARACTER_BLOCK},
-        test_logs={rec.post_id: test_log.strip() or TEST_LOG},
+        anchor_elements=anchors,
+        character_blocks=blocks,
+        test_logs=logs,
         render_dir=Path(get_settings().data_dir) / "renders",
     )
     out = run_post(rec, sources, deps)

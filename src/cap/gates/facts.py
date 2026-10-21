@@ -140,14 +140,19 @@ def check_claim(
 ) -> tuple[ClaimCheckResult, bool]:
     cc = ClaimCheckResult(claim_text=claim.text, source_url=claim.source_url)
     injection = False
-    if claim.source_url:
+    if claim.source_url and claim.source_url.startswith(TESTLOG_SCHEME):
+        # the drafter cites test-log entries as testlog://<anything>; the post has one
+        candidates = [s for s in sources if s.url.startswith(TESTLOG_SCHEME)]
+        if candidates:
+            claim.source_url = cc.source_url = candidates[0].url
+    elif claim.source_url:
         candidates = [s for s in sources if s.url == claim.source_url]
-        if not candidates:
-            cc.final = "missing_source"
-            cc.note = "cited source is not among the post's sources"
-            return cc, injection
     else:
         candidates = list(sources)
+    if claim.source_url and not candidates:
+        cc.final = "missing_source"
+        cc.note = "cited source is not among the post's sources"
+        return cc, injection
     if not candidates:
         cc.final = "missing_source"
         cc.note = "no sources on the post"

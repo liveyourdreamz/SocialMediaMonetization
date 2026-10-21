@@ -73,8 +73,17 @@ def script_text(record: PostRecord, cut: str | None = None) -> str:
     return text.replace(OPENING_SLOT, human if human else "").strip()
 
 
+def _clean(p: str) -> str:
+    """Strip markdown the drafter may add (headings, emphasis, rules): it would be read
+    aloud and shown on a slide otherwise."""
+    p = re.sub(r"^\s*(#{1,6}|[-*_]{3,})\s*", "", p, flags=re.M)
+    p = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", p)
+    return p.strip()
+
+
 def paragraphs(text: str) -> list[str]:
-    parts = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    parts = [_clean(p) for p in re.split(r"\n\s*\n", text)]
+    parts = [p for p in parts if re.search(r"\w", p)]  # nothing to say or show otherwise
     out: list[str] = []
     for p in parts:  # keep each slide readable: split long paragraphs at sentences
         if len(p) <= 420:
@@ -285,7 +294,9 @@ def _duration(path: Path) -> float:
             pass
     # fall back to ffmpeg's own report
     exe = _ffmpeg_exe()
-    r = subprocess.run([exe, "-i", str(path)], capture_output=True, text=True)
+    r = subprocess.run(
+        [exe, "-i", str(path)], capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
     m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", r.stderr)
     if not m:
         raise RenderError(f"cannot read duration of {path.name}")
@@ -309,7 +320,11 @@ def _ffprobe() -> str | None:
 
 def _ffmpeg(args: list[str]) -> None:
     r = subprocess.run(
-        [_ffmpeg_exe(), "-y", "-loglevel", "error", *args], capture_output=True, text=True
+        [_ffmpeg_exe(), "-y", "-loglevel", "error", *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if r.returncode != 0:
         raise RenderError(r.stderr.strip()[-800:])

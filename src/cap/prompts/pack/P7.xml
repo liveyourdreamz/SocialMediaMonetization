@@ -21,7 +21,7 @@ A Short or Reel is a window onto the full episode, not a new piece. Viewers who 
 </criteria>
 
 <examples>
-<example id="standard"><input>10-minute Falak episode; Short limit 60 s.</input><output>{"platform":"youtube_short","duration_s":50,"script_cut":"cold open, lines 1-9","title":"...","disclosure_preserved":true}</output></example>
+<example id="standard"><input>10-minute Falak episode; Short limit 60 s.</input><output>{"platform":"youtube_short","duration_s":50,"script_cut":"<the cold open's sentences, verbatim from the script>","title":"...","disclosure_preserved":true}</output></example>
 <example id="edge_caption"><input>Draft caption exceeds the Instagram limit.</input><output>{"platform":"instagram","caption":"<shortened by deleting the second sentence; disclosure prefix first>"}</output></example>
 <example id="dropped"><input>Every candidate beat relies on a figure explained earlier in the episode.</input><output>{"platform":"youtube_short","dropped":true,"explanation":"no self-contained beat under 60 s without an orphaned claim"}</output></example>
 </examples>

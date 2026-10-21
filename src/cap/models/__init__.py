@@ -41,6 +41,7 @@ log = logging.getLogger(__name__)
 Tainted = NewType("Tainted", str)
 
 MAX_TOKENS = {"low": 8192, "medium": 16384, "high": 32768, "xhigh": 32768, "max": 32768}
+MAX_OUTPUT_TOKENS = 128_000  # the 5.5 models' hard output limit; a larger request is a 400
 GET_SOURCES_TOOL: dict[str, Any] = {
     "name": "get_sources",
     "description": "Returns the fetched sources for this run, one JSON object per source.",
@@ -169,7 +170,8 @@ class ModelClient(ABC):
             if last.stop_reason == "model_context_window_exceeded":
                 break  # retrying identically is pointless
             if last.stop_reason == "max_tokens":
-                call.max_tokens *= 4  # Pack section 1: retry once with a larger limit
+                # Pack section 1: retry once with a larger limit, within the model's cap
+                call.max_tokens = min(call.max_tokens * 4, MAX_OUTPUT_TOKENS)
                 continue
             parsed, why = _parse(last.raw, output_model, spec)
             if parsed is not None:
@@ -312,7 +314,14 @@ class AnthropicClient(ModelClient):
             )
         import anthropic  # imported here so the mock path never needs the SDK
 
-        self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
+        # An explicit timeout: with the SDK default, any non-streaming call whose
+        # max_tokens exceeds ~21k raises before the request is sent ("Streaming is
+        # required..."), which parked every high-effort prompt on the first laptop run.
+        self._client = anthropic.Anthropic(
+            api_key=settings.anthropic_api_key.get_secret_value(),
+            timeout=anthropic.Timeout(1200.0, connect=10.0),
+            max_retries=2,
+        )
 
     def build_request(self, call: ModelCall) -> dict[str, Any]:
         """The exact request body; separated from the send so tests can check it."""
