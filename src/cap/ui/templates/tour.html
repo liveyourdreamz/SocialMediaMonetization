@@ -154,7 +154,20 @@
   {# ---- 9 render ----------------------------------------------------------------- #}
   {% elif stop.key == 'render' and ready %}
   {% if record.asset.kind == 'video' %}
-  <video controls playsinline preload="metadata" style="width: 100%; border-radius: var(--radius-md); background: #000" poster="/assets/{{ record.post_id }}/thumbnail.png"><source src="/assets/{{ record.post_id }}/long.mp4" type="video/mp4"></video>
+  <video id="tour-video" controls playsinline preload="auto" style="width: 100%; border-radius: var(--radius-md); background: #000" poster="/assets/{{ record.post_id }}/thumbnail.png"><source src="/assets/{{ record.post_id }}/long.mp4" type="video/mp4"></video>
+  <p id="tour-video-note" class="muted" style="font-size: 13px; line-height: 18px">Press play. <a href="/assets/{{ record.post_id }}/long.mp4" target="_blank" rel="noopener">Open the file directly</a>{% if record.asset.short_uri %} · <a href="/assets/{{ record.post_id }}/short.mp4" target="_blank" rel="noopener">the Short</a>{% endif %} · {{ asset_size }}</p>
+  <script>
+    (function () {
+      var v = document.getElementById('tour-video'), n = document.getElementById('tour-video-note');
+      var codes = {1: 'loading was aborted', 2: 'a network error stopped the download', 3: 'the file could not be decoded', 4: 'this browser cannot play this file format'};
+      function fail(why) { n.innerHTML = '<strong>The player could not show the video:</strong> ' + why + '. The file itself is on disk (' + {{ asset_size | tojson }} + '). Open it directly: <a href="/assets/{{ record.post_id }}/long.mp4" target="_blank" rel="noopener">long.mp4</a>'; }
+      v.addEventListener('error', function () { fail(v.error ? (codes[v.error.code] || ('error ' + v.error.code)) + (v.error.message ? ' (' + v.error.message + ')' : '') : 'unknown error'); });
+      var src = v.querySelector('source'); if (src) src.addEventListener('error', function () { fail('the file did not load (' + src.src + ')'); });
+      v.addEventListener('loadedmetadata', function () { n.firstChild.textContent = 'Ready: ' + Math.round(v.duration) + ' s. Press play. '; });
+    })();
+  </script>
+  {% elif record.asset.uri %}
+  <div class="card stack-sm"><span class="eyebrow">No video on this record</span><span style="font-size: 14px">The renderer was set to <code>text</code> when this post ran, so the asset is a text stand-in ({{ record.asset.uri }}). Set <code>CAP_RENDERER=video</code> in <code>.env</code> (the default) and start the tour again.</span></div>
   {% endif %}
   <div class="card tight kv">
     <span>Kind</span><span>{{ 'video' if record.asset.kind == 'video' else 'text stand-in (CAP_RENDERER=text)' }}</span>

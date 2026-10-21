@@ -369,7 +369,21 @@ def _assemble(slides: list[tuple[Path, Path]], out: Path, size: tuple[int, int])
         parts.append(seg)
     lst = out.with_suffix(".txt")
     lst.write_text("".join(f"file '{p.name}'\n" for p in parts), encoding="utf-8")
-    _ffmpeg(["-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(out)])
+    _ffmpeg(
+        [
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(lst),
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(out),
+        ]
+    )
     for p in parts:
         p.unlink(missing_ok=True)
     lst.unlink(missing_ok=True)

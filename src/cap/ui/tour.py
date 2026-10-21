@@ -157,7 +157,14 @@ def context(record: PostRecord, n: int, pkg: dict[str, Any] | None = None) -> di
     running = record.status.value in RUNNING
     ready = not stop.needs or stop.needs in have
     source = SOURCES[0]
+    size = ""
+    if record.asset.uri:
+        from pathlib import Path
+
+        f = Path(record.asset.uri)
+        size = f"{f.stat().st_size / 1e6:.1f} MB on disk" if f.exists() else "file missing on disk"
     return {
+        "asset_size": size,
         "stop": stop,
         "n": n,
         "total": len(STOPS),
