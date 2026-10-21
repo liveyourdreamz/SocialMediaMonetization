@@ -121,3 +121,44 @@ def test_the_card_shows_the_video_being_approved(tmp_path, monkeypatch):
     c = next(p for p in store.posts.values() if p.channel_id.value == "C")
     html = api.get(f"/posts/{c.post_id}").text
     assert f"/assets/{c.post_id}/long.mp4" in html and "الفيديو الذي توافق عليه" in html
+
+
+def test_screenshots_uploaded_with_a_brief_are_kept_for_the_renderer(tmp_path, monkeypatch):
+    import io
+
+    from PIL import Image
+
+    from cap.approval.app import Store
+    from cap.config import get_settings
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
+    monkeypatch.setenv("CAP_RENDERER", "text")
+    get_settings.cache_clear()
+    try:
+        store = Store()
+        api = Browser(create_app(store), follow_redirects=False)
+        api.sign_in("hemant")
+        buf = io.BytesIO()
+        Image.new("RGB", (200, 100), (10, 20, 30)).save(buf, "PNG")
+        r = api.post(
+            "/operator/brief",
+            data={
+                "csrf": api.cookies.get("cap_csrf"),
+                "channel": "A",
+                "topic": "Shots",
+                "urls": "",
+                "test_log": "Day 1: ok",
+            },
+            files=[
+                ("media", ("day3.png", buf.getvalue(), "image/png")),
+                ("media", ("notes.txt", b"x", "text/plain")),
+            ],
+        )
+        assert r.status_code == 303
+        rec = next(p for p in store.posts.values() if p.brief.topic == "Shots")
+        folder = tmp_path / "d" / "media" / rec.post_id
+        assert sorted(p.name for p in folder.iterdir()) == ["00-day3.png"]
+        assert any("1 screenshot(s) attached" in h for h in rec.history)
+    finally:
+        get_settings.cache_clear()

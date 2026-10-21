@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -421,6 +421,7 @@ def ui_router(store: Store) -> APIRouter:
         topic: str = Form(...),
         urls: str = Form(default=""),
         test_log: str = Form(default=""),
+        media: list[UploadFile] = File(default=[]),
         reviewer: Reviewer = Depends(current_reviewer),
     ) -> Response:
         """Brief -> draft -> critic -> adapt -> gates -> render -> queue, in the
@@ -433,6 +434,22 @@ def ui_router(store: Store) -> APIRouter:
         from cap.demo.seed import new_brief, run_brief
 
         record = new_brief(channel, topic.strip())
+        # screenshots from the test: the renderer shows them in the screen panel, in order
+        saved = 0
+        for i, up in enumerate(media):
+            name = Path(up.filename or "").name
+            if not name or Path(name).suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp"):
+                continue
+            folder = Path(get_settings().data_dir) / "media" / record.post_id
+            folder.mkdir(parents=True, exist_ok=True)
+            data = up.file.read()
+            if not data or len(data) > 15_000_000:
+                continue
+            (folder / f"{i:02d}-{name}").write_bytes(data)
+            saved += 1
+        if saved:
+            record.log(f"{saved} screenshot(s) attached; they take the screen panel in order")
+            record.media_manifest.real_place_or_event_depicted = False
         store.put(record)
         url_list = [u.strip() for u in urls.replace(",", "\n").splitlines() if u.strip()]
 

@@ -20,7 +20,7 @@
   <div class="stack-sm">
     <h1 style="font-size: 22px; line-height: 28px; font-weight: 600">What goes out</h1>
     {% if record.asset.kind == 'video' %}
-    <p class="muted" style="font-size: 14px; line-height: 20px">The rendered video, as the token binds it: {{ record.asset.duration_s | round | int }} s, voice {{ record.asset.voice }} (a Microsoft neural voice for now; ElevenLabs replaces it), typographic frames in Proof, the AI-character label on every frame. Not yet C2PA-signed.</p>
+    <p class="muted" style="font-size: 14px; line-height: 20px">The rendered video, as the token binds it: {{ record.asset.duration_s | round | int }} s, voice {{ record.asset.voice }} (a Microsoft neural voice for now; ElevenLabs replaces it), {{ record.asset.voice and settings.channel_characters.get(record.channel_id.value, 'the character') }} on screen beside a reconstruction of what the script describes, the AI-character label on every frame. Not yet C2PA-signed.</p>
     {% else %}
     <p class="muted" style="font-size: 14px; line-height: 20px">This post was rendered as text only (the renderer was off). The package below is what the adapters receive.</p>
     {% endif %}

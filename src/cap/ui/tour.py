@@ -91,9 +91,12 @@ STOPS: list[Stop] = [
     Stop(
         "render",
         "Voice and video",
-        "The script is spoken by Patch's voice, cut into typographic frames in the Proof "
-        "palette, and assembled by ffmpeg into the long video, the Short and a "
-        "thumbnail. The file's hash is recorded: the approval token will bind to it.",
+        "Patch is on screen, speaking the script (the lens brightens with the voice) "
+        "beside a reconstruction of what each sentence describes: the seven-day strip, "
+        "the app's sync failing on day 3, local-then-cloud with the vendor's claim, the "
+        "stopwatch to the measured 12 seconds, the verdict stamp. Screenshots uploaded "
+        "with a brief take the panel instead. ffmpeg assembles the long video, the "
+        "Short and a thumbnail; the file's hash is recorded for the approval token.",
         needs="asset",
     ),
     Stop(

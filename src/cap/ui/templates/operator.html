@@ -12,7 +12,7 @@
   {% if error %}<div class="error" role="alert"><strong>Not run.</strong> {{ error }}</div>{% endif %}
   <section class="stack">
     <div class="row"><h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em; margin: 0">File a brief</h2><a href="/tour" class="linkbtn" style="font-size: 14px">Guided tour first?</a></div>
-    <form method="post" action="/operator/brief" class="card stack"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <form method="post" action="/operator/brief" class="card stack" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
       <p class="muted" style="font-size: 14px; line-height: 20px">Runs the whole pipeline in the background: sources fetched, draft, critic, platform cuts, the four gates, voice and video rendered, then the card lands in the queue. A real draft with a rendered video takes a few minutes; this page refreshes itself. {% if settings.model_backend.value == 'mock' %}The drafter is the mock backend until an API key is in <code>.env</code>, so the draft is the sample episode.{% else %}The drafter may only use what you give it here: Patch (A) needs your test log; Falak (B, C) needs one or more source URLs. A brief with neither parks at once.{% endif %}</p>
       <div class="field">
         <label for="channel">Channel</label>
@@ -29,6 +29,11 @@
       <div class="field">
         <label for="test_log">Your test log or notes (first-hand facts the script may use)</label>
         <textarea class="input" id="test_log" name="test_log" rows="3" placeholder="e.g. Day 3: sync failed twice at 08:12 and 08:40"></textarea>
+      </div>
+      <div class="field">
+        <label for="media">Screenshots from the test (optional; png or jpg, shown on screen in this order)</label>
+        <input class="input" id="media" name="media" type="file" accept=".png,.jpg,.jpeg,.webp" multiple>
+        <span class="muted" style="font-size: 13px">Without screenshots the renderer draws a labelled reconstruction of what the script describes.</span>
       </div>
       <button class="btn primary sm" type="submit">Run the pipeline</button>
     </form>

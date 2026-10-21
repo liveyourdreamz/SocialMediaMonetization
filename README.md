@@ -49,7 +49,7 @@ What is scrappy, and what replaces it later (all behind one function each):
 | --- | --- | --- |
 | Sources | URLs you paste; a fetcher pulls the text | Trend-research agent (P4) |
 | Voice | Microsoft neural voices via `edge-tts`, free | ElevenLabs private voices (D21) |
-| Picture | Typographic explainer in Proof: title card, the spoken text on screen, the AI-character label, an end card of sources | Character animation and credited imagery |
+| Picture | Scenes: Patch or Falak drawn from the Anchor Registry, animated and speaking in time with the voice, beside a screen panel showing what each sentence describes (the app's sync failing, a stopwatch to the measured figure, the local-then-cloud flow, the verdict stamp, a figure from the logbook) or screenshots uploaded with the brief; reconstructions are labelled; the AI-character label on every frame; a sources card | Richer character animation, credited footage, C2PA signing |
 | Signing | none yet | C2PA manifest (D29) |
 | Publish | local folder, or YouTube via your OAuth client | YouTube, then Meta, by the scheduler |
 

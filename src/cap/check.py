@@ -86,13 +86,28 @@ def _ffmpeg() -> str:
 
 
 def _frames() -> str:
-    from cap.render import _raqm, _title_card
+    from cap.render import _raqm
+    from cap.render import scenes as sc
 
-    en = _title_card((1920, 1080), "A week with a note app", "Patch", "A", arabic=False)
-    ar = _title_card((1920, 1080), "تحلية مياه البحر: كيف تعمل", "Falak", "C", arabic=True)
+    lay = sc.layout((1920, 1080))
+    patch_plan = sc.plan(
+        ["On day 3 the sync failed twice.", "Our test measured 12 seconds on average."],
+        character="Patch", title="We tested Notely", topic="Notely test", on_screen=[], media=[],
+    )  # fmt: skip
+    en = sc.frame(
+        patch_plan[1], 10, 48, 2.0, lay, character="Patch", channel="A", level=0.7, arabic=False
+    )
+    falak_plan = sc.plan(
+        ["من المدار، تبدو محطة التحلية كنقطة بيضاء.", "تنتج 500 مليون لتر يومياً."],
+        character="Falak", title="تحلية المياه", topic="تحلية", on_screen=[], media=[], arabic=True,
+    )  # fmt: skip
+    ar = sc.frame(
+        falak_plan[1], 5, 48, 1.0, lay, character="Falak", channel="C", level=0.3, arabic=True
+    )
     if en.size != (1920, 1080) or ar.size != (1920, 1080):
         raise RuntimeError("frame size wrong")
-    return f"English and Arabic title cards; Arabic shaping via {'raqm' if _raqm() else 'reshaper+bidi'}"
+    kinds = [p.kind for p in patch_plan] + [p.kind for p in falak_plan]
+    return f"Patch and Falak scenes drawn ({', '.join(kinds)}); Arabic shaping via {'raqm' if _raqm() else 'reshaper+bidi'}"
 
 
 def _video() -> str:

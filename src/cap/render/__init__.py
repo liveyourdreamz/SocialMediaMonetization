@@ -2,10 +2,14 @@
 
 Voice: Microsoft neural voices through edge-tts (free, no key; English and Arabic).
     The PRD's ElevenLabs private voices (D21) replace this behind the same function.
-Picture: a typographic explainer in Proof. Title card; one slide per paragraph with
-    the spoken text readable on screen; the character's name and the "AI character"
-    label on every frame (R-16, disclosure); an end card with the sources. No
-    generated faces, no stock footage, nothing pretending to be a person.
+Picture: scenes (cap.render.scenes). The character (Patch or Falak, drawn from the
+    Anchor Registry, animated, speaking in time with the voice) stands beside a screen
+    panel that shows what the paragraph is about: the app failing to sync, a stopwatch
+    to the measured number, the local-then-cloud flow, the verdict stamp, a figure; or
+    a screenshot uploaded with the brief. The spoken sentence runs underneath; the
+    character tag and the "AI character" label are on every frame (R-16); a sources
+    card ends it. No generated faces, no stock footage, nothing pretending to be a
+    person; reconstructed app views are labelled as reconstructions.
 Assembly: ffmpeg, the static binary that imageio-ffmpeg ships.
 Output: the long-form 1920x1080 mp4 (what the approval token binds to), a 1080x1920
     Short when the post has a Short cut, a thumbnail png. C2PA signing (D29) is not
@@ -390,11 +394,73 @@ def _assemble(slides: list[tuple[Path, Path]], out: Path, size: tuple[int, int])
     return total
 
 
+def _concat(parts: list[Path], out: Path) -> None:
+    lst = out.with_suffix(".txt")
+    lst.write_text("".join(f"file '{p.name}'\n" for p in parts), encoding="utf-8")
+    _ffmpeg(
+        [
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(lst),
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(out),
+        ]
+    )
+    lst.unlink(missing_ok=True)
+
+
 # ---------------------------------------------------------------- entry point
+
+
+def _encode_scene(
+    frames_iter,
+    n: int,
+    size: tuple[int, int],
+    mp3: Path,
+    out: Path,  # type: ignore[no-untyped-def]
+) -> None:
+    """Pipe raw frames into ffmpeg with the scene's audio -> one mp4 segment."""
+    from cap.render.scenes import FPS
+
+    cmd = [
+        _ffmpeg_exe(), "-y", "-loglevel", "error",
+        "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{size[0]}x{size[1]}", "-r", str(FPS), "-i", "-",
+        "-i", str(mp3),
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "22",
+        "-c:a", "aac", "-b:a", "128k", "-shortest", str(out),
+    ]  # fmt: skip
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    assert proc.stdin is not None
+    try:
+        for im in frames_iter:
+            proc.stdin.write(im.tobytes())
+    except BrokenPipeError:
+        pass
+    finally:
+        proc.stdin.close()
+    err = proc.stderr.read().decode("utf-8", "replace") if proc.stderr else ""
+    if proc.wait() != 0:
+        raise RenderError(err.strip()[-800:] or "ffmpeg failed while encoding a scene")
+
+
+def _media_files(record: PostRecord) -> list[Path]:
+    """Screenshots uploaded with the brief, in order, if any (cap-data/media/<post>/)."""
+    d = Path(get_settings().data_dir) / "media" / record.post_id
+    if not d.is_dir():
+        return []
+    return sorted(p for p in d.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"))
 
 
 def render(record: PostRecord, out_dir: Path, *, voice_fn=speak) -> RenderResult:  # type: ignore[no-untyped-def]
     """Render the approved package. `voice_fn` is injectable so tests run offline."""
+    from cap.render import scenes as sc
+
     s = get_settings()
     channel = record.channel_id.value
     character = s.channel_characters.get(channel, "")
@@ -403,42 +469,63 @@ def render(record: PostRecord, out_dir: Path, *, voice_fn=speak) -> RenderResult
     voice = VOICES.get((character, lang), "en-GB-RyanNeural")
     work = out_dir / record.post_id
     work.mkdir(parents=True, exist_ok=True)
+    sources = sorted(
+        {
+            c.source_url
+            for c in record.draft.claims
+            if c.source_url and not c.source_url.startswith("testlog://")
+        }
+    )
+    tool = sc.tool_name(record.draft.title, record.brief.topic) if character == "Patch" else ""
 
     def build(text: str, title: str, size: tuple[int, int], name: str) -> tuple[Path, float]:
         paras = paragraphs(text)
         if not paras:
             raise RenderError("nothing to say: the script is empty")
-        slides: list[tuple[Path, Path]] = []
-        # title card, spoken as the title
-        png = work / f"{name}-000.png"
-        _title_card(size, title, character, channel, arabic).save(png)
-        mp3 = work / f"{name}-000.mp3"
-        voice_fn(title, voice, mp3)
-        slides.append((png, mp3))
-        for i, p in enumerate(paras, 1):
-            png = work / f"{name}-{i:03d}.png"
-            _slide(size, p, i, len(paras), character, channel, arabic).save(png)
-            mp3 = work / f"{name}-{i:03d}.mp3"
-            voice_fn(p, voice, mp3)
-            slides.append((png, mp3))
-        sources = sorted(
-            {
-                c.source_url
-                for c in record.draft.claims
-                if c.source_url and not c.source_url.startswith("testlog://")
-            }
+        lay = sc.layout(size)
+        plan = sc.plan(
+            [title, *sc.units(paras)],
+            character=character or "Patch",
+            title=title,
+            topic=record.brief.topic,
+            on_screen=list(record.draft.on_screen_text),
+            media=_media_files(record),
+            arabic=arabic,
         )
-        png = work / f"{name}-end.png"
-        _end_card(size, sources, character, channel, arabic).save(png)
-        mp3 = work / f"{name}-end.mp3"
-        _silence(3.0, mp3)
-        slides.append((png, mp3))
+        plan[0].kind = "talk"  # the title is spoken over the character, then the story
+        plan.append(sc.Scene(kind="sources", text="", sentences=[]))
+        segs: list[Path] = []
+        t_run = 0.0
+        total = 0.0
+        for i, scene in enumerate(plan):
+            mp3 = work / f"{name}-{i:03d}.mp3"
+            if scene.kind == "sources":
+                _silence(3.0, mp3)
+            else:
+                voice_fn(scene.text, voice, mp3)
+            dur = _duration(mp3)
+            n = max(2, int(round(dur * sc.FPS)))
+            levels = sc.loudness(mp3, n) if scene.kind != "sources" else [0.0] * n
+            seg = work / f"{name}-{i:03d}.mp4"
+
+            def frames(scene=scene, n=n, levels=levels, t0=t_run):  # type: ignore[no-untyped-def]
+                for k in range(n):
+                    yield sc.frame(
+                        scene, k, n, t0 + k / sc.FPS, lay,
+                        character=character or "Patch", channel=channel,
+                        level=levels[k], arabic=arabic, sources=sources,
+                    )  # fmt: skip
+
+            _encode_scene(frames(), n, size, mp3, seg)
+            segs.append(seg)
+            t_run += n / sc.FPS
+            total += dur
+            mp3.unlink(missing_ok=True)
         video = work / f"{name}.mp4"
-        dur = _assemble(slides, video, size)
-        for p_, a_ in slides:
+        _concat(segs, video)
+        for p_ in segs:
             p_.unlink(missing_ok=True)
-            a_.unlink(missing_ok=True)
-        return video, dur
+        return video, total
 
     video, duration = build(script_text(record), record.draft.title, (1920, 1080), "long")
     short: Path | None = None
@@ -453,8 +540,13 @@ def render(record: PostRecord, out_dir: Path, *, voice_fn=speak) -> RenderResult
             "short",
         )
     thumb = work / "thumbnail.png"
-    _title_card(
-        (1280, 720), record.draft.thumbnail_text or record.draft.title, character, channel, arabic
+    sc.thumbnail(
+        (1280, 720),
+        record.draft.thumbnail_text or record.draft.title,
+        character or "Patch",
+        channel,
+        tool,
+        arabic,
     ).save(thumb)
     digest = hashlib.sha256(video.read_bytes()).hexdigest()
     return RenderResult(
