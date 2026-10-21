@@ -12,8 +12,10 @@
   <form id="brief" method="post" action="/operator/brief" class="card stack" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
     <fieldset class="field" style="border: 0; padding: 0; margin: 0">
       <legend class="eyebrow" style="margin-bottom: 8px">Channel</legend>
+      <p class="meta" style="margin: 0 0 8px">Auto picks Falak for science and how-things-work, Patch for an AI tool you have tested.</p>
       <div class="chips">
-        {% for ch in settings.channels %}<label class="chip"><input type="radio" name="channel" value="{{ ch }}" {% if loop.first %}checked{% endif %}><span>{{ ch }} · {{ settings.channel_characters.get(ch, '') }}{% if settings.channel_languages.get(ch) == 'ar' %} · عربي{% endif %}</span></label>{% endfor %}
+        <label class="chip"><input type="radio" name="channel" value="auto" checked><span>Auto</span></label>
+        {% for ch in settings.channels %}<label class="chip"><input type="radio" name="channel" value="{{ ch }}"><span>{{ ch }} · {{ settings.channel_characters.get(ch, '') }}{% if settings.channel_languages.get(ch) == 'ar' %} · عربي{% endif %}</span></label>{% endfor %}
       </div>
     </fieldset>
     <div class="field">

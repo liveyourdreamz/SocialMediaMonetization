@@ -750,6 +750,8 @@ _RUNNING = ("drafting", "gated", "rendering")
 def _stopped_at(record: PostRecord) -> str:
     """For a parked or rejected post: the step whose work did not finish."""
     last = " ".join(record.history[-3:]).lower()
+    if "brief needs" in last:
+        return "brief"
     if any(k in last for k in ("render", "voice", "ffmpeg")):
         return "video"
     if any(k in last for k in ("gate", "ethics", "made-for-kids", "injection", "p10", "facts")):

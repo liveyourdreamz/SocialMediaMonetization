@@ -185,3 +185,34 @@ def test_flag_mode_unconfirmed_claims_reach_the_card_block_mode_rejects(keyed, m
         if mode == "flag":
             assert any("unconfirmed, flagged on the card" in h for h in rec.history)
             assert any(c.status != "supported" for c in rec.draft.claims)
+
+
+def test_auto_routes_science_to_falak_and_patch_without_a_log_stops_at_the_brief(
+    keyed, monkeypatch
+):
+    """21 Oct: 'How rainbows work' went to Patch because the form pre-selected A."""
+    from cap import routing
+    from cap.approval.app import Store
+    from cap.ui.views import workflow
+    from tests.test_ui import Browser, create_app
+
+    assert routing._heuristic("How rainbows work") == "B"
+    assert routing._heuristic("I tested the Notion AI app for a week") == "A"
+    monkeypatch.setattr(routing, "route", lambda topic: ("B", "chosen by the model"))
+    started: list[str] = []
+    monkeypatch.setattr("cap.demo.seed.run_brief", lambda *a, **k: started.append(a[1]))
+    store = Store()
+    api = Browser(create_app(store), follow_redirects=False)
+    api.sign_in("hemant")
+    assert 'value="auto" checked' in api.get("/operator").text
+    api.form("/operator/brief", channel="auto", topic="How rainbows work")
+    rec = next(p for p in store.posts.values() if p.brief.topic == "How rainbows work")
+    assert rec.channel_id.value == "B" and any(
+        "B · Falak (chosen by the model)" in h for h in rec.history
+    )
+    # Patch with no test log: stops at step 1 with the reason, no model call
+    r = api.form("/operator/brief", channel="A", topic="Notion AI")
+    rec = next(p for p in store.posts.values() if p.brief.topic == "Notion AI")
+    f = workflow(rec)
+    assert f["stopped"] and f["steps"][0]["state"] == "stopped" and "test log" in f["reason"]
+    assert r.headers["location"] == f"/posts/{rec.post_id}"

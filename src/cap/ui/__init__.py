@@ -452,7 +452,33 @@ def ui_router(store: Store) -> APIRouter:
 
         from cap.demo.seed import new_brief, run_brief
 
+        auto = channel == "auto"
+        how = ""
+        if auto:
+            from cap.routing import route
+
+            channel, how = route(topic.strip())
+        elif channel not in get_settings().channels:
+            raise HTTPException(422, "unknown channel")
         record = new_brief(channel, topic.strip())
+        if auto:
+            record.log(
+                f"channel: {channel} · {get_settings().channel_characters.get(channel, '')} ({how})"
+            )
+        if (
+            channel == "A"
+            and not test_log.strip()
+            and get_settings().model_backend.value != "mock"  # the sample carries its own log
+        ):
+            # Patch reports a test Hemant ran; without the log there is nothing to report
+            record.status = PostStatus.PARKED
+            record.log(
+                "parked: brief needs a test log. Patch's episodes report a test you ran "
+                "(timings, what broke); add your test log under More, or choose Falak "
+                "for an explainer"
+            )
+            store.put(record)
+            return RedirectResponse(f"/posts/{record.post_id}", status_code=303)
         # screenshots from the test: the renderer shows them in the screen panel, in order
         saved = 0
         for i, up in enumerate(media):
