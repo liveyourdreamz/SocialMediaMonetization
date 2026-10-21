@@ -57,9 +57,10 @@ def test_the_tour_runs_idea_to_published_on_a_real_post(tmp_path, monkeypatch):
     assert "youtube_short" in api.get(f"/tour/{post_id}/7").text
     assert "Judge A" in api.get(f"/tour/{post_id}/8").text
     assert rec.asset.sha256 in api.get(f"/tour/{post_id}/9").text
-    assert f"/posts/{post_id}" in api.get(f"/tour/{post_id}/10").text
-    assert "No verdict yet" in api.get(f"/tour/{post_id}/11").text
-    assert "No token yet" in api.get(f"/tour/{post_id}/12").text
+    assert "Open Connections" in api.get(f"/tour/{post_id}/10").text
+    assert f"/posts/{post_id}" in api.get(f"/tour/{post_id}/11").text
+    assert "No verdict yet" in api.get(f"/tour/{post_id}/12").text
+    assert "No token yet" in api.get(f"/tour/{post_id}/13").text
 
     # the real card, the real verdict, the real outbox, the real publish
     api.get(f"/posts/{post_id}")
@@ -70,12 +71,16 @@ def test_the_tour_runs_idea_to_published_on_a_real_post(tmp_path, monkeypatch):
         spot_check_supported="yes",
     )
     assert api.form(f"/posts/{post_id}/finalise").status_code == 303
-    html = api.get(f"/tour/{post_id}/11").text
+    html = api.get(f"/tour/{post_id}/12").text
     assert "approve" in html and "Seven days with Notely." in html
-    assert "Open the Outbox preview" in api.get(f"/tour/{post_id}/12").text
+    assert "Open the Outbox preview" in api.get(f"/tour/{post_id}/13").text
     assert api.form(f"/posts/{post_id}/publish").status_code == 303
-    html = api.get(f"/tour/{post_id}/13").text
-    assert "End of the tour" in html and store.get(post_id).status == PostStatus.PUBLISHED
+    html = api.get(f"/tour/{post_id}/14").text
+    assert (
+        "End of the tour" in html
+        and "written" in html
+        and store.get(post_id).status == PostStatus.PUBLISHED
+    )
     # a tour post is never counted as a real episode's data
     assert store.get(post_id).flags.tour
 

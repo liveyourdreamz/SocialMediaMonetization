@@ -100,6 +100,15 @@ STOPS: list[Stop] = [
         needs="asset",
     ),
     Stop(
+        "connections",
+        "Your channels: credentials and connections",
+        "Before anything can leave the laptop, each platform is connected once on the "
+        "Connections screen: you enter the developer-app credentials from that "
+        "platform's console (kept only in cap-data on this laptop, never shown back in "
+        "full), then press Connect and sign in to your own YouTube, Facebook Page and "
+        "Instagram, or TikTok account. The local folder is always a destination.",
+    ),
+    Stop(
         "card",
         "The queue and the blind card",
         "The post lands in your queue. The card shows the script and the claims but not "
@@ -120,15 +129,18 @@ STOPS: list[Stop] = [
         "The Outbox",
         "Finalising issues a signed token bound to the post, the video's hash and your "
         "name. The post waits in the Outbox with a preview of exactly what goes out per "
-        "platform. Nothing has left the laptop yet.",
+        "platform and the destinations to choose from: the connected channels are "
+        'ticked, the rest say "connect it first". Nothing has left the laptop yet.',
         needs="token",
     ),
     Stop(
         "publish",
         "Publish",
         "The publisher verifies the token and the file hash, refuses canaries and "
-        "changed renders, then sends. On the laptop it writes a folder; with a YouTube "
-        "channel connected the same step uploads unlisted, labelled as AI content.",
+        "changed renders, then sends to every destination you ticked, recording each "
+        "result or error separately. A tour post goes to the local folder only; a real "
+        "post goes to your connected channels: YouTube unlisted with the synthetic-media "
+        "flag, a Facebook Reel, Instagram when the video has a public URL, TikTok.",
         needs="published",
     ),
 ]

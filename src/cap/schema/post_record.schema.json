@@ -1018,6 +1018,27 @@
           ],
           "default": null,
           "title": "Published At"
+        },
+        "urls": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Urls",
+          "type": "object"
+        },
+        "errors": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Errors",
+          "type": "object"
+        },
+        "destinations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Destinations",
+          "type": "array"
         }
       },
       "title": "Publish",

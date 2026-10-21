@@ -324,24 +324,42 @@ def ui_router(store: Store) -> APIRouter:
     ) -> Response:
         _approver(reviewer)
         record = store.get(post_id)
+        from cap import connections as conn
+
+        available = conn.connected_destinations()
         return render(
             request,
             "preview.html",
             reviewer,
             record=record,
             pkg=views.package(record),
+            destinations=[
+                (k, label, k in available) for k, label in conn.DESTINATION_LABELS.items()
+            ],
+            any_connected=len(available) > 1,
+            results=views.publish_results(record),
             content_rtl=views.is_rtl(record.channel_id.value),
             channel_label=views.channel_label(record.channel_id.value),
             refusal=request.query_params.get("refused", ""),
         )
 
     @r.post("/posts/{post_id}/publish", dependencies=[Depends(check_csrf)])
-    def publish_post(post_id: str, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
+    async def publish_post(
+        request: Request, post_id: str, reviewer: Reviewer = Depends(current_reviewer)
+    ) -> Response:
         _approver(reviewer)
         if store.paused:
             return RedirectResponse("/paused", status_code=303)
         record = store.get(post_id)
-        refused = publish_now(store, record)
+        form = await request.form()
+        from cap.connections import DESTINATION_LABELS
+
+        chosen = [
+            str(d)
+            for d in form.getlist("destinations")
+            if isinstance(d, str) and d in DESTINATION_LABELS and d != "local"
+        ]
+        refused = publish_now(store, record, chosen)
         if refused:
             from urllib.parse import quote
 
@@ -468,6 +486,138 @@ def ui_router(store: Store) -> APIRouter:
         threading.Thread(target=work, name=f"brief-{record.post_id[:8]}", daemon=True).start()
         return RedirectResponse("/operator", status_code=303)
 
+    def _connections_summary() -> str:
+        from cap import connections as conn
+
+        names = [
+            conn.status(k)["account"].get("name", k)
+            for k in conn.PLATFORMS
+            if conn.status(k)["connected"]
+        ]
+        return ("connected: " + ", ".join(names)) if names else "none connected yet"
+
+    # ---- connections: the channels a post can go to -----------------------------
+    conn_state_cookie = "cap_conn_state"
+
+    def _conn_redirect(request: Request, platform: str) -> str:
+        return str(request.url_for("connection_callback", platform=platform))
+
+    @r.get("/connections", response_class=HTMLResponse)
+    def connections_page(
+        request: Request, reviewer: Reviewer = Depends(current_reviewer)
+    ) -> Response:
+        _approver(reviewer)
+        from cap import connections as conn
+
+        return render(
+            request,
+            "connections.html",
+            reviewer,
+            tab="operator",
+            platforms=[conn.status(k) for k in conn.PLATFORMS],
+            redirect_uris={k: _conn_redirect(request, k) for k in conn.PLATFORMS},
+            signin_uri=str(request.url_for("google_callback")),
+            saved=request.query_params.get("saved", ""),
+            connected=request.query_params.get("connected", ""),
+            error=request.query_params.get("error", ""),
+        )
+
+    @r.post("/connections/{platform}/credentials", dependencies=[Depends(check_csrf)])
+    async def connection_credentials(
+        request: Request, platform: str, reviewer: Reviewer = Depends(current_reviewer)
+    ) -> Response:
+        """The developer-app credentials, typed into the form, kept under cap-data only."""
+        _approver(reviewer)
+        from cap import connections as conn
+
+        if platform not in conn.PLATFORMS:
+            raise HTTPException(404, "no such platform")
+        form = await request.form()
+        values = {k: str(v) for k, v in form.items() if k != "csrf" and isinstance(v, str)}
+        conn.set_credentials(platform, values)
+        return RedirectResponse(f"/connections?saved={platform}", status_code=303)
+
+    @r.get("/connections/{platform}/connect")
+    def connection_start(
+        request: Request, platform: str, reviewer: Reviewer = Depends(current_reviewer)
+    ) -> Response:
+        _approver(reviewer)
+        from cap import connections as conn
+
+        if platform not in conn.PLATFORMS:
+            raise HTTPException(404, "no such platform")
+        if not conn.status(platform)["credentials_complete"]:
+            return RedirectResponse(
+                f"/connections?error={platform}: enter the credentials first", status_code=303
+            )
+        state = conn.new_state()
+        resp = RedirectResponse(
+            conn.auth_url(platform, _conn_redirect(request, platform), state), status_code=303
+        )
+        resp.set_cookie(
+            conn_state_cookie,
+            f"{platform}:{state}",
+            max_age=600,
+            httponly=True,
+            samesite="lax",
+            secure=secure_cookies(),
+        )
+        return resp
+
+    @r.get("/connections/{platform}/callback", name="connection_callback")
+    def connection_callback(
+        request: Request,
+        platform: str,
+        code: str = "",
+        state: str = "",
+        error: str = "",
+        reviewer: Reviewer = Depends(current_reviewer),
+    ) -> Response:
+        _approver(reviewer)
+        from urllib.parse import quote
+
+        from cap import connections as conn
+
+        if platform not in conn.PLATFORMS:
+            raise HTTPException(404, "no such platform")
+        expected = request.cookies.get(conn_state_cookie, "")
+        if error or not code:
+            return RedirectResponse(
+                f"/connections?error={quote(f'{platform}: {error or "no code returned"}')}",
+                status_code=303,
+            )
+        if expected != f"{platform}:{state}":
+            return RedirectResponse(
+                f"/connections?error={quote(f'{platform}: the sign-in did not start here; try again')}",
+                status_code=303,
+            )
+        try:
+            conn.complete(platform, code, _conn_redirect(request, platform))
+        except Exception as e:  # noqa: BLE001 - the screen shows why
+            resp = RedirectResponse(
+                f"/connections?error={quote(f'{platform}: {type(e).__name__}: {str(e)[:160]}')}",
+                status_code=303,
+            )
+            resp.delete_cookie(conn_state_cookie)
+            return resp
+        resp = RedirectResponse(f"/connections?connected={platform}", status_code=303)
+        resp.delete_cookie(conn_state_cookie)
+        return resp
+
+    @r.post("/connections/{platform}/disconnect", dependencies=[Depends(check_csrf)])
+    def connection_disconnect(
+        platform: str,
+        forget: str = Form(default=""),
+        reviewer: Reviewer = Depends(current_reviewer),
+    ) -> Response:
+        _approver(reviewer)
+        from cap import connections as conn
+
+        if platform not in conn.PLATFORMS:
+            raise HTTPException(404, "no such platform")
+        (conn.forget if forget else conn.disconnect)(platform)
+        return RedirectResponse("/connections", status_code=303)
+
     # ---- guided tour: one worked Patch episode, idea to published ----------------
     @r.get("/tour", response_class=HTMLResponse)
     def tour_intro(request: Request, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
@@ -499,12 +649,16 @@ def ui_router(store: Store) -> APIRouter:
         if not record.flags.tour:
             raise HTTPException(404, "not a tour post")
         pkg = views.package(record) if record.approval.token else None
+        from cap import connections as conn
+
         return render(
             request,
             "tour.html",
             reviewer,
             record=record,
             stops=tour.STOPS,
+            platforms=[conn.status(k) for k in conn.PLATFORMS],
+            results=views.publish_results(record),
             **tour.context(record, n, pkg),
         )
 
@@ -539,6 +693,7 @@ def ui_router(store: Store) -> APIRouter:
             published=views.published(store),
             recent=views.recent_briefs(store),
             outbox=views.outbox(store),
+            connections_summary=_connections_summary(),
             running=any(
                 p.status.value in ("drafting", "gated", "rendering") for p in store.posts.values()
             ),

@@ -154,6 +154,26 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
         step("Digest renders", r.status_code == 200)
         r = api.get("/paused")
         step("Paused renders", r.status_code == 200)
+        r = api.get("/connections")
+        step(
+            "Connections renders with the three platforms",
+            r.status_code == 200 and "TikTok" in r.text and "Connect" in r.text,
+        )
+        r = form(
+            "/connections/youtube/credentials",
+            client_id="smoke-id.apps",
+            client_secret="smoke-secret",
+        )
+        step(
+            "credentials saved, never echoed",
+            r.status_code == 303 and "smoke-secret" not in api.get("/connections").text,
+        )
+        r = api.get("/connections/youtube/connect")
+        step(
+            "Connect sends the browser to Google's consent page",
+            r.status_code == 303
+            and r.headers["location"].startswith("https://accounts.google.com/"),
+        )
         r = form("/tour/start")
         step("guided tour starts a tour post", r.status_code == 303)
         tour_id = r.headers["location"].split("/")[2]

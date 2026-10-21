@@ -688,3 +688,47 @@ def package(record: PostRecord) -> dict[str, Any]:
         "sha256": record.asset.sha256,
         "token_present": bool(record.approval.token),
     }
+
+
+# destination key -> the adapter that carries it (its result and error keys)
+_ADAPTER_FOR = {
+    "local": "local",
+    "youtube_long": "youtube",
+    "youtube_short": "youtube_short",
+    "facebook": "facebook",
+    "instagram": "instagram",
+    "tiktok": "tiktok",
+}
+_ADAPTER_GROUP = {"facebook": "meta", "instagram": "meta"}
+
+
+def publish_results(record: PostRecord) -> list[dict[str, Any]]:
+    """Per chosen destination: sent / written / not sent, with the link or the reason."""
+    from cap.connections import DESTINATION_LABELS
+
+    out: list[dict[str, Any]] = []
+    pub = record.publish
+    for d in pub.destinations or ["local"]:
+        key = _ADAPTER_FOR.get(d, d)
+        group = _ADAPTER_GROUP.get(d, "")
+        pid = pub.platform_post_ids.get(key) or (pub.platform_post_ids.get(group) if group else "")
+        url = pub.urls.get(key) or pub.urls.get(d, "")
+        err = pub.errors.get(key) or pub.errors.get(d) or (pub.errors.get(group) if group else "")
+        if d == "local":
+            state, text = ("written", pid) if pid else ("not written", err or "")
+        elif pid and not err:
+            state, text = "sent", url or pid
+        elif err:
+            state, text = "not sent", err
+        else:
+            state, text = "not sent", "no result recorded"
+        out.append(
+            {
+                "key": d,
+                "label": DESTINATION_LABELS.get(d, d),
+                "state": state,
+                "text": text,
+                "url": url if state == "sent" else "",
+            }
+        )
+    return out

@@ -103,6 +103,7 @@
 
   <section class="stack">
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Channels and cadence</h2>
+    <a href="/connections" class="card tight link" style="text-decoration: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px"><span class="stack-sm" style="gap: 2px"><span class="eyebrow">Connections</span><span style="font-size: 15px">YouTube, Facebook Page and Instagram, TikTok: credentials and account connections{% if connections_summary %} · {{ connections_summary }}{% endif %}</span></span><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></a>
     <div class="card tight kv">
       {% for ch in settings.channels %}<span>{{ ch }} · {{ settings.channel_characters.get(ch, '') }}</span><span>{{ settings.channel_languages.get(ch, 'en') }} · {{ settings.longform_per_channel_per_month }} long-form, {{ settings.shorts_cap_per_channel_per_month }} Shorts a month</span>{% endfor %}
       <span>Idle pause</span><span>{{ settings.queue_idle_pause_hours }} hours</span>

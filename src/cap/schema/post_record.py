@@ -334,6 +334,9 @@ class Approval(Strict):
 class Publish(Strict):
     platform_post_ids: dict[str, str] = Field(default_factory=dict)
     published_at: datetime | None = None
+    urls: dict[str, str] = Field(default_factory=dict)  # destination -> where to see it
+    errors: dict[str, str] = Field(default_factory=dict)  # destination -> why it did not go
+    destinations: list[str] = Field(default_factory=list)  # what the approver chose
 
 
 class Metrics(Strict):

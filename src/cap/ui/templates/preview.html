@@ -69,13 +69,38 @@
     <span>Rendered file</span><span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all">{{ pkg.asset_name or '—' }}{% if not pkg.asset_exists %} (missing on disk){% endif %}</span>
     <span>Bound hash</span><span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all">{{ pkg.sha256[:16] }}…</span>
     <span>Approval token</span><span>{{ 'issued, held by the server' if pkg.token_present else 'none' }}</span>
-    <span>Destination</span><span>{% if settings.publisher == 'youtube' %}YouTube, {{ settings.youtube_privacy }}, synthetic-media flag on{% else %}local folder (cap-data/published); set CAP_PUBLISHER=youtube after `cap youtube auth`{% endif %}</span>
   </section>
 
+  {% if published %}
+  <section class="card stack-sm">
+    <span class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Where it went</span>
+    <div class="kv" style="font-size: 14px">
+      {% for r in results %}
+      <span>{{ r.label }}</span>
+      <span><span class="{{ 'word-pass' if r.state in ('sent', 'written') else 'word-signal' }}">{{ r.state }}</span>{% if r.url %} · <a href="{{ r.url }}" target="_blank" rel="noopener" style="word-break: break-all">{{ r.url }}</a>{% elif r.text %} · <span style="word-break: break-all">{{ r.text }}</span>{% endif %}</span>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   {% if approved and not paused %}
-  <form method="post" action="/posts/{{ record.post_id }}/publish" class="stack-sm"><input type="hidden" name="csrf" value="{{ csrf }}">
+  <form method="post" action="/posts/{{ record.post_id }}/publish" class="card stack"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <span class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Where it goes</span>
+    {% if record.flags.tour %}
+    <p class="muted" style="font-size: 14px; line-height: 20px">A tour post goes to the local folder only, whatever is connected.</p>
+    {% else %}
+    <div class="stack-sm">
+      {% for key, label, available in destinations %}
+      <label style="display: flex; gap: 10px; align-items: flex-start; min-height: 44px; font-size: 15px; line-height: 22px">
+        <input type="checkbox" name="destinations" value="{{ key }}" {% if key == 'local' %}checked disabled{% elif available %}checked{% else %}disabled{% endif %} style="width: 20px; height: 20px; margin-top: 1px">
+        <span>{{ label }}{% if key != 'local' and not available %} <span class="muted">· <a href="/connections">connect it first</a></span>{% endif %}{% if key == 'youtube_long' and available %} <span class="muted">· {{ settings.youtube_privacy }}, synthetic-media flag on, not made for kids</span>{% endif %}</span>
+      </label>
+      {% endfor %}
+    </div>
+    {% if not any_connected %}<p class="muted" style="font-size: 13px">No channel is connected yet, so this publish writes the local folder only. <a href="/connections">Connect your channels</a> and the boxes above switch on.</p>{% endif %}
+    {% endif %}
     <button class="btn primary" type="submit">Publish now</button>
-    <p class="meta" style="text-align: center">The publisher verifies the token against the rendered file before anything leaves. The scheduler presses this button at the posting slot once it exists.</p>
+    <p class="meta" style="text-align: center">The publisher verifies the token against the rendered file before anything leaves; each destination's result is shown here afterwards. The scheduler presses this button at the posting slot once it exists.</p>
   </form>
   {% endif %}
 </main>

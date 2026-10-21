@@ -39,7 +39,7 @@ from cap.approval.card import (
 )
 from cap.approval.identity import Reviewer, reviewer_identity
 from cap.config import get_settings
-from cap.publisher import PlatformAdapter, PublishRefusedError, publish
+from cap.publisher import PlatformAdapter, PublishRefusedError
 from cap.schema.post_record import Channel, Decision, PostRecord, PostStatus, ReasonCode
 
 
@@ -57,6 +57,12 @@ class Store:
         self.analytics: dict[str, Any] = {}  # agent 14's figures, with source and pull time
         self.analytics_note: str = ""  # "example figures" in demo mode; else empty
         self.publisher: PlatformAdapter | None = None  # set by the app; None = approve only
+
+    def local_published_dir(self) -> Path:
+        """Where the local record of every publish goes (cap-data/published)."""
+        from cap.config import get_settings
+
+        return Path(get_settings().data_dir) / "published"
 
     def get(self, post_id: str) -> PostRecord:
         try:
@@ -181,26 +187,41 @@ def finalise_and_issue(store: Store, record: PostRecord, reviewer: str, **kw: An
     return issued
 
 
-def publish_now(store: Store, record: PostRecord) -> str | None:
+def publish_now(
+    store: Store, record: PostRecord, destinations: list[str] | None = None
+) -> str | None:
     """The plain-code publisher (PRD 4.6) on one approved post: verifies the token
     against the rendered file's hash and refuses canaries, failed gates, changed
     files and anything not approved. Returns the refusal text, or None on success.
-    The scheduler calls this at the posting slot; the Outbox button calls it now."""
-    if store.publisher is None:
-        return "no platform adapter is configured"
+    `destinations` are the Outbox's choices (youtube_long, facebook, ...); the local
+    folder is always first. A tour post never leaves the laptop. The scheduler calls
+    this at the posting slot; the Outbox button calls it now."""
+    from cap.publisher import adapters_for, publish_to
+
     if not record.approval.token:
         return "no approval token on the record"
+    chosen = [] if record.flags.tour else list(destinations or [])
+    if store.publisher is not None and not destinations:
+        adapters: list[PlatformAdapter] = [store.publisher]
+    else:
+        adapters = adapters_for(chosen, store.local_published_dir())
+    record.publish.destinations = ["local", *chosen]
     try:
-        publish(
+        publish_to(
             record,
             Path(record.asset.uri),
             tok.ApprovalToken.decode(record.approval.token),
-            store.publisher,
+            adapters,
         )
     except PublishRefusedError as e:
         record.log(f"publish refused: {e}")
         store.put(record)
         return str(e)
+    except Exception as e:  # noqa: BLE001 - a platform error on the first destination
+        record.publish.errors[adapters[0].name] = f"{type(e).__name__}: {str(e)[:200]}"
+        record.log(f"publish failed at {adapters[0].name}: {type(e).__name__}")
+        store.put(record)
+        return f"{adapters[0].name}: {type(e).__name__}: {str(e)[:120]}"
     store.put(record)
     return None
 

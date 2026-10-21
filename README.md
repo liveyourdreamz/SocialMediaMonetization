@@ -61,14 +61,27 @@ console, two values in `.env`, and your e-mail mapped to your reviewer name. The
 login page then offers "Sign in with Google"; the local name box stays as a fallback
 on the laptop and is refused outside local.
 
+## Connecting your channels
+
+Operator > **Connections**. For each platform: enter the developer-app credentials
+from its console (YouTube: a Google OAuth client with the YouTube Data API enabled;
+Meta: a Business app with Facebook Login for Business; TikTok: an app with the
+Content Posting API), register the redirect URI the screen shows, save, press
+**Connect** and sign in to your own account. Credentials and tokens are kept in
+`cap-data/connections/` (0600, git-ignored) and never shown back in full. On each
+post's Outbox you tick the destinations; the local folder is always one; each
+destination's result or error is listed afterwards. Instagram needs the video at a
+public URL, so from a laptop only the Facebook Reel is sent. The three adapters
+have not yet been run against live accounts by us: the first publish is the test.
+
 ## Guided tour
 
 The Portfolio screen has a **Guided tour**: one worked Patch episode (a seven-day
-test of a note app) in thirteen stops, idea to published. The first nine show what
+test of a note app) in fourteen stops, idea to published. The first nine show what
 each agent produced (brief, material, character block, script, claims, critic,
-platform cuts, the four gates, the rendered video); the last four you do for real
-on that post: open the blind card, give your verdict, see the Outbox, publish to
-the local folder. It needs no API key; the drafter uses prepared output, the voice
+platform cuts, the four gates, the rendered video); then your channels and their
+credentials (Connections); the last four you do for real on that post: open the
+blind card, give your verdict, choose destinations on the Outbox, publish. It needs no API key; the drafter uses prepared output, the voice
 and video are rendered for real.
 
 ## Testing the solution

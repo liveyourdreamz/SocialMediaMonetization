@@ -59,15 +59,18 @@ def _service():  # type: ignore[no-untyped-def]
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
+    from cap import connections
+
+    info = connections.youtube_credentials_json()
     path = token_path()
-    if not path.exists():
-        raise RuntimeError("no YouTube credentials; run `cap youtube auth` first")
-    creds = Credentials.from_authorized_user_info(
-        json.loads(path.read_text(encoding="utf-8")), SCOPES
-    )
-    if not creds.valid and creds.expired and creds.refresh_token:
+    if info is None and path.exists():  # the older `cap youtube auth` file
+        info = json.loads(path.read_text(encoding="utf-8"))
+    if info is None:
+        raise RuntimeError("YouTube is not connected; open Connections in the app")
+    creds = Credentials.from_authorized_user_info(info, info.get("scopes") or SCOPES)
+    if not creds.valid and creds.refresh_token:
         creds.refresh(Request())
-        path.write_text(creds.to_json(), encoding="utf-8")
+        connections.save_youtube_token(json.loads(creds.to_json()))
     return build("youtube", "v3", credentials=creds, cache_discovery=False)
 
 
@@ -126,6 +129,7 @@ class YouTubeAdapter:
         description = description_for(record)
         tags = [t for t in record.brief.topic.split() if len(t) > 3][:10]
         vid = self._upload_one(yt, asset, record.draft.title, description, tags)
+        record.publish.urls["youtube"] = f"https://www.youtube.com/watch?v={vid}"
         thumb = Path(record.asset.thumbnail_uri) if record.asset.thumbnail_uri else None
         if thumb and thumb.exists():
             try:
@@ -142,4 +146,5 @@ class YouTubeAdapter:
             title = (cut.title if cut and cut.title else record.draft.title) + " #Shorts"
             sid = self._upload_one(yt, short, title, description, tags)
             record.publish.platform_post_ids["youtube_short"] = sid
+            record.publish.urls["youtube_short"] = f"https://www.youtube.com/shorts/{sid}"
         return vid

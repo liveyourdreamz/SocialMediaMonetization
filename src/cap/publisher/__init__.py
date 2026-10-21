@@ -100,3 +100,47 @@ def publish(
     record.status = PostStatus.PUBLISHED
     record.log(f"published to {adapter.name} as {post_id}")
     return record
+
+
+def publish_to(
+    record: PostRecord,
+    asset: Path,
+    token: ApprovalToken,
+    adapters: list[PlatformAdapter],
+) -> PostRecord:
+    """The same checks once, then every chosen destination in turn. One platform
+    failing never undoes another: each result or error is recorded against its
+    name, and the post is published if at least one destination took it."""
+    if not adapters:
+        raise PublishRefusedError("no destination chosen")
+    first, rest = adapters[0], adapters[1:]
+    publish(record, asset, token, first)  # the checks, then the first destination
+    for adapter in rest:
+        try:
+            pid = adapter.upload(record, asset)
+            record.publish.platform_post_ids[adapter.name] = pid
+            record.log(f"published to {adapter.name} as {pid}")
+        except Exception as e:  # noqa: BLE001 - recorded per destination, shown on the Outbox
+            record.publish.errors[adapter.name] = f"{type(e).__name__}: {str(e)[:200]}"
+            record.log(f"{adapter.name} refused or failed: {type(e).__name__}")
+    return record
+
+
+def adapters_for(destinations: list[str], local_dir: Path) -> list[PlatformAdapter]:
+    """Destination keys (from the Outbox form) -> adapters, local folder always first
+    so the record of what went out exists even if a platform fails."""
+    out: list[PlatformAdapter] = [LocalFolderAdapter(local_dir)]
+    wanted = set(destinations)
+    if wanted & {"youtube_long", "youtube_short"}:
+        from cap.publisher.youtube import YouTubeAdapter
+
+        out.append(YouTubeAdapter())
+    if wanted & {"facebook", "instagram"}:
+        from cap.publisher.meta import MetaAdapter
+
+        out.append(MetaAdapter())
+    if "tiktok" in wanted:
+        from cap.publisher.tiktok import TikTokAdapter
+
+        out.append(TikTokAdapter())
+    return out
