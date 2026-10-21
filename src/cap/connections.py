@@ -54,7 +54,11 @@ PLATFORMS: dict[str, PlatformSpec] = {
         console_note=(
             "Google Cloud console > APIs & Services > Credentials > Create OAuth client "
             "(Web application). Enable the YouTube Data API v3 on the project. The same "
-            "client also serves Google sign-in."
+            "client also serves Google sign-in. Then Google Auth Platform > Audience: while "
+            "the app's publishing status is Testing, add your own Google account under Test "
+            "users or Google refuses the sign-in (403 access_denied); Testing also expires "
+            "the token every 7 days, so once Connect works, press Publish app there. "
+            "Unverified is fine for your own account: click through the warning once."
         ),
         auth_url="https://accounts.google.com/o/oauth2/v2/auth",
         token_url="https://oauth2.googleapis.com/token",
