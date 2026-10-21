@@ -74,6 +74,17 @@ BLOCKED_DOMAINS = [
     "substack.com",
 ]
 MAX_SOURCES = 5
+# Domains the search API has refused for this process ("not accessible to our user
+# agent"); dropped from the allow-list on retry so one refusal never sinks a search.
+_REFUSED: set[str] = set()
+
+
+def refused_domains(message: str) -> list[str]:
+    """The domains a 400 from the search tool names as inaccessible."""
+    m = re.search(r"not accessible[^\[]*\[([^\]]*)\]?", message)
+    if not m:
+        return []
+    return [d.strip(" '\"") for d in m.group(1).split(",") if d.strip(" '\"")]
 
 
 def _domain_ok(url: str, channel: str) -> bool:
@@ -104,7 +115,7 @@ def _search_with_model(topic: str, channel: str) -> tuple[list[str], str]:
             "topic named"
         )
     else:
-        tool["allowed_domains"] = SCIENCE_DOMAINS
+        tool["allowed_domains"] = [d for d in SCIENCE_DOMAINS if d not in _REFUSED]
         what = (
             "pages that explain the mechanism with figures and dates: science and "
             "earth-observation agencies, encyclopaedic references, peer-reviewed journals"
@@ -116,13 +127,25 @@ def _search_with_model(topic: str, channel: str) -> tuple[list[str], str]:
         "found in them. Finish with one line per chosen page, in this exact form and "
         "nothing else:\nURL | why this page\n"
     )
-    resp = client.messages.create(
-        model=SONNET,
-        max_tokens=2000,
-        system=system,
-        messages=[{"role": "user", "content": f"Topic: {topic}\nChannel: {channel}"}],
-        tools=[tool],  # type: ignore[list-item]
-    )
+    resp = None
+    for _ in range(3):  # drop any domain the API refuses, then try again
+        try:
+            resp = client.messages.create(
+                model=SONNET,
+                max_tokens=2000,
+                system=system,
+                messages=[{"role": "user", "content": f"Topic: {topic}\nChannel: {channel}"}],
+                tools=[tool],  # type: ignore[list-item]
+            )
+            break
+        except anthropic.BadRequestError as e:
+            bad = refused_domains(str(e))
+            if not bad or "allowed_domains" not in tool:
+                raise
+            _REFUSED.update(bad)
+            tool["allowed_domains"] = [d for d in tool["allowed_domains"] if d not in _REFUSED]
+    if resp is None:
+        raise RuntimeError("the search API kept refusing domains")
     searched: set[str] = set()
     text = ""
     for block in resp.content:
@@ -169,22 +192,32 @@ def find_sources(topic: str, channel: str) -> tuple[list[dict[str, Any]], list[s
     log: list[str] = []
     urls: list[str] = []
     s = get_settings()
-    try:
-        if s.model_backend.value == "anthropic" and s.anthropic_api_key is not None:
+    if s.model_backend.value == "anthropic" and s.anthropic_api_key is not None:
+        try:
             urls, note = _search_with_model(topic, channel)
             log.append(
                 f"research: the scout searched the source library and chose {len(urls)} page(s)"
             )
+            if _REFUSED:
+                log.append(
+                    "research: left out domains the search API cannot reach: "
+                    + ", ".join(sorted(_REFUSED))
+                )
             if note and not urls:
                 log.append(f"research: {note[:200]}")
-        else:
-            urls = _search_wikipedia(topic)
+        except Exception as e:  # noqa: BLE001 - fall back; the scout alone never parks a post
             log.append(
-                f"research (no API key): Wikipedia search for '{topic}' gave {len(urls)} page(s)"
+                f"research: the scout failed ({type(e).__name__}: {str(e)[:120]}); "
+                "falling back to Wikipedia search"
             )
-    except Exception as e:  # noqa: BLE001 - the post parks with this line, never a 500
-        log.append(f"research failed: {type(e).__name__}: {str(e)[:160]}")
-        return [], log
+            urls = []
+    if not urls:
+        try:
+            urls = _search_wikipedia(topic)
+            log.append(f"research: Wikipedia search for '{topic}' gave {len(urls)} page(s)")
+        except Exception as e:  # noqa: BLE001 - the post parks with this line, never a 500
+            log.append(f"research failed: {type(e).__name__}: {str(e)[:160]}")
+            return [], log
     urls = [u for u in urls if _domain_ok(u, channel)]
     docs = fetch.fetch_sources(urls)  # via the module, so a test's patch of it holds
     good: list[dict[str, Any]] = []
