@@ -80,6 +80,105 @@ def test_a_real_brief_gets_its_channels_character_and_parks_without_material(tmp
         assert rec.status == PostStatus.PARKED and "add one or more source URLs" in rec.history[-1]
         rec = run_brief(store, "B", "desalination", urls=["https://example.org/desal"])
         assert seen and 'character="Falak"' in seen[0] and "Notely" not in seen[0]
-        assert rec.brief.anchor_elements == ["from orbit"]
+        assert rec.brief.anchor_elements[:1] == ["from orbit"] and rec.brief.format_id == "from_orbit"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_fetch_failures_say_why_and_wikipedia_uses_its_rest_api(monkeypatch):
+    import httpx
+
+    from cap import fetch
+
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.headers.get("user-agent", "")))
+        u = str(request.url)
+        if "rest_v1/page/html/Rainbow" in u:
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text="<html><body><p>A rainbow is an optical phenomenon.</p></body></html>",
+            )
+        if "blocks-scripts.example" in u:
+            if "Mozilla" in request.headers.get("user-agent", ""):
+                return httpx.Response(
+                    200,
+                    headers={"content-type": "text/html"},
+                    text="<html><body><main>Served to browsers only.</main></body></html>",
+                )
+            return httpx.Response(403)
+        if "gone.example" in u:
+            return httpx.Response(404)
+        raise httpx.ConnectError("name or service not known")
+
+    real = httpx.Client
+
+    class Patched(real):
+        def __init__(self, *a, **kw):
+            kw["transport"] = httpx.MockTransport(handler)
+            super().__init__(*a, **kw)
+
+    monkeypatch.setattr(httpx, "Client", Patched)
+    docs = fetch.fetch_sources(
+        [
+            "https://en.wikipedia.org/wiki/Rainbow",
+            "https://blocks-scripts.example/page",
+            "https://gone.example/x",
+            "https://nowhere.invalid/",
+        ]
+    )
+    assert docs[0]["body"].startswith("A rainbow") and seen[0][0].endswith("/page/html/Rainbow")
+    assert (
+        docs[1]["body"] == "Served to browsers only."
+        and "Mozilla" in seen[-3][1]
+        or "Mozilla" in seen[2][1]
+    )
+    assert fetch.failed_reason(docs[2]) == "HTTP 404 from the site"
+    assert fetch.failed_reason(docs[3]).startswith("could not connect")
+    assert fetch.failed_reason(docs[0]) is None
+
+
+def test_a_brief_whose_pages_all_failed_parks_with_the_reasons(tmp_path, monkeypatch):
+    from cap.approval.app import Store
+    from cap.config import get_settings
+    from cap.demo.seed import new_brief, run_brief
+    from cap.schema.post_record import PostStatus
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
+    monkeypatch.setenv("CAP_MODEL_BACKEND", "anthropic")
+    monkeypatch.setenv("CAP_ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+    get_settings.cache_clear()
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "cap.models.get_client", lambda fixtures=None: calls.append("model") or None
+    )
+    monkeypatch.setattr(
+        "cap.fetch.fetch_sources",
+        lambda urls, timeout=20.0: [
+            {
+                "url": u,
+                "body": "[fetch failed: HTTP 403 from the site]",
+                "fetched_at": "",
+                "page_date": None,
+            }
+            for u in urls
+        ],
+    )
+    try:
+        store = Store()
+        rec = run_brief(store, "B", "Rainbows", urls=["https://x.example/a"])
+        assert rec.status == PostStatus.PARKED and calls == []
+        assert (
+            any("HTTP 403" in h for h in rec.history)
+            and "fix or replace the links" in rec.history[-1]
+        )
+        b = new_brief("B", "Rainbows").brief
+        assert (
+            b.format_id == "from_orbit" and b.claims_allowed and "from orbit" in b.anchor_elements
+        )
+        assert new_brief("A", "x").brief.format_id == "tested_7_days"
     finally:
         get_settings.cache_clear()

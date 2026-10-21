@@ -156,10 +156,39 @@ EXAMPLE_ANALYTICS: dict[str, Any] = {
 }
 
 
+FORMATS = {"A": "tested_7_days", "B": "from_orbit", "C": "from_orbit"}
+CLAIMS_SCOPE = {
+    "A": [
+        "features and behaviour of the tool as logged in the test",
+        "the vendor's own stated claims",
+    ],
+    "B": [
+        "the mechanism as the cited sources describe it",
+        "figures cited from the sources, with dates",
+    ],
+    "C": [
+        "the mechanism as the cited sources describe it",
+        "figures cited from the sources, with dates",
+    ],
+}
+
+
 def new_brief(channel: str, topic: str) -> PostRecord:
-    """The record a brief starts as, visible on the Operator screen while it runs."""
+    """The record a brief starts as, visible on the Operator screen while it runs. The
+    brief builder (P6) is not in the laptop loop, so the format and the claims scope
+    the drafter expects are set here per channel."""
     ch = Channel(channel)
-    rec = PostRecord(channel_id=ch, brief=Brief(topic=topic, anchor_elements=["test log"]))
+    from cap.characters import ANCHOR_ELEMENTS
+
+    rec = PostRecord(
+        channel_id=ch,
+        brief=Brief(
+            topic=topic,
+            format_id=FORMATS[ch.value],
+            anchor_elements=ANCHOR_ELEMENTS[ch.value][:2],
+            claims_allowed=CLAIMS_SCOPE[ch.value],
+        ),
+    )
     rec.status = PostStatus.DRAFTING
     rec.log(f"brief filed: {topic}")
     return rec
@@ -194,14 +223,26 @@ def run_brief(
             rec.status = PostStatus.PARKED
             store.put(rec)
             return rec
+        from cap.fetch import failed_reason
+
         sources = fetch_sources(urls) if urls else []
-        dead = [s["url"] for s in sources if s["body"].startswith("[fetch failed")]
-        if dead:
-            rec.log(f"could not fetch: {', '.join(dead)}")
-        sources = [s for s in sources if not s["body"].startswith("[fetch failed")]
+        for s in sources:
+            why = failed_reason(s)
+            if why:
+                rec.log(f"could not fetch {s['url']}: {why}")
+        sources = [s for s in sources if not failed_reason(s)]
         if urls:
-            rec.log(f"fetched {len(sources)} source(s)")
-        rec.brief.anchor_elements = ANCHOR_ELEMENTS[ch.value][:1]
+            rec.log(f"fetched {len(sources)} of {len(urls)} source(s)")
+        if urls and not sources and not test_log:
+            rec.log(
+                "parked: none of the source pages could be fetched (reasons above); the "
+                "drafter may not use facts from memory, so fix or replace the links and "
+                "file the brief again"
+            )
+            rec.status = PostStatus.PARKED
+            store.put(rec)
+            return rec
+        rec.brief.anchor_elements = ANCHOR_ELEMENTS[ch.value][:2]
         blocks, anchors = CHARACTER_BLOCKS, ANCHOR_ELEMENTS
         logs = {rec.post_id: test_log} if test_log else {}
     else:
