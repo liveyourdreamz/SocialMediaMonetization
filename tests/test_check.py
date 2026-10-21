@@ -76,11 +76,18 @@ def test_a_real_brief_gets_its_channels_character_and_parks_without_material(tmp
     )
     try:
         store = Store()
+        monkeypatch.setattr(
+            "cap.research.find_sources", lambda topic, ch: ([], ["research failed: no network"])
+        )
         rec = run_brief(store, "B", "desalination")
-        assert rec.status == PostStatus.PARKED and "add one or more source URLs" in rec.history[-1]
+        assert (
+            rec.status == PostStatus.PARKED and "no source page could be found" in rec.history[-1]
+        )
         rec = run_brief(store, "B", "desalination", urls=["https://example.org/desal"])
         assert seen and 'character="Falak"' in seen[0] and "Notely" not in seen[0]
-        assert rec.brief.anchor_elements[:1] == ["from orbit"] and rec.brief.format_id == "from_orbit"
+        assert (
+            rec.brief.anchor_elements[:1] == ["from orbit"] and rec.brief.format_id == "from_orbit"
+        )
     finally:
         get_settings.cache_clear()
 
@@ -171,14 +178,107 @@ def test_a_brief_whose_pages_all_failed_parks_with_the_reasons(tmp_path, monkeyp
         store = Store()
         rec = run_brief(store, "B", "Rainbows", urls=["https://x.example/a"])
         assert rec.status == PostStatus.PARKED and calls == []
-        assert (
-            any("HTTP 403" in h for h in rec.history)
-            and "fix or replace the links" in rec.history[-1]
-        )
+        assert any("HTTP 403" in h for h in rec.history)
+        assert "no source page could be found" in rec.history[-1]
         b = new_brief("B", "Rainbows").brief
         assert (
             b.format_id == "from_orbit" and b.claims_allowed and "from orbit" in b.anchor_elements
         )
         assert new_brief("A", "x").brief.format_id == "tested_7_days"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_a_topic_alone_is_enough_the_system_finds_the_sources(tmp_path, monkeypatch):
+    """The PRD's agent 1 finds the sources; Hemant files a topic and approves."""
+    from cap import research
+    from cap.approval.app import Store
+    from cap.config import get_settings
+    from cap.demo import happy_fixtures
+    from cap.demo.seed import run_brief
+    from cap.models import MockClient
+    from cap.schema.post_record import PostStatus
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
+    monkeypatch.setenv("CAP_RENDERER", "text")
+    monkeypatch.setenv("CAP_MODEL_BACKEND", "anthropic")
+    monkeypatch.setenv("CAP_ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+    get_settings.cache_clear()
+    monkeypatch.setattr("cap.models.get_client", lambda fixtures=None: MockClient(happy_fixtures()))
+    asked: list[tuple[str, str]] = []
+
+    def scout(topic, channel):
+        asked.append((topic, channel))
+        return [
+            "https://www.nasa.gov/rainbows",
+            "https://www.reddit.com/r/x",
+            "https://en.wikipedia.org/wiki/Rainbow",
+        ], "chose two"
+
+    monkeypatch.setattr(research, "_search_with_model", scout)
+    monkeypatch.setattr(
+        "cap.fetch.fetch_sources",
+        lambda urls, timeout=20.0: [
+            {
+                "url": u,
+                "body": f"Text from {u}. Notes are stored locally first and then synced.",
+                "fetched_at": "",
+                "page_date": "2026-01-02",
+            }
+            for u in urls
+        ],
+    )
+    try:
+        store = Store()
+        rec = run_brief(store, "B", "How rainbows form")
+        assert asked == [("How rainbows form", "B")]
+        assert rec.status != PostStatus.PARKED
+        assert any("source: https://www.nasa.gov/rainbows (2026-01-02)" in h for h in rec.history)
+        assert not any("reddit" in h for h in rec.history)  # UGC is never a source
+    finally:
+        get_settings.cache_clear()
+
+
+def test_without_a_key_the_scout_uses_wikipedia_search(tmp_path, monkeypatch):
+    import httpx
+
+    from cap import research
+    from cap.config import get_settings
+
+    monkeypatch.chdir(tmp_path)  # never the repository's own .env
+    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
+    monkeypatch.setenv("CAP_MODEL_BACKEND", "mock")
+    get_settings.cache_clear()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        u = str(request.url)
+        if "w/api.php" in u:
+            return httpx.Response(
+                200, json={"query": {"search": [{"title": "Rainbow"}, {"title": "Refraction"}]}}
+            )
+        if "rest_v1/page/html/" in u:
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text="<html><body><p>Light bends.</p></body></html>",
+            )
+        return httpx.Response(404)
+
+    real = httpx.Client
+
+    class Patched(real):
+        def __init__(self, *a, **kw):
+            kw["transport"] = httpx.MockTransport(handler)
+            super().__init__(*a, **kw)
+
+    monkeypatch.setattr(httpx, "Client", Patched)
+    try:
+        docs, log = research.find_sources("rainbows", "B")
+        assert [d["url"] for d in docs] == [
+            "https://en.wikipedia.org/wiki/Rainbow",
+            "https://en.wikipedia.org/wiki/Refraction",
+        ]
+        assert docs[0]["body"] == "Light bends." and any("no API key" in ln for ln in log)
     finally:
         get_settings.cache_clear()

@@ -218,12 +218,8 @@ def run_brief(
     if real:
         # A real drafter may use only what the brief supplies: fetched pages and the
         # test log. Nothing from the sample episode, nothing from memory.
-        if not urls and not test_log:
-            rec.log(f"parked: brief has no material; add {needs(ch.value)}")
-            rec.status = PostStatus.PARKED
-            store.put(rec)
-            return rec
         from cap.fetch import failed_reason
+        from cap.research import find_sources
 
         sources = fetch_sources(urls) if urls else []
         for s in sources:
@@ -232,16 +228,28 @@ def run_brief(
                 rec.log(f"could not fetch {s['url']}: {why}")
         sources = [s for s in sources if not failed_reason(s)]
         if urls:
-            rec.log(f"fetched {len(sources)} of {len(urls)} source(s)")
-        if urls and not sources and not test_log:
+            rec.log(f"fetched {len(sources)} of {len(urls)} pinned source(s)")
+        if not sources:
+            # agent 1: the system finds its own sources; a pinned URL only adds to them
+            found, lines = find_sources(topic, ch.value)
+            for ln in lines:
+                rec.log(ln)
+            sources = found
+            store.put(rec)
+        if not sources and not test_log:
             rec.log(
-                "parked: none of the source pages could be fetched (reasons above); the "
-                "drafter may not use facts from memory, so fix or replace the links and "
-                "file the brief again"
+                "parked: no source page could be found or fetched for this topic (the "
+                "lines above say what was tried); the drafter may not use facts from "
+                "memory. Try a more specific topic, or pin a page URL on the brief."
             )
             rec.status = PostStatus.PARKED
             store.put(rec)
             return rec
+        if ch == Channel.A and not test_log:
+            rec.log(
+                f"note: no test log on the brief; Patch's format needs {needs('A')} for any "
+                "first-hand result, so this episode can only describe the vendor's pages"
+            )
         rec.brief.anchor_elements = ANCHOR_ELEMENTS[ch.value][:2]
         blocks, anchors = CHARACTER_BLOCKS, ANCHOR_ELEMENTS
         logs = {rec.post_id: test_log} if test_log else {}

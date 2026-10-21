@@ -30,18 +30,21 @@ STOPS: list[Stop] = [
     Stop(
         "idea",
         "The idea becomes a brief",
-        "Everything starts with you. From the Operator screen you file a brief: the "
-        "channel, the topic, the pages the drafter may cite and the test log you wrote. "
-        "Nothing is drafted from memory. The worked example is a seven-day test of "
-        "Driftpad, an AI meeting-notes tool. Driftpad is fictional: a real product would "
-        "need a real test, and every number Patch speaks has to trace to a log or a page.",
+        "Everything starts with a topic. From the Operator screen you file a brief: the "
+        "channel and the topic; for Patch, the test log you wrote. The system finds and "
+        "reads the sources itself. Nothing is drafted from memory. The worked example is "
+        "a seven-day test of Driftpad, an AI meeting-notes tool. Driftpad is fictional: a "
+        "real product would need a real test, and every number Patch speaks has to trace "
+        "to a log or a page.",
     ),
     Stop(
         "material",
         "The material: test log and sources",
-        "The pipeline fetches each source URL and keeps the page text with its date. "
-        "These pages and your test log are the only facts the script may contain; the "
-        "facts gate later checks every claim against them.",
+        "The research scout searches the source library for the topic (agencies, "
+        "references and journals for Falak; vendor pages for Patch), fetches each page "
+        "and keeps its text with its date. These pages and your test log are the only "
+        "facts the script may contain; the facts gate later checks every claim against "
+        "them. A URL pinned on the brief is added to what the scout finds.",
     ),
     Stop(
         "character",

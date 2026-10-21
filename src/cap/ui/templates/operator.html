@@ -13,7 +13,7 @@
   <section class="stack">
     <div class="row"><h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em; margin: 0">File a brief</h2><a href="/tour" class="linkbtn" style="font-size: 14px">Guided tour first?</a></div>
     <form method="post" action="/operator/brief" class="card stack" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
-      <p class="muted" style="font-size: 14px; line-height: 20px">Runs the whole pipeline in the background: sources fetched, draft, critic, platform cuts, the four gates, voice and video rendered, then the card lands in the queue. A real draft with a rendered video takes a few minutes; this page refreshes itself. {% if settings.model_backend.value == 'mock' %}The drafter is the mock backend until an API key is in <code>.env</code>, so the draft is the sample episode.{% else %}The drafter may only use what you give it here: Patch (A) needs your test log; Falak (B, C) needs one or more source URLs. A brief with neither parks at once.{% endif %}</p>
+      <p class="muted" style="font-size: 14px; line-height: 20px">Runs the whole pipeline in the background: sources fetched, draft, critic, platform cuts, the four gates, voice and video rendered, then the card lands in the queue. A real draft with a rendered video takes a few minutes; this page refreshes itself. {% if settings.model_backend.value == 'mock' %}The drafter is the mock backend until an API key is in <code>.env</code>, so the draft is the sample episode.{% else %}Give it a topic. The system finds and reads the sources itself (agencies, references and journals for Falak; vendor pages for Patch), and the facts gate checks every claim against them. Patch's "Tested for 7 days" format also needs your test log for any first-hand result.{% endif %}</p>
       <div class="field">
         <label for="channel">Channel</label>
         <select class="input" id="channel" name="channel">{% for ch in settings.channels %}<option value="{{ ch }}">{{ ch }} · {{ settings.channel_characters.get(ch, '') }}</option>{% endfor %}</select>
@@ -23,7 +23,7 @@
         <input class="input" id="topic" name="topic" placeholder="e.g. What a 7-day test of a note app showed" required maxlength="140">
       </div>
       <div class="field">
-        <label for="urls">Source URLs, one per line (the drafter may only claim what these say)</label>
+        <label for="urls">Pin a page (optional): URLs, one per line, used in addition to what the system finds</label>
         <textarea class="input" id="urls" name="urls" rows="3" placeholder="https://…"></textarea>
       </div>
       <div class="field">
