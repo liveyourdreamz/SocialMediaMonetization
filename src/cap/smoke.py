@@ -83,7 +83,10 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
         r = api.get("/queue")
         step("Queue renders", r.status_code == 200)
         r = api.get("/operator")
-        step("Operator renders", r.status_code == 200 and "File a brief" in r.text)
+        step(
+            "Operator renders",
+            r.status_code == 200 and "New post" in r.text and "Your posts" in r.text,
+        )
 
         r = form("/operator/brief", channel="A", topic="Smoke test episode")
         step("file a brief for Patch", r.status_code == 303, f"status {r.status_code}")

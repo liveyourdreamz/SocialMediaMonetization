@@ -88,3 +88,16 @@ Not on any screen: daily views, subscriber deltas, trending topics, a publish bu
 - Chips: unselected (`surface`, `line`), selected (`ink` fill, `on-ink` text), focus ring. One chip selected at a time on the reject sheet.
 - Inputs: default (`line`), focused (`stroke` of `line-strong` plus the focus ring), filled.
 - The paused queue is a full-width `signal` band at the top with `on-signal` text, above everything, until the reviewer reopens the queue. No modal.
+
+## Flow (the workflow component)
+
+Every screen that shows one post answers two questions before anything else: which step is it at, and what is left. `Flow` is that answer, the same seven steps everywhere:
+
+Brief · Draft · Sources · Checks · Video · Your review · Publish
+
+- **Full form** (the post's progress page and its Outbox): a `label` "Step 3 of 7", the step as a `heading` in the system's voice ("Finding sources for each claim", "Ready for your review", "Stopped at checks"), the seven marks on one track, then the one next action as a button or a meta line ("Nothing to do yet; this page updates itself").
+- **Compact form** (the card's header, every row of Your posts): seven short bars and "3/7 · Finding sources".
+- **States are a mark and a word.** Done: `ink` disc with the check. Current: `ink` ring with an `ink` dot, label in `ink` semibold, `aria-current="step"`. Stopped: `signal` disc with `!`, label in `ink`, and the reason in a sentence above the track. To do: `line` ring, label in `muted`. The track between reached steps is `ink`, the rest `line`.
+- **No accent.** Progress is not a link; the only accented thing near a Flow is the back arrow.
+- **Blindness holds.** On the card, Flow says "Step 6 of 7 · Ready for your review" and nothing about how the checks went; that stays for the reveal.
+- **One source of truth.** The step, the headline, the stop reason and the next action come from `views.workflow(record)`; templates never infer them.

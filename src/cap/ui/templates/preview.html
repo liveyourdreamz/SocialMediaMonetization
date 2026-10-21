@@ -11,19 +11,16 @@
 
   {% if refusal %}<div class="error" role="alert"><strong>Not published.</strong> The publisher refused it: {{ refusal }}</div>{% endif %}
 
-  <div class="banner verdict">
-    <span class="eyebrow">{% if published %}Published{% elif approved %}In the outbox{% else %}Not approved{% endif %}</span>
-    <span class="head">{{ record.draft.title }}</span>
-    <span class="facts">{{ channel_label }}{% if approved %} · approved by {{ record.approval.reviewer }} · token issued · waiting for the publisher{% elif published %} · {% for k, v in record.publish.platform_post_ids.items() %}{{ k }}: {{ v }}{% endfor %}{% else %} · {{ record.status.value | replace('_', ' ') }}{% endif %}</span>
-  </div>
+  <header class="stack-sm">
+    <h1 class="read" style="font-size: 26px; line-height: 1.2; font-weight: 600; text-wrap: balance; margin: 0">{{ record.draft.title }}</h1>
+    <span class="meta">{{ channel_label }}{% if approved or published %} · approved by {{ record.approval.reviewer }}{% endif %}</span>
+  </header>
+  {% set flow = workflow(record) %}
+  {% include "_flow.html" %}
 
   <div class="stack-sm">
-    <h1 style="font-size: 22px; line-height: 28px; font-weight: 600">What goes out</h1>
-    {% if record.asset.kind == 'video' %}
-    <p class="muted" style="font-size: 14px; line-height: 20px">The rendered video, as the token binds it: {{ record.asset.duration_s | round | int }} s, voice {{ record.asset.voice }} (a Microsoft neural voice for now; ElevenLabs replaces it), {{ record.asset.voice and settings.channel_characters.get(record.channel_id.value, 'the character') }} on screen beside a reconstruction of what the script describes, the AI-character label on every frame. Not yet C2PA-signed.</p>
-    {% else %}
-    <p class="muted" style="font-size: 14px; line-height: 20px">This post was rendered as text only (the renderer was off). The package below is what the adapters receive.</p>
-    {% endif %}
+    <h2 style="font-size: 22px; line-height: 28px; font-weight: 600; margin: 0">What goes out</h2>
+    <p class="meta">{% if record.asset.kind == 'video' %}{{ record.asset.duration_s | round | int }} s · voice {{ record.asset.voice }} · the file your approval is bound to · not yet C2PA-signed{% else %}text only: the renderer was off{% endif %}</p>
   </div>
 
   {% if record.asset.kind == 'video' %}
@@ -72,7 +69,7 @@
   </section>
 
   {% if published %}
-  <section class="card stack-sm">
+  <section id="where" class="card stack-sm">
     <span class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Where it went</span>
     <div class="kv" style="font-size: 14px">
       {% for r in results %}
@@ -84,7 +81,7 @@
   {% endif %}
 
   {% if approved and not paused %}
-  <form method="post" action="/posts/{{ record.post_id }}/publish" class="card stack"><input type="hidden" name="csrf" value="{{ csrf }}">
+  <form id="publish" method="post" action="/posts/{{ record.post_id }}/publish" class="card stack"><input type="hidden" name="csrf" value="{{ csrf }}">
     <span class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Where it goes</span>
     {% if record.flags.tour %}
     <p class="muted" style="font-size: 14px; line-height: 20px">A tour post goes to the local folder only, whatever is connected.</p>

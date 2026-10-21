@@ -8,33 +8,21 @@
     <span class="muted">{{ channel_label }}</span>
   </div>
 
-  <div class="banner verdict">
-    <span class="eyebrow">{% if running %}In the pipeline{% else %}{{ record.status.value | replace('_', ' ') }}{% endif %}</span>
-    <span class="head">{{ record.draft.title or record.brief.topic }}</span>
-    <span class="facts">{% if running %}{{ record.status.value }} · this page refreshes itself{% elif record.status.value == 'parked' %}did not reach the queue; the last line below says why{% else %}not in the queue{% endif %}</span>
-  </div>
+  <header class="stack-sm">
+    <h1 class="read" style="font-size: 26px; line-height: 1.2; font-weight: 600; text-wrap: balance; margin: 0">{{ record.draft.title or record.brief.topic }}</h1>
+    <span class="meta">{{ channel_label }} · filed {{ record.created_at | day(True, True) }}</span>
+  </header>
 
-  <section class="stack-sm">
-    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Brief</h2>
-    <div class="card tight kv">
-      <span>Topic</span><span>{{ record.brief.topic }}</span>
-      <span>Channel</span><span>{{ channel_label }}</span>
-      <span>Filed</span><span>{{ record.created_at | day(True, True) }}</span>
-    </div>
-  </section>
+  {% set flow = workflow(record) %}
+  {% include "_flow.html" %}
 
-  <section class="stack-sm">
-    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">What has happened</h2>
-    <div class="card tight stack-sm" style="font-size: 14px; line-height: 20px">
+  <details class="card tight" {% if flow.stopped %}open{% endif %}>
+    <summary style="cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center">The log · {{ lines | length }} {{ "entry" if lines | length == 1 else "entries" }}</summary>
+    <div class="stack-sm" style="font-size: 14px; line-height: 20px; margin-top: 8px">
       {% for when, what in lines %}
       <div class="row" style="align-items: flex-start; gap: 12px"><span class="muted" style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap">{{ when[11:19] }}</span><span style="word-break: break-word">{{ what }}</span></div>
       {% else %}<span class="muted">Nothing logged yet.</span>{% endfor %}
-      {% if running %}<span class="word-signal">… still running</span>{% endif %}
     </div>
-  </section>
-
-  {% if not running and record.status.value == 'parked' %}
-  <p class="muted" style="font-size: 14px; line-height: 20px">A parked post is not in the queue and cannot be approved. The usual causes: the model backend refused or failed (check the key in <code>.env</code> and the console window), a source could not be fetched, the voice service was unreachable, or a gate escalated. File the brief again once the cause is fixed.</p>
-  {% endif %}
+  </details>
 </main>
 {% endblock %}

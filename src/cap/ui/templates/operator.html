@@ -4,50 +4,55 @@
 {% if running %}<meta http-equiv="refresh" content="8">{% endif %}
 <main class="screen">
   <header class="stack-sm">
-    <span class="eyebrow">Content Agent Portfolio</span>
-    <h1 style="font-size: 28px; line-height: 32px; font-weight: 600">Operator</h1>
-    <p class="meta" style="font-size: 13px">Rarely. Settings come from the environment and Secret Manager; nothing secret is shown or entered here.</p>
+    <h1 style="font-size: 28px; line-height: 32px; font-weight: 600; margin: 0">New post</h1>
+    <p class="meta">A topic is enough. Research, script, checks and video run on their own; you review the result.</p>
   </header>
 
   {% if error %}<div class="error" role="alert"><strong>Not run.</strong> {{ error }}</div>{% endif %}
-  <section class="stack">
-    <div class="row"><h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em; margin: 0">File a brief</h2><a href="/tour" class="linkbtn" style="font-size: 14px">Guided tour first?</a></div>
-    <form method="post" action="/operator/brief" class="card stack" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
-      <p class="muted" style="font-size: 14px; line-height: 20px">Runs the whole pipeline in the background: sources fetched, draft, critic, platform cuts, the four gates, voice and video rendered, then the card lands in the queue. A real draft with a rendered video takes a few minutes; this page refreshes itself. {% if settings.model_backend.value == 'mock' %}The drafter is the mock backend until an API key is in <code>.env</code>, so the draft is the sample episode.{% else %}Give it a topic. The system finds and reads the sources itself (agencies, references and journals for Falak; vendor pages for Patch), and the facts gate checks every claim against them. Patch's "Tested for 7 days" format also needs your test log for any first-hand result.{% endif %}</p>
-      <div class="field">
-        <label for="channel">Channel</label>
-        <select class="input" id="channel" name="channel">{% for ch in settings.channels %}<option value="{{ ch }}">{{ ch }} · {{ settings.channel_characters.get(ch, '') }}</option>{% endfor %}</select>
+  <form id="brief" method="post" action="/operator/brief" class="card stack" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <fieldset class="field" style="border: 0; padding: 0; margin: 0">
+      <legend class="eyebrow" style="margin-bottom: 8px">Channel</legend>
+      <div class="chips">
+        {% for ch in settings.channels %}<label class="chip"><input type="radio" name="channel" value="{{ ch }}" {% if loop.first %}checked{% endif %}><span>{{ ch }} · {{ settings.channel_characters.get(ch, '') }}{% if settings.channel_languages.get(ch) == 'ar' %} · عربي{% endif %}</span></label>{% endfor %}
       </div>
-      <div class="field">
-        <label for="topic">Topic</label>
-        <input class="input" id="topic" name="topic" placeholder="e.g. What a 7-day test of a note app showed" required maxlength="140">
+    </fieldset>
+    <div class="field">
+      <label for="topic" class="eyebrow">Topic</label>
+      <input class="input" id="topic" name="topic" placeholder="e.g. How cocoons work" required maxlength="140" autocomplete="off">
+    </div>
+    <details>
+      <summary style="cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center">More: test log, pinned pages, screenshots</summary>
+      <div class="stack" style="margin-top: 8px">
+        <div class="field">
+          <label for="test_log">Your test log (Patch: the first-hand results the episode reports)</label>
+          <textarea class="input" id="test_log" name="test_log" rows="3" placeholder="Day 3: sync failed twice at 08:12 and 08:40"></textarea>
+        </div>
+        <div class="field">
+          <label for="urls">Pin a page (optional, one URL per line)</label>
+          <textarea class="input" id="urls" name="urls" rows="2" placeholder="https://…"></textarea>
+        </div>
+        <div class="field">
+          <label for="media">Screenshots (optional, shown in order)</label>
+          <input class="input" id="media" name="media" type="file" accept=".png,.jpg,.jpeg,.webp" multiple>
+        </div>
       </div>
-      <div class="field">
-        <label for="urls">Pin a page (optional): URLs, one per line, used in addition to what the system finds</label>
-        <textarea class="input" id="urls" name="urls" rows="3" placeholder="https://…"></textarea>
-      </div>
-      <div class="field">
-        <label for="test_log">Your test log or notes (first-hand facts the script may use)</label>
-        <textarea class="input" id="test_log" name="test_log" rows="3" placeholder="e.g. Day 3: sync failed twice at 08:12 and 08:40"></textarea>
-      </div>
-      <div class="field">
-        <label for="media">Screenshots from the test (optional; png or jpg, shown on screen in this order)</label>
-        <input class="input" id="media" name="media" type="file" accept=".png,.jpg,.jpeg,.webp" multiple>
-        <span class="muted" style="font-size: 13px">Without screenshots the renderer draws a labelled reconstruction of what the script describes.</span>
-      </div>
-      <button class="btn primary sm" type="submit">Run the pipeline</button>
-    </form>
-  </section>
+    </details>
+    <button class="btn primary" type="submit">Create the post</button>
+    {% if settings.model_backend.value == 'mock' %}<p class="meta">No API key yet: the draft will be the sample episode.</p>{% endif %}
+  </form>
 
   <section class="stack">
-    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Recent posts, any state</h2>
+    <div class="row"><h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em; margin: 0">Your posts</h2><a href="/tour" class="linkbtn" style="font-size: 14px">Guided tour</a></div>
     <div class="stack-sm">
       {% for p in recent %}
-      <a class="card tight link" href="/posts/{{ p.post_id }}" style="gap: 4px">
-        <div class="row"><span class="tag">{{ p.channel_id.value }}</span><span class="meta{% if p.status.value in ('drafting', 'gated', 'rendering') %} word-signal{% endif %}">{{ p.status.value | replace('_', ' ') }}{% if p.status.value in ('drafting', 'gated', 'rendering') %} · running{% endif %}</span></div>
-        <span class="read" style="font-size: 16px">{{ p.draft.title or p.brief.topic }}</span>
-        <span class="meta">brief: {{ p.brief.topic }}{% if p.status.value == 'parked' and p.history %} · {{ p.history[-1].split(' ', 1)[-1][:140] }}{% endif %}</span>
+      {% set flow = workflow(p) %}
+      <a class="card tight link" href="/posts/{{ p.post_id }}{% if p.status.value in ('approved', 'published') %}/preview{% endif %}" style="gap: 6px">
+        <span class="read" style="font-size: 16px; line-height: 22px">{{ p.draft.title or p.brief.topic }}</span>
+        <span class="row" style="justify-content: flex-start; gap: 10px">{% set flow_compact = true %}{% include "_flow.html" %}{% set flow_compact = false %}<span class="meta{% if flow.stopped %} word-signal{% endif %}">{{ flow.number }}/{{ flow.total }} · {{ flow.headline }}</span></span>
+        <span class="meta">{{ p.channel_id.value }} · {{ settings.channel_characters.get(p.channel_id.value, '') }}{% if flow.stopped and flow.reason %} · {{ flow.reason[:110] }}{% endif %}</span>
       </a>
+      {% else %}
+      <p class="meta">No posts yet.</p>
       {% endfor %}
     </div>
   </section>
@@ -83,6 +88,9 @@
   </section>
 
   <section class="stack">
+    <div class="hr" style="margin: var(--space-6) 0 var(--space-4)"></div>
+    <h2 style="font-size: 22px; line-height: 28px; font-weight: 600; margin: 0 0 4px">Settings</h2>
+    <p class="meta" style="margin: 0 0 var(--space-4)">Rarely needed. Keys live in .env and on Connections; nothing secret is shown here.</p>
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Queue state</h2>
     <p class="meta">Running build: <span style="font-family: var(--font-mono)">{{ build }}</span> · restart the app (run install.bat again) to pick up a newer one</p>
     <div class="card tight stack-sm">

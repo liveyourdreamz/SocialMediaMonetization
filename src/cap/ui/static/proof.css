@@ -146,3 +146,27 @@ textarea.input { resize: none; font-family: var(--font-read); font-size: 17px; l
 mark.slot { background: var(--surface-sunken); color: var(--muted); border-radius: var(--radius-sm); padding: 0 6px; font-family: var(--font-ui); font-size: 14px; }
 mark.line { background: transparent; color: var(--ink); font-weight: 600; }
 .tile .val.sm { font-size: 18px; line-height: 24px; }
+
+/* ---- Flow: where a post is in the seven steps (Proof component) ---------------- */
+.flow { gap: var(--space-3); }
+.flow-head { font-size: 22px; line-height: 28px; font-weight: 600; text-wrap: balance; margin: 0; }
+.flow-reason { margin: 0; font-size: 15px; line-height: 22px; display: flex; gap: var(--space-2); align-items: flex-start; }
+.mark-signal { flex: none; width: 20px; height: 20px; border-radius: var(--radius-pill); background: var(--signal); color: var(--on-signal); font-weight: 700; font-size: 13px; display: grid; place-items: center; margin-top: 1px; }
+.fsteps { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; }
+.fstep { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.fstep:not(:first-child)::before { content: ""; position: absolute; top: 10px; left: calc(-50% + 13px); right: calc(50% + 13px); height: 2px; background: var(--line); }
+.fstep.done::before, .fstep.current::before, .fstep.stopped::before { background: var(--ink); }
+.fstep .fmark { width: 22px; height: 22px; border-radius: var(--radius-pill); border: 2px solid var(--line); background: var(--surface); display: grid; place-items: center; font-size: 12px; font-weight: 700; box-sizing: border-box; }
+.fstep.done .fmark { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.fstep.current .fmark { border-color: var(--ink); }
+.fstep.current .fmark i { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--ink); }
+.fstep.stopped .fmark { background: var(--signal); border-color: var(--signal); color: var(--on-signal); }
+.fstep .fname { font-size: 11px; line-height: 14px; color: var(--muted); text-align: center; overflow-wrap: anywhere; }
+.fstep.current .fname, .fstep.stopped .fname { color: var(--ink); font-weight: 600; }
+.flow-next { display: flex; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.flow-mini { display: inline-flex; gap: 3px; align-items: center; }
+.flow-mini i { width: 14px; height: 4px; border-radius: 2px; background: var(--line); }
+.flow-mini i.done { background: var(--ink); }
+.flow-mini i.current { background: var(--ink); opacity: .45; }
+.flow-mini i.stopped { background: var(--signal); }

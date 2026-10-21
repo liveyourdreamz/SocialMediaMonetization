@@ -732,3 +732,113 @@ def publish_results(record: PostRecord) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+# ---- the workflow: where a post is, what is left, what to do next ---------------
+STEPS: list[tuple[str, str]] = [
+    ("brief", "Brief"),
+    ("draft", "Draft"),
+    ("research", "Sources"),
+    ("checks", "Checks"),
+    ("video", "Video"),
+    ("review", "Your review"),
+    ("publish", "Publish"),
+]
+_RUNNING = ("drafting", "gated", "rendering")
+
+
+def _stopped_at(record: PostRecord) -> str:
+    """For a parked or rejected post: the step whose work did not finish."""
+    last = " ".join(record.history[-3:]).lower()
+    if any(k in last for k in ("render", "voice", "ffmpeg")):
+        return "video"
+    if any(k in last for k in ("gate", "ethics", "made-for-kids", "injection", "p10", "facts")):
+        return "checks"
+    if "research" in last or "fetch" in last:
+        return "research"
+    if not record.draft.script or any(k in last for k in ("p2", "p3", "p7", "draft")):
+        return "draft"
+    return "checks"
+
+
+def workflow(record: PostRecord) -> dict[str, Any]:
+    """The seven steps of one post with a state each (done, current, stopped, todo), the
+    step number, a one-line status and the next action: the same everywhere a post is
+    shown, so 'where am I and what is left' always has one answer."""
+    st = record.status.value
+    hist = " ".join(record.history).lower()
+    if st == "published":
+        current, stopped = "", ""
+    elif st in ("parked", "rejected", "discarded"):
+        current, stopped = _stopped_at(record), _stopped_at(record)
+    elif st == "drafting":
+        current, stopped = "draft", ""
+    elif st == "gated":
+        current = "checks" if "research:" in hist or "source:" in hist else "research"
+        stopped = ""
+    elif st == "rendering":
+        current, stopped = "video", ""
+    elif st == "awaiting_approval":
+        current, stopped = "review", ""
+    elif st == "approved":
+        current, stopped = "publish", ""
+    else:
+        current, stopped = "brief", ""
+    keys = [k for k, _ in STEPS]
+    idx = keys.index(current) if current else len(keys)
+    steps = []
+    for i, (k, label) in enumerate(STEPS):
+        if k == stopped:
+            state = "stopped"
+        elif i < idx:
+            state = "done"
+        elif i == idx:
+            state = "current"
+        else:
+            state = "todo"
+        steps.append({"key": k, "label": label, "state": state})
+    reason = ""
+    if stopped and record.history:
+        reason = record.history[-1].split(" ", 1)[-1]
+        reason = reason.removeprefix("parked: ").removeprefix("gates failed: ")
+    pid = record.post_id
+    if st == "published":
+        headline, nxt, href = "Published", "See where it went", f"/posts/{pid}/preview#where"
+    elif stopped:
+        label = dict(STEPS)[stopped]
+        headline = f"Stopped at {label.lower()}"
+        nxt, href = "File the brief again once the cause is fixed", "/operator#brief"
+    elif current == "review":
+        blind = record.approval.pre_reveal_decision is None
+        headline = "Ready for your review" if blind else "Verdict recorded"
+        nxt = "Read it, then approve or reject" if blind else "Keep or change your verdict"
+        href = f"/posts/{pid}"
+    elif current == "publish":
+        headline, nxt, href = (
+            "Approved, waiting to publish",
+            "Choose where it goes and publish",
+            f"/posts/{pid}/preview#publish",
+        )
+    else:
+        doing = {
+            "brief": "Brief filed",
+            "draft": "Writing the script",
+            "research": "Finding sources for each claim",
+            "checks": "Running the four checks",
+            "video": "Rendering voice and video",
+        }[current]
+        headline, nxt, href = doing, "Nothing to do yet; this page updates itself", ""
+    n_done = sum(1 for s in steps if s["state"] == "done")
+    return {
+        "steps": steps,
+        "number": min(idx + 1, len(STEPS)) if current or stopped else len(STEPS),
+        "total": len(STEPS),
+        "done": n_done,
+        "headline": headline,
+        "reason": reason,
+        "next": nxt,
+        "href": href,
+        "running": st in _RUNNING,
+        "stopped": bool(stopped),
+        "finished": st == "published",
+    }

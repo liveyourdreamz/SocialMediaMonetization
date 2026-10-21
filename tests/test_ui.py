@@ -469,9 +469,9 @@ def test_a_post_that_has_not_reached_the_queue_shows_progress_not_a_crash(world)
     rec = new_brief("A", "Still running")
     store.put(rec)
     html = api.get(f"/posts/{rec.post_id}").text
-    assert "In the pipeline" in html and "Still running" in html and "refresh" in html
+    assert "Writing the script" in html and "Still running" in html and "refresh" in html
     rec.status = PostStatus.PARKED
     rec.log("parked: render failed: voice service unreachable")
     html = api.get(f"/posts/{rec.post_id}").text
-    assert "did not reach the queue" in html and "voice service unreachable" in html
+    assert "Stopped at" in html and "voice service unreachable" in html and "Step " in html
     assert "refresh" not in html

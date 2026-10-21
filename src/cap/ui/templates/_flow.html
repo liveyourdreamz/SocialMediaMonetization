@@ -1,0 +1,27 @@
+{# Proof component: Flow. Where a post is in the seven steps, what is left, what to do next.
+   Pass `flow` (views.workflow). Optional `flow_compact` for list rows. #}
+{% if flow_compact %}
+<span class="flow-mini" aria-label="Step {{ flow.number }} of {{ flow.total }}: {{ flow.headline }}">
+  {% for s in flow.steps %}<i class="{{ s.state }}"></i>{% endfor %}
+</span>
+{% else %}
+<section class="flow card" aria-label="Workflow">
+  <div class="row" style="align-items: baseline">
+    <span class="eyebrow">{% if flow.finished %}All {{ flow.total }} steps done{% else %}Step {{ flow.number }} of {{ flow.total }}{% endif %}</span>
+    {% if flow.running %}<span class="meta" aria-live="polite">working</span>{% endif %}
+  </div>
+  <h2 class="flow-head">{{ flow.headline }}</h2>
+  {% if flow.reason %}<p class="flow-reason"><span class="mark-signal" aria-hidden="true">!</span>{{ flow.reason }}</p>{% endif %}
+  <ol class="fsteps">
+    {% for s in flow.steps %}
+    <li class="fstep {{ s.state }}"{% if s.state == 'current' %} aria-current="step"{% endif %}>
+      <span class="fmark">{% if s.state == 'done' %}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{% elif s.state == 'stopped' %}!{% elif s.state == 'current' %}<i></i>{% endif %}</span>
+      <span class="fname">{{ s.label }}<span class="sr"> ({{ s.state }})</span></span>
+    </li>
+    {% endfor %}
+  </ol>
+  <div class="flow-next">
+    {% if flow.href %}<a class="btn {{ 'primary' if not flow.stopped else 'secondary' }} sm" href="{{ flow.href }}">{{ flow.next }}</a>{% else %}<span class="meta">{{ flow.next }}</span>{% endif %}
+  </div>
+</section>
+{% endif %}
