@@ -21,6 +21,9 @@ OPENING_SLOT = "[[HEMANT_OPENING_LINE]]"
 LABELS = {
     "en": {
         "script": "Script",
+        "video": "The video you are approving",
+        "short_file": "The Short",
+        "play": "Press play. The file is what the token binds to; the script below is its narration.",
         "on_screen": "On-screen text",
         "claims": "Claims and where they come from",
         "media": "Media",
@@ -42,6 +45,9 @@ LABELS = {
     },
     "ar": {
         "script": "النص",
+        "video": "الفيديو الذي توافق عليه",
+        "short_file": "المقطع القصير",
+        "play": "اضغط تشغيل. هذا الملف هو ما يرتبط به رمز الموافقة؛ النص أدناه هو تعليقه الصوتي.",
         "on_screen": "النص على الشاشة",
         "claims": "الادعاءات ومصادرها",
         "media": "الوسائط",

@@ -8,6 +8,16 @@
 <div class="banner verdict thumb"><span class="eyebrow">{{ L.thumb }}</span><span class="head" {% if content_rtl %}lang="ar" dir="rtl" style="font-family: var(--font-read-ar)"{% endif %}>{{ card.thumbnail_text }}</span></div>
 {% endif %}
 
+{% if record.asset.kind == 'video' %}
+<section class="stack-sm">
+  <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">{{ L.video }} · {{ record.asset.duration_s | round | int }} s</h2>
+  <video controls playsinline preload="metadata" style="width: 100%; border-radius: var(--radius-md); background: #000" poster="/assets/{{ record.post_id }}/thumbnail.png" data-video-note="card-video-note">
+    <source src="/assets/{{ record.post_id }}/long.mp4" type="video/mp4">
+  </video>
+  <p id="card-video-note" class="muted" style="font-size: 13px; line-height: 18px">{{ L.play }} <a href="/assets/{{ record.post_id }}/long.mp4" target="_blank" rel="noopener">long.mp4</a>{% if record.asset.short_uri %} · <a href="/assets/{{ record.post_id }}/short.mp4" target="_blank" rel="noopener">{{ L.short_file }}</a>{% endif %}</p>
+</section>
+{% endif %}
+
 <section class="stack">
   <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">{{ L.script }}</h2>
   <div class="{{ 'cut' if long_script else '' }}" id="script">

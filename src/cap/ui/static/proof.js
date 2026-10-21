@@ -78,4 +78,15 @@
       b.remove();
     });
   });
+
+  // A video that cannot play says why, instead of a silent black box.
+  document.querySelectorAll("video[data-video-note]").forEach(function (v) {
+    var n = document.getElementById(v.getAttribute("data-video-note"));
+    if (!n) return;
+    var codes = { 1: "loading was aborted", 2: "a network error stopped the download", 3: "the file could not be decoded", 4: "this browser cannot play this file format" };
+    var src = v.querySelector("source");
+    function fail(why) { n.innerHTML = "<strong>The player could not show the video:</strong> " + why + ". Open the file directly: <a href=\"" + (src ? src.getAttribute("src") : "") + "\" target=\"_blank\" rel=\"noopener\">long.mp4</a>"; }
+    v.addEventListener("error", function () { fail(v.error ? (codes[v.error.code] || "error " + v.error.code) + (v.error.message ? " (" + v.error.message + ")" : "") : "unknown error"); });
+    if (src) src.addEventListener("error", function () { fail("the file did not load"); });
+  });
 })();

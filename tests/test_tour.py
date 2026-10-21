@@ -91,3 +91,33 @@ def test_a_non_tour_post_has_no_tour_pages(tmp_path, monkeypatch):
     api.sign_in("hemant")
     pid = next(iter(store.posts))
     assert api.get(f"/tour/{pid}/1").status_code == 404
+
+
+def test_the_card_shows_the_video_being_approved(tmp_path, monkeypatch):
+    """The card is where the post is judged; the rendered video is what is published,
+    so it is on the card, above the script, for Hemant and for the Arabic reviewer."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
+    monkeypatch.setenv("CAP_RENDERER", "video")
+    monkeypatch.setenv("CAP_VOICE", "silent")
+    from cap.approval.app import Store
+    from cap.config import get_settings
+    from cap.demo.seed import seed_store
+
+    get_settings.cache_clear()
+    store = Store()
+    seed_store(store, demo=True)
+    api = Browser(create_app(store), follow_redirects=False)
+    api.sign_in("hemant")
+    post = next(p for p in store.queue() if p.channel_id.value == "A")
+    html = api.get(f"/posts/{post.post_id}").text
+    assert f"/assets/{post.post_id}/long.mp4" in html and "<video" in html
+    assert "The video you are approving" in html
+    # the file itself is served to the signed-in reviewer
+    r = api.get(f"/assets/{post.post_id}/long.mp4")
+    assert r.status_code == 200 and r.headers["content-type"] == "video/mp4"
+    # Layla's stage-one card carries it too, labelled in Arabic
+    api.sign_in("layla")
+    c = next(p for p in store.posts.values() if p.channel_id.value == "C")
+    html = api.get(f"/posts/{c.post_id}").text
+    assert f"/assets/{c.post_id}/long.mp4" in html and "الفيديو الذي توافق عليه" in html
