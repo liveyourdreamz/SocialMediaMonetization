@@ -13,6 +13,13 @@ if defined CAP_SMOKE (
   uv run cap smoke
   exit /b
 )
+echo  Checking this laptop against the real services (key, model, voice, ffmpeg)...
+uv run cap check
+if errorlevel 1 (
+  echo.
+  echo  A check FAILED above. The app still starts, but briefs will park until it is fixed.
+  echo.
+)
 uv run cap serve --demo --host 0.0.0.0 --open %*
 pause
 exit /b

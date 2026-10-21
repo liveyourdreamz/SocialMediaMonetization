@@ -14,4 +14,5 @@ fi
 
 uv sync --quiet
 if [ "${1:-}" = "--smoke" ]; then exec uv run cap smoke; fi   # CI: the loop, no browser
+uv run cap check || echo "A check FAILED above. The app still starts, but briefs will park until it is fixed."
 exec uv run cap serve --demo --host 0.0.0.0 --open "$@"

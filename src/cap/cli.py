@@ -6,6 +6,7 @@ cap prompts check          verify the extracted prompts match the registry
 cap harness run [--runs N] run the regression sets (mock backend unless configured)
 cap demo                   run one fake Patch episode through the pipeline (mock)
 cap smoke                  the whole laptop loop through the real app, no browser (mock)
+cap check                  this machine against the real services (key, model, voice, ffmpeg)
 cap serve [--demo]         run the app locally (Portfolio, queue, card, digest, operator)
                            with demo posts queued; asks for the API key on first run
 cap key                    enter or change the Anthropic API key (hidden; local .env only)
@@ -32,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     h.add_argument("action", choices=["run"])
     h.add_argument("--runs", type=int, default=1)
     sub.add_parser("demo")
+    ck = sub.add_parser("check")
+    ck.add_argument("--offline", action="store_true", help="skip checks that need the network")
     sm = sub.add_parser("smoke")
     sm.add_argument("--dir", default="cap-data-smoke", help="scratch folder (wiped first)")
     sv = sub.add_parser("serve")
@@ -119,6 +122,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{out.post_id} -> {out.status.value}")
         for line in out.history:
             print("  ", line)
+    elif args.cmd == "check":
+        from cap import check
+
+        return check.run(offline=args.offline)
     elif args.cmd == "smoke":
         from pathlib import Path
 

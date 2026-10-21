@@ -32,6 +32,8 @@ jobs:
           ! grep -rEn "sk-ant-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}" --include=*.py --include=*.yaml --include=*.json --include=*.md .
       - name: Smoke (the laptop loop through the real app, from the launcher)
         run: ./run.sh --smoke
+      - name: Check (the real-service seams that can run without a key)
+        run: uv run cap check --offline
 
   windows:
     # The laptop path Hemant actually uses: install.bat (the downloaded bootstrap) fetches
@@ -45,6 +47,8 @@ jobs:
         run: |
           uv sync --locked --all-extras
           uv run pytest -q -x --tb=short 2>&1 | Tee-Object -FilePath pytest.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run cap check --offline 2>&1 | Tee-Object -Append -FilePath pytest.txt
           exit $LASTEXITCODE
       - name: Surface the failure as an annotation (log API is not always readable)
         if: failure()
