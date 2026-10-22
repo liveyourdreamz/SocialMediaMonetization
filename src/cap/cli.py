@@ -173,15 +173,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def signin_secrets(env: Path) -> dict[str, str]:
-    """Who signs in from the phone with what: per-person secrets when cap.setup has them
-    (signin_secrets), else the shared passcode."""
+    """Each person's sign-in secret (cap.setup writes them into .env on first run)."""
     from cap import setup
 
-    per_person = getattr(setup, "signin_secrets", None)
-    if callable(per_person):
-        return dict(per_person(env))
-    code = setup.read_passcode(env)
-    return {"passcode": code} if code else {}
+    return dict(setup.signin_secrets(env))
 
 
 def _open_later(url: str, delay: float = 1.5) -> None:
@@ -289,12 +284,16 @@ def _run_app(
     if settings.google_enabled:
         how = "Google sign-in is on"
     else:
-        how = "sign in as hemant" + (" (or layla for channel C)" if args.demo else "")
-    print(f"open {local_url} and {how} (the laptop needs no passcode)")
+        how = "sign in with your own code (below); the laptop needs it too"
+    print(f"open {local_url} and {how}")
+    codes = signin_secrets(env_file)
+    if args.host != "0.0.0.0":  # noqa: S104 - the phone block below already shows them
+        for person, code in codes.items():
+            print(f"  {person}: {code}")
     if args.host == "0.0.0.0":  # noqa: S104 - the phone path is the point of this host
         addresses = lan.lan_ipv4()
         templates.env.globals["phone_urls"] = lan.phone_urls(args.port, addresses)  # Operator
-        print(lan.phone_block(args.port, signin_secrets(env_file), addresses))
+        print(lan.phone_block(args.port, codes, addresses))
     if args.open:
         _open_later(local_url)
     uvicorn.run(create_app(store), host=args.host, port=args.port)

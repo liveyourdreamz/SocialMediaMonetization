@@ -490,13 +490,9 @@ def render(  # type: ignore[no-untyped-def]
     voice = VOICES.get((character, lang), "en-GB-RyanNeural")
     work = out_dir / record.post_id / ("final" if stage == "final" else "")
     work.mkdir(parents=True, exist_ok=True)
-    sources = sorted(
-        {
-            c.source_url
-            for c in record.draft.claims
-            if c.source_url and not c.source_url.startswith("testlog://")
-        }
-    )
+    from cap.gates.verdict import confirmed_sources
+
+    sources = confirmed_sources(record)  # the one filter: supported claims, no test log
     tool = sc.tool_name(record.draft.title, record.brief.topic) if character == "Patch" else ""
 
     def build(text: str, title: str, size: tuple[int, int], name: str) -> tuple[Path, float]:

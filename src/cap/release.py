@@ -166,7 +166,7 @@ def canonical_bytes(document: dict[str, Any]) -> bytes:
 def description_for(record: PostRecord, caption: str | None = None) -> str:
     """The published description: the caption, the links that confirmed a claim
     (never one that confirmed nothing, review H2) and the AI-character disclosure."""
-    from cap.pipeline import confirmed_sources
+    from cap.gates.verdict import confirmed_sources
 
     text = (record.draft.caption if caption is None else caption).strip()
     sources = confirmed_sources(record)

@@ -460,7 +460,19 @@ def _approved_post(script: str, **flags: bool) -> PostRecord:
     return r
 
 
-def test_only_approved_real_posts_enter_the_history(tmp_path):
+@pytest.fixture
+def real_backend(monkeypatch):
+    """An approval drafted by the real model; mock drafts never enter the history."""
+    from cap.config import get_settings
+
+    monkeypatch.setenv("CAP_MODEL_BACKEND", "anthropic")
+    monkeypatch.setenv("CAP_ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+def test_only_approved_real_posts_enter_the_history(tmp_path, real_backend):
     h = FileHistory(tmp_path / "history.jsonl")
     real = _approved_post("real")
     assert record_approved(real, h)
@@ -497,7 +509,7 @@ def test_the_pipeline_reads_the_history_under_the_data_dir(tmp_path, monkeypatch
 
 
 def test_an_approved_post_makes_its_duplicate_fail_originality(
-    fixtures, record, tmp_path, monkeypatch
+    fixtures, record, tmp_path, monkeypatch, real_backend
 ):
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
     get_settings.cache_clear()

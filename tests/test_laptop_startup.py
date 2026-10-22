@@ -16,7 +16,6 @@ import socket
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from cap import cli, instance, lan
@@ -231,19 +230,17 @@ def test_phone_block_has_urls_secrets_and_the_firewall_command() -> None:
     assert "<this laptop" not in block
 
 
-def test_signin_secrets_prefers_per_person_secrets(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import cap.setup
+def test_the_start_up_banner_shows_each_persons_own_code(tmp_path: Path) -> None:
+    """The banner shows the per-person codes cap.setup wrote into .env (one each for
+    hemant and layla); the old shared passcode is gone."""
+    from cap.setup import ensure_local_secrets
 
     env = tmp_path / ".env"
-    env.write_text("CAP_LOCAL_PASSCODE=654321\n", encoding="utf-8")
-    if not hasattr(cap.setup, "signin_secrets"):
-        assert cli.signin_secrets(env) == {"passcode": "654321"}
-    monkeypatch.setattr(
-        cap.setup, "signin_secrets", lambda p: {"hemant": "h-1", "layla": "l-2"}, raising=False
-    )
-    assert cli.signin_secrets(env) == {"hemant": "h-1", "layla": "l-2"}
+    env.write_text("CAP_MODEL_BACKEND=mock\nCAP_LOCAL_PASSCODE=654321\n", encoding="utf-8")
+    ensure_local_secrets(env)
+    codes = cli.signin_secrets(env)
+    assert set(codes) == {"hemant", "layla"} and len(set(codes.values())) == 2
+    assert "654321" not in codes.values() and "CAP_LOCAL_PASSCODE" not in env.read_text()
 
 
 def test_operator_settings_show_the_phone_urls(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -251,8 +248,10 @@ def test_operator_settings_show_the_phone_urls(tmp_path: Path, monkeypatch) -> N
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(templates.env.globals, "phone_urls", ["http://192.168.1.20:8000/login"])
-    api = TestClient(create_app(FileStore(tmp_path / "data")), follow_redirects=False)
-    api.post("/login", data={"name": "hemant"})
+    from tests.test_ui import Browser
+
+    api = Browser(create_app(FileStore(tmp_path / "data")), follow_redirects=False)
+    api.sign_in("hemant")
     page = api.get("/operator").text
     assert "On your phone" in page and "http://192.168.1.20:8000/login" in page
 

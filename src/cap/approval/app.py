@@ -48,6 +48,7 @@ from cap.approval.identity import Reviewer, reviewer_identity, signed_in_name
 from cap.approval.sessions import SessionStore
 from cap.approval.throttle import SignInThrottle
 from cap.config import get_settings
+from cap.gates.history import FileHistory, HistoryStore, default_history, record_approved
 from cap.publisher import PlatformAdapter, PublishRefusedError
 from cap.schema.migrate import load_record
 from cap.schema.post_record import (
@@ -74,6 +75,11 @@ class Store:
         self.analytics: dict[str, Any] = {}  # agent 14's figures, with source and pull time
         self.analytics_note: str = ""  # "example figures" in demo mode; else empty
         self.publisher: PlatformAdapter | None = None  # set by the app; None = approve only
+
+    def history(self) -> HistoryStore:
+        """Where approved posts are kept for the originality gate (in memory: the
+        app's data folder; a FileStore keeps it beside its own records)."""
+        return default_history()
 
     def local_published_dir(self) -> Path:
         """Where the local record of every publish goes (cap-data/published)."""
@@ -164,6 +170,11 @@ class FileStore(Store):
             self.paused_reason = d.get("paused_reason", "")
             self.analytics = d.get("analytics", {})
             self.analytics_note = d.get("analytics_note", "")
+
+    def history(self) -> HistoryStore:
+        from cap.gates.history import HISTORY_FILE
+
+        return FileHistory(self.root / HISTORY_FILE)
 
     def put(self, record: PostRecord) -> None:
         super().put(record)
@@ -275,6 +286,8 @@ def finalise_and_issue(store: Store, record: PostRecord, reviewer: str, **kw: An
     store.put(record)
     if record.status != PostStatus.APPROVED:
         return False
+    # the originality gate compares new posts with approved ones (review C7)
+    record_approved(record, store.history())
     try:
         release_job.start(store, record)
     except PublishRefusedError as e:  # the approval does not hold for release: say so

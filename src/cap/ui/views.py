@@ -663,8 +663,6 @@ def _narration(record: PostRecord, cut: str | None = None) -> str:
 
 def package(record: PostRecord) -> dict[str, Any]:
     """Exactly what goes out, per platform, as the adapters will receive it."""
-    from cap.pipeline import confirmed_sources
-
     script = _narration(record)
     base = {
         "title": record.draft.title,

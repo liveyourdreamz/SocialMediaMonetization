@@ -138,7 +138,13 @@ def default_history() -> FileHistory:
 def record_approved(record: PostRecord, store: HistoryStore | None = None) -> bool:
     """Call once a post is approved (the approval step's last act). Returns whether the
     post entered the history. A post that is not approved, a canary or a tour post
-    never does."""
+    never does, and neither does one drafted by the mock backend: every mock post is
+    the same sample script, so letting them in would fail every later mock post on
+    originality (merge review, 22 Oct)."""
+    from cap.config import ModelBackend, get_settings
+
     if record.status not in (PostStatus.APPROVED, PostStatus.PUBLISHED):
+        return False
+    if get_settings().model_backend == ModelBackend.MOCK:
         return False
     return (store or default_history()).add(record)

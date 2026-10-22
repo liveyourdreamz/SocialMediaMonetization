@@ -203,12 +203,6 @@ def ensure_local_secrets(path: Path) -> None:
     restrict_to_owner(path)
 
 
-def read_passcode(path: Path) -> str:
-    """Gone: the shared phone passcode was replaced by per-person secrets
-    (signin_secrets). Kept, always empty, until the start-up banner stops asking."""
-    return ""
-
-
 def ensure_env(
     path: Path = Path(".env"),
     *,

@@ -83,7 +83,10 @@ def test_queue_is_oldest_first_and_blind(world):
     first = html.index(_post(store, Channel.A).post_id)
     second = html.index(_post(store, Channel.B).post_id)
     assert first < second
-    assert "Originality" not in html and "mfk" not in html.lower()
+    # gate words, not substrings: a random CSRF token can contain "mfk" (seen 22 Oct)
+    import re
+
+    assert "Originality" not in html and not re.search(r"\bmfk(_|\b)", html.lower())
 
 
 def test_blind_card_then_reveal_with_server_side_clock(world):
