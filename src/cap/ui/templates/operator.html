@@ -118,6 +118,7 @@
     <div class="card tight kv">
       {% for ch in settings.channels %}<span>{{ ch }} · {{ settings.channel_characters.get(ch, '') }}</span><span>{{ settings.channel_languages.get(ch, 'en') }} · {{ settings.longform_per_channel_per_month }} long-form, {{ settings.shorts_cap_per_channel_per_month }} Shorts a month</span>{% endfor %}
       <span>Idle pause</span><span>{{ settings.queue_idle_pause_hours }} hours</span>
+      <span>Video length</span><span>{{ settings.video_length_s }} seconds · change CAP_VIDEO_LENGTH_S in .env, then restart</span>
       <span>Claims per post</span><span>at most {{ settings.max_claims }} · change CAP_MAX_CLAIMS in .env, then restart · unconfirmed claims are {{ 'flagged on the card' if settings.fact_mode == 'flag' else 'a rejection' }}</span>
       <span>Pilot start</span><span>{{ settings.pilot_start or 'not set' }}</span>
     </div>

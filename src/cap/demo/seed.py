@@ -171,6 +171,7 @@ def new_brief(channel: str, topic: str) -> PostRecord:
     the drafter expects are set here per channel."""
     ch = Channel(channel)
     from cap.characters import ANCHOR_ELEMENTS
+    from cap.config import get_settings
 
     rec = PostRecord(
         channel_id=ch,
@@ -179,6 +180,7 @@ def new_brief(channel: str, topic: str) -> PostRecord:
             format_id=FORMATS[ch.value],
             anchor_elements=ANCHOR_ELEMENTS[ch.value][:2],
             claims_allowed=CLAIMS_SCOPE[ch.value],
+            length_s=get_settings().video_length_s,
         ),
     )
     rec.status = PostStatus.DRAFTING

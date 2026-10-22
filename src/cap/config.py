@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # The drafter is told the limit when it writes and when it lists claims; a draft
     # over it is rewritten once to fit, then parked with the count if still over.
     max_claims: int = Field(default=10, ge=1, le=50)
+    # 22 Oct 2026: the target length of every new post's video, in seconds
+    # (CAP_VIDEO_LENGTH_S in .env). 30 while the whole loop is being proven end to end;
+    # the drafter writes to it at the character's speaking rate and the critic checks it.
+    video_length_s: int = Field(default=30, ge=15, le=1800)
     voice: Literal["edge", "silent"] = "edge"
 
     # Where approved posts go: "local" (a folder under data_dir) or "youtube" (a real
