@@ -13,7 +13,8 @@ JSON, under /api, same rules, same store:
                                   starts, and the token is issued when it is done
   GET  /api/posts/{id}/release    the final release: status, error, token present
 
-Identity: cap.approval.identity (header or signed cookie, opt-in, local only).
+Identity: cap.approval.identity (a server-held session; the X-Reviewer header only
+under the test-only setting). Host headers: cap.approval.hosts.
 """
 
 from __future__ import annotations
@@ -41,7 +42,10 @@ from cap.approval.card import (
     record_stage_one,
     record_verdict,
 )
-from cap.approval.identity import Reviewer, reviewer_identity
+from cap.approval.hosts import HostGuard, static_hosts
+from cap.approval.identity import Reviewer, reviewer_identity, signed_in_name
+from cap.approval.sessions import SessionStore
+from cap.approval.throttle import SignInThrottle
 from cap.config import get_settings
 from cap.publisher import PlatformAdapter, PublishRefusedError
 from cap.schema.post_record import (
@@ -421,27 +425,29 @@ def create_app(store: Store | None = None) -> FastAPI:
     )  # the screens; imported here to keep the API importable alone
 
     store = store or Store()
-    local = get_settings().env in ("local", "test")
-    app = FastAPI(
-        title="Content Agent Portfolio",
-        docs_url="/api/docs" if local else None,
-        openapi_url="/api/openapi.json" if local else None,
-        redoc_url=None,
-    )
+    settings = get_settings()
+    local = settings.env in ("local", "test")
+    app = FastAPI(title="Content Agent Portfolio", docs_url=None, openapi_url=None, redoc_url=None)
     app.state.store = store
+    app.state.sessions = SessionStore()
+    app.state.throttle = SignInThrottle()
+    app.add_middleware(HostGuard, allowed=static_hosts(settings))
     app.include_router(api_router(store))
     app.include_router(ui_router(store))
     app.mount("/static", STATIC, name="static")
+    if local:
+        _api_docs(app)
 
     @app.exception_handler(Exception)
     async def _crash(request: Request, exc: Exception):  # type: ignore[no-untyped-def]
-        """A fault on a laptop run says what broke (type, message, file and line) so it
-        can be reported; outside local it stays a plain 500 with the detail in the log."""
+        """A fault on a laptop run tells a signed-in reviewer what broke (type, message,
+        file and line) so it can be reported; anyone else, and every run outside
+        local, gets a plain 500 with the detail in the log."""
         import logging
         import traceback
 
         logging.getLogger("cap").exception("unhandled error on %s", request.url.path)
-        if not local:
+        if not local or signed_in_name(request) is None:
             return JSONResponse({"detail": "internal error"}, status_code=500)
         tb = traceback.extract_tb(exc.__traceback__)
         where = f"{tb[-1].filename.split('cap')[-1]}:{tb[-1].lineno}" if tb else "?"
@@ -468,3 +474,21 @@ def create_app(store: Store | None = None) -> FastAPI:
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
     return app
+
+
+def _api_docs(app: FastAPI) -> None:
+    """The API's docs, on a laptop run only, to a signed-in approver only."""
+    from fastapi.openapi.docs import get_swagger_ui_html
+    from fastapi.responses import HTMLResponse
+
+    def _approver(reviewer: Reviewer = Depends(reviewer_identity)) -> None:
+        if not reviewer.is_approver:
+            raise HTTPException(403, "approvers only")
+
+    @app.get("/api/openapi.json", include_in_schema=False, dependencies=[Depends(_approver)])
+    def openapi() -> JSONResponse:
+        return JSONResponse(app.openapi())
+
+    @app.get("/api/docs", include_in_schema=False, dependencies=[Depends(_approver)])
+    def docs() -> HTMLResponse:
+        return get_swagger_ui_html(openapi_url="/api/openapi.json", title=app.title)

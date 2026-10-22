@@ -25,17 +25,20 @@ from cap.approval.app import Store, finalise_and_issue, publish_now, visible_to
 from cap.approval.card import CardError, record_stage_one, record_verdict
 from cap.approval.identity import (
     COOKIE,
-    COOKIE_MAX_AGE_S,
     CSRF_COOKIE,
     Reviewer,
     check_csrf,
     csrf_token,
     current_reviewer,
     new_csrf_token,
+    person_for_secret,
     role_for,
     secure_cookies,
-    sign_cookie,
+    sessions,
+    sign_in_configured,
 )
+from cap.approval.sessions import LIFETIME_S
+from cap.approval.throttle import SignInThrottle
 from cap.config import get_settings
 from cap.publisher import PublishRefusedError
 from cap.schema.post_record import Decision, PostStatus, ReasonCode
@@ -88,34 +91,47 @@ def ui_router(store: Store) -> APIRouter:
         if not reviewer.is_approver:
             raise HTTPException(403, "approvers only")
 
-    def _signed_in(name: str) -> Response:
+    def _signed_in(request: Request, name: str) -> Response:
+        """A fresh session (and CSRF token) for `name`; any session the browser
+        already had is ended, so a planted id never becomes a signed-in one."""
+        sessions(request).end(request.cookies.get(COOKIE))
         resp = RedirectResponse("/", status_code=303)
         secure = secure_cookies()
-        for key, value in ((COOKIE, sign_cookie(name)), (CSRF_COOKIE, new_csrf_token())):
+        sid = sessions(request).start(name)
+        for key, value in ((COOKIE, sid), (CSRF_COOKIE, new_csrf_token())):
             resp.set_cookie(
-                key, value, max_age=COOKIE_MAX_AGE_S, httponly=True, samesite="lax", secure=secure
+                key, value, max_age=LIFETIME_S, httponly=True, samesite="lax", secure=secure
             )
         resp.delete_cookie(google.STATE_COOKIE)
         return resp
 
-    # ---- sign-in: Google when configured; the local name box only under the dev flag
-    @r.get("/login", response_class=HTMLResponse)
-    def login_form(request: Request) -> Response:
+    def _login_page(request: Request, status: int = 200, error: str = "") -> Response:
+        """The sign-in form, with a CSRF token of its own (set here when the browser
+        has none yet, so the first POST can be checked like every other)."""
         s = get_settings()
-        if not s.google_enabled and not s.dev_reviewer_header:
-            raise HTTPException(503, "sign-in not configured for this environment")
-        return render(
+        token = csrf_token(request) or new_csrf_token()
+        resp = render(
             request,
             "login.html",
             None,
-            name="",
-            error="",
+            status,
+            csrf=token,
+            error=error,
             google=s.google_enabled,
             local=s.dev_reviewer_header,
-            need_passcode=not __import__("cap.approval.identity", fromlist=["x"]).is_loopback(
-                request
-            ),
         )
+        if not csrf_token(request):
+            resp.set_cookie(
+                CSRF_COOKIE, token, httponly=True, samesite="lax", secure=secure_cookies()
+            )
+        return resp
+
+    # ---- sign-in: Google when configured; the per-person secret under the dev flag
+    @r.get("/login", response_class=HTMLResponse)
+    def login_form(request: Request) -> Response:
+        if not sign_in_configured():
+            raise HTTPException(503, "sign-in not configured for this environment")
+        return _login_page(request)
 
     @r.get("/auth/google")
     def google_start(request: Request) -> Response:
@@ -139,64 +155,40 @@ def ui_router(store: Store) -> APIRouter:
         request: Request, code: str = "", state: str = "", error: str = ""
     ) -> Response:
         if error or not code:
-            return render(
-                request,
-                "login.html",
-                None,
-                401,
-                error="Google sign-in was cancelled.",
-                name="",
-                google=True,
-                local=get_settings().dev_reviewer_header,
-            )
+            return _login_page(request, 401, "Google sign-in was cancelled.")
         if not state or state != request.cookies.get(google.STATE_COOKIE):
             raise HTTPException(401, "sign-in state did not match; start again")
         redirect_uri = str(request.url_for("google_callback"))
         email = google.verify_id_token(google.exchange_code(code, redirect_uri))
-        return _signed_in(google.reviewer_for_email(email))
+        return _signed_in(request, google.reviewer_for_email(email))
 
-    @r.post("/login")
-    def login(
-        request: Request, name: str = Form(default=""), passcode: str = Form(default="")
-    ) -> Response:
-        s = get_settings()
-        if not s.dev_reviewer_header:
+    @r.post("/login", dependencies=[Depends(check_csrf)])
+    def login(request: Request, secret: str = Form(default="")) -> Response:
+        """The secret alone says who is signing in. Wrong secrets count against this
+        device and against everyone (cap.approval.throttle)."""
+        if not get_settings().dev_reviewer_header:
             raise HTTPException(503, "sign-in not configured for this environment")
-        import secrets as _secrets
-
-        from cap.approval.identity import is_loopback
-
-        if not is_loopback(request):
-            # another device on the network: the passcode printed in the console
-            want = s.local_passcode.get_secret_value() if s.local_passcode else ""
-            if not want or not _secrets.compare_digest(passcode.strip(), want):
-                return render(
-                    request,
-                    "login.html",
-                    None,
-                    403,
-                    error="Passcode needed: it is printed in the app's console window on the laptop.",
-                    name=name.strip(),
-                    google=s.google_enabled,
-                    local=True,
-                    need_passcode=True,
-                )
-        name = name.strip()
-        if not name or role_for(name) is None:
-            return render(
-                request,
-                "login.html",
-                None,
-                403,
-                error="That name is not on a reviewer list.",
-                name=name,
-                google=get_settings().google_enabled,
-                local=True,
+        throttle: SignInThrottle = request.app.state.throttle
+        client = request.client.host if request.client else ""
+        refused = throttle.refusal(client)
+        if refused:
+            return _login_page(request, 429, refused)
+        name = person_for_secret(secret)
+        if name is None:
+            throttle.failed(client)
+            why = throttle.refusal(client) or (
+                "That code is not right. Each person's code is shown in the app's "
+                "console window on the laptop when it starts."
             )
-        return _signed_in(name)
+            return _login_page(request, 403, why)
+        if role_for(name) is None:
+            return _login_page(request, 403, f"{name} is not on a reviewer list.")
+        throttle.succeeded(client)
+        return _signed_in(request, name)
 
     @r.post("/logout", dependencies=[Depends(check_csrf)])
-    def logout() -> Response:
+    def logout(request: Request) -> Response:
+        sessions(request).end(request.cookies.get(COOKIE))
         resp = RedirectResponse("/login", status_code=303)
         resp.delete_cookie(COOKIE)
         resp.delete_cookie(CSRF_COOKIE)

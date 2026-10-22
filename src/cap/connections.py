@@ -8,7 +8,8 @@ Three platforms, each with two parts the app captures on the Connections screen:
   2. the account connection: a Connect button sends him to the platform's consent
      page; the callback stores the token and the account name.
 
-Everything is kept under <data_dir>/connections/<platform>.json, created 0600, and is
+Everything is kept under <data_dir>/connections/<platform>.json, readable by the
+owner only (cap.secretfile: 0600, or the user's own ACL on Windows), and is
 never printed, logged or shown back in full (the screen shows the last four
 characters of a saved id). Nothing here is sent anywhere but the platform it belongs
 to. The publisher (plain code, PRD 4.6) reads the tokens; no model ever does.
@@ -17,9 +18,7 @@ to. The publisher (plain code, PRD 4.6) reads the tokens; no model ever does.
 from __future__ import annotations
 
 import json
-import os
 import secrets
-import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,6 +27,7 @@ from urllib.parse import urlencode
 import httpx
 
 from cap.config import get_settings
+from cap.secretfile import restrict_to_owner
 
 
 @dataclass(frozen=True)
@@ -115,7 +115,9 @@ DESTINATION_LABELS = {
 
 def _dir() -> Path:
     d = Path(get_settings().data_dir) / "connections"
-    d.mkdir(parents=True, exist_ok=True)
+    if not d.exists():
+        d.mkdir(parents=True)
+        restrict_to_owner(d)
     return d
 
 
@@ -137,10 +139,7 @@ def save(platform: str, data: dict[str, Any]) -> None:
     p = _path(platform)
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
-    try:
-        os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
-    except OSError:
-        pass
+    restrict_to_owner(tmp)
     tmp.replace(p)
 
 
@@ -186,6 +185,16 @@ def _mask(v: str) -> str:
     return ("…" + v[-4:]) if len(v) > 8 else "saved"
 
 
+def _is_secret_field(key: str) -> bool:
+    return "token" in key or "secret" in key
+
+
+def public_account(account: dict[str, Any]) -> dict[str, Any]:
+    """The account as a screen may show it: the name and ids, never a token (the Meta
+    page token sits beside the page name in the stored record)."""
+    return {k: v for k, v in account.items() if not _is_secret_field(k)}
+
+
 def status(platform: str) -> dict[str, Any]:
     """What the screen shows: never a secret, never a token."""
     spec = PLATFORMS[platform]
@@ -206,7 +215,7 @@ def status(platform: str) -> dict[str, Any]:
         and not load(platform).get("credentials")
         and bool(creds.get("client_id")),
         "connected": bool(data.get("token")),
-        "account": data.get("account") or {},
+        "account": public_account(data.get("account") or {}),
         "connected_at": data.get("connected_at", ""),
         "last_error": data.get("last_error", ""),
     }
@@ -393,8 +402,11 @@ def safe_error(e: Exception, platform: str, extra: list[str] | None = None) -> s
     else:
         text = f"{type(e).__name__}: {e}"
     secrets_ = [v for v in credentials(platform).values() if v]
-    tok = load(platform).get("token") or {}
+    stored = load(platform)
+    tok = stored.get("token") or {}
     secrets_ += [str(v) for v in tok.values() if isinstance(v, str) and v]
+    account = stored.get("account") or {}
+    secrets_ += [str(v) for k, v in account.items() if _is_secret_field(k) and v]
     secrets_ += [s for s in (extra or []) if s]
     for s in sorted(set(secrets_), key=len, reverse=True):
         if len(s) >= 6:

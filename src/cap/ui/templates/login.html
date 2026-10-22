@@ -17,15 +17,12 @@
   {% endif %}
   {% if local %}
   <form method="post" action="/login" class="stack" style="margin-top: 8px">
-    {% if google %}<hr class="hr"><p class="meta">Local stand-in, for this laptop only:</p>{% endif %}
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if google %}<hr class="hr"><p class="meta">Or with your sign-in code:</p>{% endif %}
     <div class="field">
-      <label for="name">Reviewer name</label>
-      <input class="input" id="name" name="name" value="{{ name }}" autocomplete="username" required>
-      {% if need_passcode %}
-      <label for="passcode" class="eyebrow" style="margin-top: 8px">Passcode</label>
-      <input class="input" id="passcode" name="passcode" inputmode="numeric" autocomplete="one-time-code" required>
-      <span class="meta">Shown in the app's console window on the laptop.</span>
-      {% endif %}
+      <label for="secret">Your sign-in code</label>
+      <input class="input" id="secret" name="secret" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+      <span class="meta">Each person has their own code, shown in the app's console window on the laptop when it starts. The code says who you are.</span>
     </div>
     <button class="btn {{ 'secondary' if google else 'primary' }}" type="submit">Continue</button>
     {% if not google %}<p class="meta">Google sign-in switches on when a client id and secret are in <code>.env</code>.</p>{% endif %}
