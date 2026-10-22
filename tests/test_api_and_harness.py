@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from cap.approval.app import Store, create_app
 from cap.approval.token import ApprovalToken, verify
 from cap.config import get_settings
+from cap.gates.disclosure import MFK_FACTOR_WEIGHTS
 from cap.harness import run_all
 from cap.models import MockClient
 from cap.pipeline import run_post
@@ -135,7 +136,9 @@ def test_harness_scores_exact_and_non_miss_separately():
     fx = {
         ("P1", "A"): ok(verdict="pass", rule_findings=[]),
         ("P1", "B"): ok(verdict="pass", rule_findings=[]),
-        ("P9", "default"): ok(factors=[{"factor_id": "child_subject_matter", "outcome": "absent"}]),
+        ("P9", "default"): ok(
+            factors=[{"factor_id": f, "outcome": "absent"} for f in MFK_FACTOR_WEIGHTS]
+        ),
     }
     reports = {r.name: r for r in run_all(MockClient(fx), runs=2)}
     red, green, mfk = reports["red"], reports["green"], reports["mfk"]

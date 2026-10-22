@@ -250,14 +250,15 @@ def adapt(record: PostRecord, client: ModelClient, platforms: list[Platform]) ->
         if new_numbers:
             record.log(f"variant {v.platform} dropped: introduced numerals {sorted(new_numbers)}")
             continue
-        if AI_ROLE_DISCLOSURE_KEY not in (v.caption or record.draft.caption).lower():
+        caption = v.caption or record.draft.caption  # no caption: the draft's, as checked
+        if AI_ROLE_DISCLOSURE_KEY not in caption.lower():
             record.log(f"variant {v.platform} dropped: disclosure not preserved in the caption")
             continue
         record.variants.append(
             Variant(
                 platform=Platform(v.platform),
                 title=v.title,
-                caption=v.caption,
+                caption=caption,
                 duration_s=v.duration_s,
                 script_cut=v.script_cut,
                 on_screen_text=v.on_screen_text,

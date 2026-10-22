@@ -2,7 +2,8 @@
 
 Three calls, all through the model client:
 * Call A (Sonnet, effort high): claim discovery over the script and the variant titles
-  and captions, with the Drafter's claims as a hint. Claims it adds are checked too.
+  and captions, with the Drafter's claims as a hint. Claims it adds are checked too,
+  and so is every Drafter claim it left out: discovery adds, it never removes.
 * Call B (Sonnet, effort high): per-claim verifier against the claim's source. A claim
   with no source is tried against every source the post carries; a claim citing a URL
   the post does not carry is missing_source.
@@ -18,8 +19,9 @@ the test log and the claim, then the task line.
 Code checks, not the model: the supporting quote must be an exact substring of the
 source (whitespace-normalised, unicode-normalised, and also tested after decoding the
 JSON escapes the model saw); an unsupported, outdated or missing-source claim blocks
-the post; a blocked discovery call parks the post; sources reach the model only
-through the client's nonce-keyed wrapper.
+the post in block mode and is a card question in flag mode (D41); endorsement wording
+fails it in both; a blocked discovery call falls back to the drafter's list (D43);
+sources reach the model only through the client's nonce-keyed wrapper.
 """
 
 from __future__ import annotations
@@ -85,20 +87,52 @@ def discover_claims(
         why = res.output.blocked_reason if res.output else res.reason
         record.log(f"claim discovery declined ({str(why)[:160]}); checking the drafter's list")
         return [c.model_copy() for c in record.draft.claims], [], False
-    by_text = {c.text: c for c in record.draft.claims}
-    claims: list[Claim] = []
-    for c in res.output.claims:
-        prior = by_text.get(c.text)
-        claims.append(
+    claims = merge_claims(
+        record.draft.claims,
+        [(c.text, c.source_url) for c in res.output.claims]
+        + [(t, None) for t in res.output.added_claims],
+    )
+    return claims, res.output.endorsement_wording, res.output.injection_suspected
+
+
+_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
+
+
+def claim_key(text: str) -> str:
+    """Two claim texts are the same claim when they match after normalisation (case,
+    whitespace, quotes, closing punctuation, Arabic-Indic digits: "٣٠" is "30")."""
+    return _normalise(text).translate(_DIGITS).casefold().rstrip(" .!?;:,")
+
+
+def merge_claims(drafted: list[Claim], discovered: list[tuple[str, str | None]]) -> list[Claim]:
+    """Discovery's list (text, cited url) merged with the drafter's, which includes the
+    claims code added for unlisted numbers. Discovery may add or reword; it never
+    removes: every drafter claim is checked whatever call A returned (an empty list
+    from call A once passed a post with nothing checked). Deduplicated on the
+    normalised text; a drafter claim keeps its source, quote and test-log mark."""
+    by_key = {claim_key(c.text): c for c in drafted}
+    out: list[Claim] = []
+    seen: set[str] = set()
+    for text, url in discovered:
+        key = claim_key(text)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        prior = by_key.get(key)
+        out.append(
             Claim(
-                text=c.text,
-                source_url=c.source_url or (prior.source_url if prior else None),
+                text=prior.text if prior else text,
+                source_url=url or (prior.source_url if prior else None),
                 source_quote=prior.source_quote if prior else None,
                 in_test_log=prior.in_test_log if prior else False,
             )
         )
-    claims += [Claim(text=t) for t in res.output.added_claims]
-    return claims, res.output.endorsement_wording, res.output.injection_suspected
+    for c in drafted:
+        key = claim_key(c.text)
+        if key and key not in seen:
+            seen.add(key)
+            out.append(c.model_copy())
+    return out
 
 
 def _verify(
@@ -214,12 +248,12 @@ def check_facts(
     gate.unsupported_claims += [f"endorsement wording: {w}" for w in endorsement_wording]
     from cap.config import get_settings
 
-    unconfirmed = [cc.claim_text for cc in gate.claim_checks if cc.final != "supported"]
-    if get_settings().fact_mode == "flag":
-        # D41: unconfirmed claims go to Hemant on the card; endorsement wording still fails
-        gate.passed = not endorsement_wording
-        if unconfirmed:
-            record.log(f"facts: {len(unconfirmed)} claim(s) unconfirmed, flagged on the card")
-    else:
-        gate.passed = not gate.unsupported_claims
+    # PRD 4.14: endorsement wording fails the post in every mode. Unconfirmed claims
+    # fail it in block mode; in flag mode (D41) they become one card question
+    # (cap.gates.verdict) and the gate itself passes.
+    unconfirmed = [cc for cc in gate.claim_checks if cc.final != "supported"]
+    flag_mode = get_settings().fact_mode == "flag"
+    gate.passed = not endorsement_wording and (flag_mode or not unconfirmed)
+    if unconfirmed and flag_mode:
+        record.log(f"facts: {len(unconfirmed)} claim(s) unconfirmed, flagged on the card")
     return gate, injection

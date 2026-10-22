@@ -6,12 +6,14 @@ from cap.agents import draft
 from cap.demo import CHARACTER_BLOCK, TEST_LOG
 from cap.gates import (
     InMemoryHistory,
+    Outcome,
     check_disclosure,
     check_ethics,
     check_facts,
     check_originality,
+    decide,
 )
-from cap.gates.disclosure import mfk_band, mfk_score
+from cap.gates.disclosure import MFK_FACTOR_WEIGHTS, mfk_band, mfk_score
 from cap.gates.ethics import _BAIT, _judge_user_message, aggregate, verdict_from_findings
 from cap.gates.facts import quote_in_source
 from cap.models import Completion, MockClient
@@ -36,7 +38,8 @@ from tests.conftest import SOURCES, make_deps, ok, source_docs
 def test_happy_path_reaches_queue(client, record, tmp_path):
     out = run_post(record, SOURCES, make_deps(client, record, tmp_path))
     assert out.status == PostStatus.AWAITING_APPROVAL, out.history
-    assert out.gates.all_passed, out.gates.model_dump()
+    assert decide(out).outcome == Outcome.PASS, out.gates.model_dump()
+    assert not out.flags.needs_decision and out.gates_cleared
     assert out.flags.card_prepared and out.approval.spot_check is not None
     assert out.asset.sha256 and (tmp_path / f"{out.post_id}.render.txt").exists()
     assert len(out.variants) == 2
@@ -322,7 +325,7 @@ def test_mfk_unknown_factor_id_is_unscored_not_dropped(fixtures, record):
     )
     gate = check_disclosure(record, MockClient(fixtures))
     assert gate.mfk_band == "unscored" and not gate.passed
-    assert gate.mfk_factors == ["unknown_factor:subject_matter"]
+    assert gate.mfk_factors[0] == "unknown_factor:subject_matter"
 
 
 def test_mfk_bands_and_heaviest_unclear_rule():
@@ -347,7 +350,10 @@ def test_mfk_bands_and_heaviest_unclear_rule():
 
 def test_mfk_doubtful_goes_to_the_card_for_hemant(fixtures, record, tmp_path):
     fixtures[("P9", "default")] = ok(
-        factors=[{"factor_id": "child_subject_matter", "outcome": "unclear"}]
+        factors=[
+            {"factor_id": f, "outcome": "unclear" if f == "child_subject_matter" else "absent"}
+            for f in MFK_FACTOR_WEIGHTS
+        ]
     )
     out = run_post(record, SOURCES, make_deps(MockClient(fixtures), record, tmp_path))
     assert out.status == PostStatus.AWAITING_APPROVAL, out.history[-3:]
@@ -385,7 +391,7 @@ def test_originality_blocks_near_duplicate_and_skips_canaries():
     canary.flags.canary = True
     canary.draft.script = "canary text"
     history.add(canary)
-    assert len(history.posts) == 1  # D23
+    assert len(history.entries) == 1  # D23
     dup = PostRecord(channel_id=Channel.A)
     dup.draft.script = prior.draft.script + " One extra sentence about the test log."
     g = check_originality(dup, history, ["test log"])

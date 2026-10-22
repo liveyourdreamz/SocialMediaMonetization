@@ -8,9 +8,10 @@
 * made_for_kids: P9 returns factors only; code turns factors into a score with fixed
   weights and a band. The factor table with its weights goes to the model as a static
   block so the ids it returns are the ids the code weights; an id the code does not
-  know makes the output unscored (fail closed), never silently ignored. "Unclear" on
-  either of the two heaviest factors is doubtful whatever the score. Doubtful never
-  auto-decides: the pipeline parks the post for Hemant (PRD 3, 4.13).
+  know, an id given twice or an id left out makes the output unscored (fail closed),
+  never silently ignored or scored clear. "Unclear" on either of the two heaviest
+  factors is doubtful whatever the score. Doubtful and unscored never auto-decide: they
+  are card questions for Hemant (cap.gates.verdict; PRD 3, 4.13).
 """
 
 from __future__ import annotations
@@ -84,6 +85,17 @@ def mfk_band(score: float, factors: Sequence[tuple[str, str]] = ()) -> Band:
     return "clear"
 
 
+def factor_problems(factors: Sequence[tuple[str, str]]) -> list[str]:
+    """Why a factor list cannot be scored: an id the code does not weight, an id given
+    twice, or an id left out. Zero factors is not "nothing child-directed", it is no
+    assessment, so a missing id makes the result unscored (never clear by omission)."""
+    ids = [fid for fid, _ in factors]
+    out = [f"unknown_factor:{fid}" for fid in ids if fid not in MFK_FACTOR_WEIGHTS]
+    out += [f"duplicate_factor:{fid}" for fid in sorted({i for i in ids if ids.count(i) > 1})]
+    out += [f"missing_factor:{fid}" for fid in MFK_FACTOR_WEIGHTS if fid not in ids]
+    return out
+
+
 def _p9_user_message(record: PostRecord) -> str:
     variants = [
         {"platform": v.platform.value, "title": v.title, "caption": v.caption}
@@ -133,12 +145,11 @@ def check_disclosure(record: PostRecord, client: ModelClient) -> DisclosureGate:
     factors: list[tuple[str, str]] = []
     if not unscored:
         assert result.output is not None
-        for f in result.output.factors:
-            if f.factor_id not in MFK_FACTOR_WEIGHTS:
-                unscored = True  # unknown id: fail closed, never drop it
-                gate.mfk_factors.append(f"unknown_factor:{f.factor_id}")
-                break
-            factors.append((f.factor_id, f.outcome))
+        factors = [(f.factor_id, f.outcome) for f in result.output.factors]
+        problems = factor_problems(factors)
+        if problems:
+            unscored = True  # fail closed: a score needs every factor, each once
+            gate.mfk_factors = problems
     if unscored:
         # no score means Hemant decides; the gate does not pass
         gate.made_for_kids = False

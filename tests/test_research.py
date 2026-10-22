@@ -117,7 +117,7 @@ def test_if_the_scout_fails_outright_wikipedia_search_takes_over(keyed, monkeypa
     monkeypatch.setattr(
         research,
         "_search_wikipedia",
-        lambda topic, limit=2: ["https://en.wikipedia.org/wiki/Cocoon"],
+        lambda topic, limit=2, lang="en": ["https://en.wikipedia.org/wiki/Cocoon"],
     )
     docs, log = research.find_sources("Cocoons", "B")
     assert [d["url"] for d in docs] == ["https://en.wikipedia.org/wiki/Cocoon"]

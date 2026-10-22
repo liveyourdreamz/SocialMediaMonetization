@@ -1,7 +1,7 @@
 """Gate 7: originality and anchor check (PRD 4.12, rulebook R-13). Code only.
 
-Compares the post against the channel group's recent history and checks the character
-anchor is present. The similarity backend is pluggable: the Foundation default is a
+Compares the post against the recent post history (cap.gates.history: approved posts
+of every channel, D23 exclusions) and checks the character anchor is present. The similarity backend is pluggable: the Foundation default is a
 deterministic lexical measure so the gate runs without any service. It catches
 verbatim and near-verbatim reuse only; a plain paraphrase (scenario S4) is a known
 miss until the embedding backend lands before the week-6 milestone.
@@ -12,11 +12,9 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
 from math import sqrt
-from typing import Protocol
 
+from cap.gates.history import HistoryIndex
 from cap.rulebook import load_rulebook
 from cap.schema.post_record import OriginalityGate, PostRecord
 
@@ -59,31 +57,6 @@ def skeleton_share(script: str, history: list[str]) -> float:
     for h in history:
         seen |= openers(h)
     return len(mine & seen) / len(mine)
-
-
-class HistoryIndex(Protocol):
-    """Recent approved posts for a channel group. Canaries never enter it (D23)."""
-
-    def recent(self, channel_id: str, days: int) -> list[tuple[str, str]]:
-        """Return (post_id, script_text) pairs."""
-
-
-@dataclass
-class InMemoryHistory:
-    """History across all channels (PRD 4.12 compares against every channel)."""
-
-    posts: list[tuple[str, str, str, datetime]] = field(default_factory=list)
-
-    def recent(self, channel_id: str, days: int) -> list[tuple[str, str]]:
-        cutoff = datetime.now(UTC) - timedelta(days=days)
-        return [(pid, script) for pid, _ch, script, at in self.posts if at >= cutoff]
-
-    def add(self, record: PostRecord) -> None:
-        if record.flags.canary:
-            return  # D23: canaries never enter the history index
-        self.posts.append(
-            (record.post_id, record.channel_id.value, record.draft.script, record.created_at)
-        )
 
 
 _ARABIC_MARKS = re.compile(r"[\u064B-\u065F\u0670\u0640]")  # harakat, dagger alif, tatweel

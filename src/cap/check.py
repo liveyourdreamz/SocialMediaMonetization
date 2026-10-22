@@ -331,6 +331,8 @@ def full_run(out: Callable[[str], None] = print, channels: str = "ABC") -> int:
             continue
         try:
             rec.status = PostStatus.APPROVED  # stand-in approval, in memory only
+            # the stand-in approver settles the card's questions, as Hemant would (D43)
+            rec.approval.decisions_acknowledged = list(rec.flags.needs_decision)
             t = tok.issue(rec.post_id, rec.asset.sha256, s.approvers[0], "approve", canary=False)
             publish_to(rec, Path(rec.asset.uri), t, [LocalFolderAdapter(dest)])
             if rec.status != PostStatus.PUBLISHED:

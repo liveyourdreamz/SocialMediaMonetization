@@ -35,7 +35,7 @@ def _approved(tmp_path: Path) -> tuple[PostRecord, Path, tok.ApprovalToken]:
     r.asset.uri, r.asset.sha256 = str(asset), tok.sha256_file(asset)
     r.gates.originality.passed = True
     r.gates.ethics.verdict = Verdict.PASS
-    r.gates.disclosure.passed = True
+    r.gates.disclosure.passed, r.gates.disclosure.mfk_band = True, "clear"
     r.gates.facts.passed = True
     t = tok.issue(r.post_id, r.asset.sha256, "hemant", "approve", canary=False)
     return r, asset, t

@@ -14,6 +14,7 @@ from cap import policy
 from cap.approval.app import Store, card_for
 from cap.approval.identity import Reviewer
 from cap.config import get_settings
+from cap.gates.verdict import confirmed_sources
 from cap.schema.post_record import Decision, PostRecord, PostStatus, ReasonCode
 
 OPENING_SLOT = "[[HEMANT_OPENING_LINE]]"
@@ -656,15 +657,7 @@ def package(record: PostRecord) -> dict[str, Any]:
         "on_screen_text": list(record.draft.on_screen_text),
         "script": script,
         "shot_list": list(record.draft.shot_list),
-        "sources": sorted(
-            {
-                c.source_url
-                for c in record.draft.claims
-                if c.source_url
-                and not c.source_url.startswith("testlog://")
-                and c.status == "supported"
-            }
-        ),
+        "sources": confirmed_sources(record),
     }
     cuts = []
     for v in record.variants:

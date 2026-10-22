@@ -14,7 +14,7 @@ def _approved_record(tmp_path: Path) -> tuple[PostRecord, Path]:
     r.asset.uri, r.asset.sha256 = str(asset), tok.sha256_file(asset)
     r.gates.originality.passed = True
     r.gates.ethics.verdict = Verdict.PASS
-    r.gates.disclosure.passed = True
+    r.gates.disclosure.passed, r.gates.disclosure.mfk_band = True, "clear"
     r.gates.facts.passed = True
     return r, asset
 

@@ -22,11 +22,15 @@ from cap.agents import AgentBlockedError, adapt, critique, critique_text, draft
 from cap.approval.card import prepare_card
 from cap.config import get_settings
 from cap.gates import (
-    InMemoryHistory,
+    HistoryIndex,
+    Outcome,
     check_disclosure,
     check_ethics,
     check_facts,
     check_originality,
+    confirmed_sources,
+    decide,
+    default_history,
 )
 from cap.models import ModelClient, SourceDoc
 from cap.schema.post_record import OriginalityGate, Platform, PostRecord, PostStatus
@@ -41,7 +45,9 @@ class PipelineState(TypedDict, total=False):
 @dataclass
 class PipelineDeps:
     client: ModelClient
-    history: InMemoryHistory = field(default_factory=InMemoryHistory)
+    # approved posts the originality gate compares against; written at approval by
+    # cap.gates.record_approved. Default: <data_dir>/history.jsonl
+    history: HistoryIndex = field(default_factory=default_history)
     anchor_elements: dict[str, list[str]] = field(default_factory=dict)  # channel -> elements
     character_blocks: dict[str, str] = field(default_factory=dict)  # channel -> text
     render_dir: Path = field(default_factory=lambda: Path("renders"))
@@ -168,49 +174,22 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
                 record.gates.originality = _originality_over_variants(record, deps, anchors)
         record.gates.ethics = check_ethics(record, deps.client)
         record.gates.disclosure = check_disclosure(record, deps.client)
-        # a gate that failed outright rejects, before any park (a failure is not a question)
-        hard = [
-            name
-            for name, failed in (
-                ("originality", not record.gates.originality.passed),
-                ("ethics", record.gates.ethics.verdict.value == "fail"),
-                ("facts", not record.gates.facts.passed),
-            )
-            if failed
-        ]
-        if hard:
+        # one rule decides what the four results mean together (cap.gates.verdict)
+        verdict = decide(record)
+        if verdict.outcome == Outcome.REJECT:
             record.status = PostStatus.REJECTED
-            record.stop("checks", "gates failed: " + ", ".join(hard))
-            record.log("gates failed: " + ", ".join(hard))
+            record.stop("checks", "gates failed: " + "; ".join(verdict.reasons))
+            record.log("gates failed: " + "; ".join(verdict.reasons))
             return _put(record, parked_reason="gates failed")
-        # D43: a question a gate could not settle goes to the card for Hemant to decide
-        if record.gates.ethics.verdict.value == "escalate":
-            eg = record.gates.ethics
-            views = [
-                f"judge {j.judge} ({j.platform.value}): {j.verdict.value}"
-                + (f", {j.explanation[:160]}" if j.explanation else "")
-                for j in eg.judges
-                if j.verdict.value != "pass"
-            ]
-            rules = f" Rules: {', '.join(eg.rule_ids)}." if eg.rule_ids else ""
-            why = ("; ".join(views) or "the judges did not agree") + rules
-            record.flags.needs_decision.append(f"Ethics: the judges escalated this. {why}"[:500])
-        if record.gates.disclosure.mfk_band in ("doubtful", "unscored"):
-            band = record.gates.disclosure.mfk_band
-            factors = ", ".join(record.gates.disclosure.mfk_factors) or "no factor detail"
-            record.flags.needs_decision.append(
-                f"Made for kids: {band} ({factors}). Approving keeps it 'not made for kids'."
-            )
+        # D43: what a gate could not settle goes to the card for Hemant to decide
+        for q in verdict.questions:
+            if q not in record.flags.needs_decision:
+                record.flags.needs_decision.append(q)
         if record.flags.needs_decision:
             record.log(
                 f"{len(record.flags.needs_decision)} question(s) for you on the card: "
                 + "; ".join(n.split(":")[0] for n in record.flags.needs_decision)
             )
-        if _still_failing(record):
-            record.status = PostStatus.REJECTED
-            record.stop("checks", "gates failed: " + ", ".join(_failed_gates(record)))
-            record.log("gates failed: " + ", ".join(_failed_gates(record)))
-            return _put(record, parked_reason="gates failed")
         return _put(record)
 
     def n_render(state: PipelineState) -> PipelineState:
@@ -308,56 +287,11 @@ _STEP_FOR_STATUS = {
 }
 
 
-def confirmed_sources(record: PostRecord) -> list[str]:
-    """The links that confirmed at least one claim: what a description may list."""
-    return sorted(
-        {
-            c.source_url
-            for c in record.draft.claims
-            if c.status == "supported"
-            and c.source_url
-            and not c.source_url.startswith("testlog://")
-        }
-    )
-
-
 def _park(record: PostRecord, reason: str) -> PipelineState:
     record.stop(_STEP_FOR_STATUS.get(record.status, "draft"), reason)
     record.status = PostStatus.PARKED
     record.log(f"parked: {reason}")
     return _put(record, parked_reason=reason)
-
-
-def _still_failing(record: PostRecord) -> bool:
-    """Failures that are not questions for Hemant: these reject (D43 keeps them)."""
-    g = record.gates
-    if g.all_passed:
-        return False
-    asked = bool(record.flags.needs_decision)
-    ethics_bad = g.ethics.verdict.value == "fail" or (
-        g.ethics.verdict.value != "pass" and not asked
-    )
-    mfk_question = g.disclosure.mfk_band in ("doubtful", "unscored")
-    disclosure_bad = (
-        not g.disclosure.ad_prefix_ok
-        or g.disclosure.mfk_band == "likely"
-        or (not g.disclosure.passed and not mfk_question)
-    )
-    return ethics_bad or disclosure_bad or not g.originality.passed or not g.facts.passed
-
-
-def _failed_gates(record: PostRecord) -> list[str]:
-    g = record.gates
-    out = []
-    if not g.originality.passed:
-        out.append("originality")
-    if g.ethics.verdict.value != "pass":
-        out.append("ethics")
-    if not g.disclosure.passed:
-        out.append("disclosure")
-    if not g.facts.passed:
-        out.append("facts")
-    return out
 
 
 def compile_pipeline(deps: PipelineDeps, checkpointer: Any | None = None):  # type: ignore[no-untyped-def]

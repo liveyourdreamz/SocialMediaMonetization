@@ -273,15 +273,6 @@ class Gates(Strict):
     disclosure: DisclosureGate = Field(default_factory=DisclosureGate)
     facts: FactsGate = Field(default_factory=FactsGate)
 
-    @property
-    def all_passed(self) -> bool:
-        return (
-            self.originality.passed
-            and self.ethics.verdict == Verdict.PASS
-            and self.disclosure.passed
-            and self.facts.passed
-        )
-
 
 class Asset(Strict):
     uri: str = ""  # the long-form file the approval token binds to
@@ -396,23 +387,11 @@ class PostRecord(Strict):
 
     @property
     def gates_cleared(self) -> bool:
-        """Publishable as far as the gates go: everything passed, or the only open
-        items are the questions the approver settled on the card (D43). A gate that
-        failed outright (a duplicate, an ethics fail, a likely made-for-kids post, a
-        missing Ad prefix, endorsement wording) is never cleared by anyone (R-20)."""
-        g = self.gates
-        if g.all_passed:
-            return True
-        hard_fail = (
-            not g.originality.passed
-            or g.ethics.verdict == Verdict.FAIL
-            or not g.facts.passed
-            or not g.disclosure.ad_prefix_ok
-            or g.disclosure.mfk_band == "likely"
-        )
-        if hard_fail or not self.flags.needs_decision:
-            return False
-        return set(self.flags.needs_decision) <= set(self.approval.decisions_acknowledged)
+        """Publishable as far as the gates go (cap.gates.verdict owns the rule): no gate
+        failed outright, and every question on the card was acknowledged (D43, R-20)."""
+        from cap.gates.verdict import gates_cleared
+
+        return gates_cleared(self)
 
     def stop(self, step: str, reason: str, status: PostStatus | None = None) -> None:
         """Record where and why the post stopped; the workflow bar reads these."""

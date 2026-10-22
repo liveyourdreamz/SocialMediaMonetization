@@ -151,6 +151,11 @@ def tool_name(title: str, topic: str) -> str:
 _NUM = r"(\d+(?:[.,]\d+)?)"
 
 
+def _number(text: str) -> float:
+    """A number as _NUM captures it: "1,000" is a thousand (a comma is a separator)."""
+    return float(text.replace(",", ""))
+
+
 def units(paragraphs: list[str]) -> list[str]:
     """One scene per sentence: a paragraph usually covers several beats (the setup,
     the failure, the measurement, the verdict) and each deserves its own picture."""
@@ -209,12 +214,12 @@ def plan(
                 sc.action = _action(low)
                 sc.times = 2 if "twice" in low else 3 if "three times" in low else 1
                 m = re.search(r"\bday\s+" + _NUM, low)
-                sc.day = int(float(m.group(1))) if m else None
+                sc.day = int(_number(m.group(1))) if m else None
             elif ratio:
                 sc.kind = "ratio"
-                sc.number, sc.total = float(ratio.group(1)), int(float(ratio.group(2)))
+                sc.number, sc.total = _number(ratio.group(1)), int(_number(ratio.group(2)))
                 m = re.search(r"\b(invented|made up|wrong|missed)\s+" + _NUM, low)
-                sc.extra = float(m.group(2)) if m else None
+                sc.extra = _number(m.group(2)) if m else None
             elif timed and re.search(r"\b(measured|took|average|averaged)\b", low):
                 sc.kind, sc.mood = "timer", "measure"
                 sc.action = _action(low)
@@ -255,7 +260,7 @@ def plan(
                 m = re.search(r"\b(" + _NUM + r"|seven|five|ten|three)[- ]days?", low)
                 word = m.group(1) if m else "7"
                 sc.days = {"seven": 7, "five": 5, "ten": 10, "three": 3}.get(word) or int(
-                    float(word)
+                    _number(word)
                 )
             if sc.kind == "talk" and nums and not re.search(r"\btask\b", low):
                 # D42: Patch explains anything; a number gets the measured-figure panel

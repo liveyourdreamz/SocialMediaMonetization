@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse, urlsplit, urlunsplit
 
 import httpx
 
@@ -159,22 +159,41 @@ def _search_with_model(
                     searched.add(u)
         elif t == "text":
             text += getattr(block, "text", "")
+    by_key = {url_key(u): u for u in searched}
     chosen: list[str] = []
     for line in text.splitlines():
-        m = re.search(r"https?://\S+", line)
-        if not m:
-            continue
-        u = m.group(0).rstrip(").,|")
-        if u in searched and u not in chosen:
-            chosen.append(u)
+        for m in re.finditer(r"https?://[^\s<>\"']+", line):
+            u = by_key.get(url_key(m.group(0)))  # the URL as the search returned it
+            if u and u not in chosen:
+                chosen.append(u)
     return chosen[:MAX_SOURCES], text.strip()[:300]
 
 
-def _search_wikipedia(topic: str, limit: int = 2) -> list[str]:
+def url_key(url: str) -> str:
+    """One form for two spellings of the same page, so the scout's chosen line matches
+    the search result it came from: markdown punctuation stripped ("<url>", "(url).",
+    "**url**"), percent-encoding decoded, scheme and host lower-cased, no fragment, no
+    trailing slash."""
+    u = url.strip().rstrip(").,;:|*_]>»”’\"'").lstrip("(<[*_")
+    parts = urlsplit(unquote(u))
+    path = parts.path.rstrip("/")
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, parts.query, ""))
+
+
+_ARABIC = re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]")
+
+
+def wikipedia_language(topic: str, channel: str) -> str:
+    """Channel C is Arabic, and so is any topic written in Arabic script: its pages are
+    on ar.wikipedia; searching the English site for an Arabic title finds nothing."""
+    return "ar" if channel == "C" or _ARABIC.search(topic) else "en"
+
+
+def _search_wikipedia(topic: str, limit: int = 2, lang: str = "en") -> list[str]:
     """No key: Wikipedia's search API, free, no credentials, cites nothing but itself."""
     with httpx.Client(timeout=15, headers={"User-Agent": UA, **HEADERS}) as c:
         r = c.get(
-            "https://en.wikipedia.org/w/api.php",
+            f"https://{lang}.wikipedia.org/w/api.php",
             params={
                 "action": "query",
                 "list": "search",
@@ -185,7 +204,7 @@ def _search_wikipedia(topic: str, limit: int = 2) -> list[str]:
         )
         r.raise_for_status()
         hits = (r.json().get("query") or {}).get("search") or []
-    return ["https://en.wikipedia.org/wiki/" + str(h["title"]).replace(" ", "_") for h in hits]
+    return [f"https://{lang}.wikipedia.org/wiki/" + str(h["title"]).replace(" ", "_") for h in hits]
 
 
 def _scout_request(topic: str, channel: str, claims: list[str] | None) -> str:
@@ -228,8 +247,12 @@ def find_sources(
             urls = []
     if not urls:
         try:
-            urls = _search_wikipedia(topic)
-            log.append(f"research: Wikipedia search for '{topic}' gave {len(urls)} page(s)")
+            lang = wikipedia_language(topic, channel)
+            urls = _search_wikipedia(topic, lang=lang)
+            log.append(
+                f"research: Wikipedia search for '{topic}' ({lang}.wikipedia.org) "
+                f"gave {len(urls)} page(s)"
+            )
         except Exception as e:  # noqa: BLE001 - the post parks with this line, never a 500
             log.append(f"research failed: {type(e).__name__}: {str(e)[:160]}")
             return [], log

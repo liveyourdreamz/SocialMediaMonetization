@@ -36,39 +36,48 @@ from cap.schema.post_record import (
     Verdict,
 )
 
-# R-05 engagement bait: asks framed as a condition or game. A plain closing "subscribe"
-# is allowed. Patterns are anchored to an imperative object so ordinary prose ("tools
-# like this are common") does not fire; the judge is the recall net (judged_by both).
+# R-05 engagement bait: asks framed as a condition or game. Code blocks only the
+# unmistakable phrasings, each anchored where an imperative starts (a sentence or clause
+# opening, or after "and", "then", "please"...), so ordinary prose about software never
+# fires: "the comment section", "like the video editor", "share this post with your
+# team", "Comment API calls", "React for beginners". Anything less certain is left to the
+# judges, who check R-05 too (judged_by: both). A plain closing "subscribe" is allowed.
+_ASK = r"(?:(?:^|(?<=[^\w\s'’]))\s*|\b(?:and|then|so|now|please|just|also)\s+)"
+_CAPS = r"[\"“']?(?-i:[A-Z]{2,})[\"”']?"  # case-sensitive: "Comment YES", not "comment on"
 _BAIT = re.compile(
-    r"\b("
-    r"comment\s+(yes|no|[A-Z]{2,}|\w+\s+if)\b"
-    r"|tag\s+(\d+|a|one|two|three|four|five|some|your)\s+(friends?|mates?|people)\b"
-    r"|react\s+(with\s+\S+\s+)?(if|for)\b"
-    r"|like\s+(this|the)\s+(video|post|short|clip)\b"
-    r"|share\s+(this\s+(video|post|short|clip)|if\s+you)\b"
-    r"|vote\s+(yes|no|in\s+the\s+comments)\b"
-    r"|smash\s+(that|the)\s+like\b"
-    r")",
-    re.I,
+    _ASK + r"(?:"
+    r"comment\s+(?:(?:yes|no|" + _CAPS + r")\s+(?:if|below|to|for|and)\b"
+    r"|(?:down\s+)?below\b|\S+\s+if\s+you\b)"
+    r"|type\s+(?:yes|no|" + _CAPS + r")\s+(?:in\s+the\s+(?:comments|chat)|below|if\s+you)\b"
+    r"|tag\s+(?:\d+|a|one|two|three|four|five|some|your)\s+(?:friends?|mates?|people|someone)\b"
+    r"|react\s+(?:with\s+\S+\s+)?(?:if\s+you\b|for\s+(?:part|the\s+next|more)\b)"
+    r"|like\s+(?:(?:this|the)\s+(?:video|post|short|clip)\s+)?if\s+you\b"
+    r"|like\s+(?:this|the)\s+(?:video|post|short|clip)\s*(?:[.!]|$|and\s+(?:subscribe|share))"
+    r"|share\s+(?:this\s+(?:video|post|short|clip)\s+)?if\s+you\b"
+    r"|vote\s+(?:(?:yes|no)\s+(?:in|below|if)\b|in\s+the\s+comments\b)"
+    r")"
+    r"|\bsmash\s+(?:that|the)\s+like\b",
+    re.I | re.M,
 )
 
 
 def hard_rules(record: PostRecord, variant: Variant, rulebook: Rulebook) -> list[RuleFinding]:
     """Rules judged by code. Returns findings; an empty list means none triggered."""
     findings: list[RuleFinding] = []
-    text = " ".join(
+    # one line per surface: each starts where an ask could start
+    text = "\n".join(
         [
             variant.title,
             variant.caption,
-            variant.script_cut or record.draft.script,
-            " ".join(variant.on_screen_text or record.draft.on_screen_text),
+            variant.script_cut or record.draft.script,  # the long-form cut is the script
+            *(variant.on_screen_text or record.draft.on_screen_text),
             variant.thumbnail_text or record.draft.thumbnail_text,
         ]
     )
     m = _BAIT.search(text)
     if m:
         findings.append(
-            RuleFinding(rule_id="R-05", outcome=RuleOutcome.BLOCK, evidence_span=m.group(0))
+            RuleFinding(rule_id="R-05", outcome=RuleOutcome.BLOCK, evidence_span=m.group(0).strip())
         )
     # R-07 is checked per variant: each variant publishes with its own caption.
     if AI_ROLE_DISCLOSURE_KEY not in variant.caption.lower():
@@ -127,6 +136,7 @@ def _judge_user_message(record: PostRecord, variant: Variant) -> str:
 
 
 Judge = Literal["A", "B", "C"]
+_WORST = {Verdict.PASS: 0, Verdict.ESCALATE: 1, Verdict.FAIL: 2}
 
 
 def run_judge(
@@ -167,9 +177,7 @@ def run_judge(
         RuleFinding(rule_id=f.rule_id, outcome=f.outcome, evidence_span=f.evidence_span)
         for f in out.rule_findings
     ]
-    # The verdict must follow mechanically from the findings (P1 criteria); recompute it
-    # in code rather than trusting the model's own verdict field.
-    verdict = verdict_from_findings(findings)
+    verdict = judge_verdict(out.verdict, findings)
     return JudgeResult(
         judge=judge,
         model=model,
@@ -178,6 +186,18 @@ def run_judge(
         rule_findings=findings,
         explanation=out.explanation,
     )
+
+
+def judge_verdict(stated: Verdict, findings: list[RuleFinding]) -> Verdict:
+    """A judge's outcome is the worse of the verdict it stated and the one its findings
+    imply (P1 step 4): a "pass" with a blocking finding fails, and a "fail" or
+    "escalate" with no finding to back it is neither trusted nor dropped: it escalates,
+    so the approver sees the judge's explanation."""
+    computed = verdict_from_findings(findings)
+    triggered = any(f.outcome != RuleOutcome.NOT_TRIGGERED for f in findings)
+    if stated != Verdict.PASS and not triggered:
+        return Verdict.ESCALATE
+    return stated if _WORST[stated] > _WORST[computed] else computed
 
 
 def verdict_from_findings(findings: list[RuleFinding]) -> Verdict:
@@ -199,9 +219,6 @@ def aggregate(judges: list[JudgeResult]) -> tuple[Verdict, bool]:
     if Verdict.ESCALATE in verdicts or disagreement or any(j.status != "ok" for j in judges):
         return Verdict.ESCALATE, disagreement
     return Verdict.PASS, False
-
-
-_WORST = {Verdict.PASS: 0, Verdict.ESCALATE: 1, Verdict.FAIL: 2}
 
 
 def check_ethics(
