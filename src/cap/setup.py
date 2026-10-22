@@ -16,25 +16,76 @@ KEY = "CAP_ANTHROPIC_API_KEY"
 BACKEND = "CAP_MODEL_BACKEND"
 
 
-def read_key(path: Path) -> str | None:
-    """The key stored in .env, or None when absent, blank or commented out."""
-    if not path.exists():
-        return None
-    for line in path.read_text(encoding="utf-8").splitlines():
+# Written in place of the key when Hemant leaves the prompt blank: mock mode was his
+# choice, so later commands (cap check, then cap serve, on every launch) do not ask again.
+DECLINED = f"# {KEY}=  (left blank: mock mode. set-key.bat adds a key)"
+_QUOTES = "\"'`\u201c\u201d\u2018\u2019"
+
+
+class KeyFormatError(ValueError):
+    """What was typed or pasted cannot be an API key; the message says why."""
+
+
+def clean_key(raw: str) -> str:
+    """The key out of whatever was pasted: surrounding whitespace and quotes (straight
+    or curly), an `export ` or `CAP_ANTHROPIC_API_KEY=` prefix. Refuses anything that
+    is still not plain ASCII without spaces, because httpx cannot send it in a header
+    and every call would fail with an encoding error."""
+    key = raw
+    while True:
+        before = key
+        key = key.strip().strip(_QUOTES).strip()
+        if key.lower().startswith("export "):
+            key = key[len("export ") :]
+        if key.upper().startswith(f"{KEY}="):
+            key = key[len(KEY) + 1 :]
+        if key == before:
+            break
+    if not key.isascii():
+        raise KeyFormatError(
+            "has characters an API key cannot have (a curly quote, an accented letter or a "
+            "non-breaking space); copy it again from console.anthropic.com"
+        )
+    if any(c.isspace() for c in key):
+        raise KeyFormatError("has a space in the middle; copy it again in one piece")
+    return key
+
+
+def _env_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8-sig") if path.exists() else ""
+
+
+def _raw_key(path: Path) -> str | None:
+    for line in _env_text(path).splitlines():
         if line.startswith(f"{KEY}="):
-            value = line.split("=", 1)[1].strip().strip('"').strip("'")
-            return value or None
+            return line.split("=", 1)[1]
     return None
+
+
+def read_key(path: Path) -> str | None:
+    """The key stored in .env, or None when absent, blank, commented out or unusable."""
+    raw = _raw_key(path)
+    if raw is None:
+        return None
+    try:
+        return clean_key(raw) or None
+    except KeyFormatError:
+        return None
+
+
+def declined(path: Path) -> bool:
+    """Hemant left the key prompt blank before (see DECLINED)."""
+    return any(
+        ln.startswith(f"# {KEY}=") and "left blank" in ln for ln in _env_text(path).splitlines()
+    )
 
 
 def backend(path: Path) -> str:
     return "anthropic" if read_key(path) else "mock"
 
 
-def write_key(path: Path, key: str | None) -> None:
-    """Set (or clear) the key, keeping every other line of .env as it is."""
-    key = (key or "").strip()
-    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+def _set_key_lines(path: Path, key_line: str, model_backend: str) -> None:
+    lines = _env_text(path).splitlines()
     kept = [
         ln
         for ln in lines
@@ -42,12 +93,53 @@ def write_key(path: Path, key: str | None) -> None:
     ]
     while kept and not kept[-1].strip():
         kept.pop()
-    kept.append(f"{BACKEND}={'anthropic' if key else 'mock'}")
-    if key:
-        kept.append(f"{KEY}={key}")
-    else:
-        kept.append(f"# {KEY}=")
+    kept += [f"{BACKEND}={model_backend}", key_line]
     path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+
+def write_key(path: Path, key: str | None) -> None:
+    """Set the key (cleaned; KeyFormatError if unusable), or record that it was left
+    blank, keeping every other line of .env as it is."""
+    key = clean_key(key or "")
+    if key:
+        _set_key_lines(path, f"{KEY}={key}", "anthropic")
+    else:
+        _set_key_lines(path, DECLINED, "mock")
+
+
+def normalise_encoding(path: Path) -> bool:
+    """Rewrite a .env saved in the Windows code page (Notepad's "ANSI") as UTF-8, which is
+    how the app reads it. Lossless: every cp1252 byte has one UTF-8 form. True if done."""
+    if not path.exists():
+        return False
+    data = path.read_bytes()
+    try:
+        data.decode("utf-8")
+        return False
+    except UnicodeDecodeError:
+        pass
+    try:
+        text = data.decode("cp1252")
+    except UnicodeDecodeError:
+        return False  # neither; Settings will say what is wrong
+    path.write_text(text, encoding="utf-8", newline="")
+    return True
+
+
+def _saved_key(path: Path) -> tuple[str | None, str]:
+    """The saved key, tidied in place when it was saved with quotes or a prefix; or
+    None and the reason it cannot be used (the unusable key is cleared)."""
+    raw = _raw_key(path)
+    if raw is None or not raw.strip():
+        return None, ""
+    try:
+        key = clean_key(raw)
+    except KeyFormatError as e:
+        _set_key_lines(path, f"# {KEY}=", "mock")
+        return None, f"The API key saved in .env {e}."
+    if key != raw:
+        _set_key_lines(path, f"{KEY}={key}", "anthropic")
+    return key or None, ""
 
 
 def ensure_local_secrets(path: Path) -> None:
@@ -83,16 +175,25 @@ def ensure_env(
 ) -> str:
     """Make sure .env exists and (when interactive) holds a key. Returns the backend.
 
+    Asks at most once: a blank answer is remembered (DECLINED) until `cap key`.
     `ask` is the prompt function; None means getpass when stdin is a terminal and no
     prompt at all otherwise (a service or a test never blocks on input)."""
     if not path.exists():
         example = path.with_name(".env.example")
-        path.write_text(example.read_text(encoding="utf-8") if example.exists() else "")
+        text = example.read_text(encoding="utf-8") if example.exists() else ""
+        path.write_text(text, encoding="utf-8")
+    if normalise_encoding(path):
+        out(f"{path.name} was saved in the Windows code page; rewrote it as UTF-8.")
     ensure_local_secrets(path)
-    have = read_key(path)
+    have, problem = _saved_key(path)
     if have and not force:
         out(f"API key: saved in {path.resolve()} (run `uv run cap key` to change it)")
         return "anthropic"
+    if problem:
+        out(problem)
+    elif declined(path) and not force:
+        out("API key: none (mock mode, sample drafts). Run set-key.bat to add one.")
+        return "mock"
     if ask is None:
         if not force and not sys.stdin.isatty():
             return backend(path)  # a service or a test never blocks on input
@@ -100,7 +201,13 @@ def ensure_env(
     out("")
     out(f"Anthropic API key. Typed hidden; saved only to {path.resolve()}.")
     out("Leave blank for mock mode (sample drafts, no network).")
-    key = ask("API key: ").strip()
+    key = ""
+    for _ in range(3):
+        try:
+            key = clean_key(ask("API key: "))
+            break
+        except KeyFormatError as e:
+            out(f"That key {e}. Try again, or leave it blank for mock mode.")
     if key and not key.startswith("sk-"):
         out("That does not look like an Anthropic key (they start with sk-). Saved anyway.")
     write_key(path, key)

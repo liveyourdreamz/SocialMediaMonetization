@@ -95,6 +95,7 @@
     <p class="meta" style="margin: 0 0 var(--space-4)">Rarely needed. Keys live in .env and on Connections; nothing secret is shown here.</p>
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Queue state</h2>
     <p class="meta">Running build: <span style="font-family: var(--font-mono)">{{ build }}</span> · restart the app (run install.bat again) to pick up a newer one</p>
+    {% if phone_urls is defined and phone_urls %}<p class="meta">On your phone (same Wi-Fi): {% for u in phone_urls %}<a href="{{ u }}" style="font-family: var(--font-mono)">{{ u }}</a>{% if not loop.last %} · {% endif %}{% endfor %} · the sign-in secret is printed in the laptop's app window</p>{% endif %}
     <div class="card tight stack-sm">
       {% if paused %}
       <span class="word-signal">Paused: {{ queue_state.paused_reason }}</span>

@@ -25,7 +25,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Strict(BaseModel):
-    """Base with additionalProperties=false, as the structured-output rules require."""
+    """Base with additionalProperties=false, as the structured-output rules require.
+    It is shared with the model-output envelopes (cap.agents.outputs), so it stays
+    strict: records stored on disk are read through cap.schema.migrate.load_record,
+    which tolerates fields an older or newer build wrote."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True, validate_assignment=True)
 
@@ -374,7 +377,13 @@ class Flags(Strict):
     needs_decision: list[str] = Field(default_factory=list)
 
 
+# The stored record's layout version. Raise it when a change needs old files rewritten,
+# and add the step to cap.schema.migrate.MIGRATIONS (one function per version step).
+SCHEMA_VERSION = 2
+
+
 class PostRecord(Strict):
+    schema_version: int = SCHEMA_VERSION
     post_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     channel_id: Channel
     status: PostStatus = PostStatus.BRIEFED
