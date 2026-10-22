@@ -201,10 +201,14 @@ def adapters_for(destinations: list[str], local_dir: Path) -> list[PlatformAdapt
             out.append(YouTubeAdapter("long"))
         if "youtube_short" in wanted:
             out.append(YouTubeAdapter("short"))
-    if wanted & {"facebook", "instagram"}:
-        from cap.publisher.meta import MetaAdapter
+    if "facebook" in wanted:
+        from cap.publisher.meta import FacebookAdapter
 
-        out.append(MetaAdapter())
+        out.append(FacebookAdapter())
+    if "instagram" in wanted:
+        from cap.publisher.meta import InstagramAdapter
+
+        out.append(InstagramAdapter())
     if "tiktok" in wanted:
         from cap.publisher.tiktok import TikTokAdapter
 

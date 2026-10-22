@@ -124,7 +124,7 @@ def signin_secrets(path: Path) -> dict[str, str]:
     """Person -> sign-in secret, as stored in .env (for the start-up banner)."""
     import json
 
-    for ln in path.read_text(encoding="utf-8").splitlines() if path.exists() else []:
+    for ln in path.read_text(encoding="utf-8-sig").splitlines() if path.exists() else []:
         if ln.startswith(f"{SIGNIN}="):
             try:
                 found = json.loads(ln.split("=", 1)[1].strip().strip("'"))
@@ -187,7 +187,7 @@ def ensure_local_secrets(path: Path) -> None:
     import json
     import secrets
 
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
     lines = [ln for ln in text.splitlines() if not ln.startswith("CAP_LOCAL_PASSCODE=")]
     have = {ln.split("=", 1)[0] for ln in lines if "=" in ln and not ln.startswith("#")}
     if "CAP_APPROVAL_SIGNING_KEY" not in have:

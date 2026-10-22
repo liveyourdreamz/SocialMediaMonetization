@@ -146,14 +146,28 @@ def test_h4_five_wrong_secrets_lock_the_device_out_even_for_the_right_one(served
     assert sign_in(client(PHONE_HOST, "192.168.1.51"), SIGNIN["layla"]).status_code == 303
 
 
-def test_h4_twenty_wrong_secrets_from_anywhere_freeze_sign_in_until_restart(served):
+def test_h4_twenty_wrong_secrets_from_anywhere_pause_sign_in(served):
     store, client = served
     for i in range(20):
         ip = f"192.168.1.{100 + i // 4}"  # four tries per address, under the per-device limit
         assert sign_in(client(PHONE_HOST, ip), f"wrong-guess-{i:04d}").status_code in (403, 429)
     r = sign_in(client(PHONE_HOST, "192.168.1.60"), SIGNIN["hemant"])
-    assert r.status_code == 429 and "Restart the app" in r.text
+    assert r.status_code == 429 and "paused for 15 minutes" in r.text
     assert sign_in(client(), SIGNIN["hemant"]).status_code == 429  # the laptop too
+
+
+def test_the_global_pause_lifts_on_its_own_so_nobody_can_lock_the_owner_out():
+    """Re-verification 22 Oct: a permanent freeze let anyone on the Wi-Fi lock the
+    owner out until a restart. The pause is timed."""
+    from cap.approval import throttle
+
+    now = [1000.0]
+    t = throttle.SignInThrottle(clock=lambda: now[0])
+    for i in range(throttle.GLOBAL):
+        t.failed(f"10.0.0.{i}")
+    assert t.refusal("laptop") == throttle.FROZEN and t.frozen
+    now[0] += throttle.GLOBAL_COOLDOWN_S + 1
+    assert t.refusal("laptop") is None and not t.frozen
 
 
 def test_h4_lockout_lifts_after_the_window(monkeypatch):

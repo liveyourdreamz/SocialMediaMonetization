@@ -89,9 +89,12 @@ class FileHistory:
 
     def _read(self) -> list[Entry]:
         try:
-            lines = self.path.read_text(encoding="utf-8").splitlines()
+            raw = self.path.read_bytes()
         except FileNotFoundError:
             return []
+        # line by line, so a write cut through a multi-byte character spoils only its
+        # own line (re-verification, 22 Oct: one bad byte stopped every brief)
+        lines = [b.decode("utf-8", errors="replace") for b in raw.splitlines()]
         out: list[Entry] = []
         for ln in lines:
             try:

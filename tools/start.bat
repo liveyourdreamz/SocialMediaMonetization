@@ -6,7 +6,7 @@ cd /d "%~dp0.."
 echo.
 echo  Installing dependencies (first time takes a minute)...
 uv sync --quiet
-if errorlevel 1 ( echo  Dependency install failed. & goto :fail )
+if errorlevel 1 ( if exist ".venv\Scripts\python.exe" ( echo  WARNING: could not update the dependencies; starting with the ones already installed. ) else ( echo  Dependency install failed and nothing is installed yet. & goto :fail ) )
 for /f "delims=" %%v in ('git log -1 "--format=%%h %%cd" "--date=format:%%d %%b %%H:%%M"') do echo  Code updated to build %%v
 echo.
 if defined CAP_SMOKE (

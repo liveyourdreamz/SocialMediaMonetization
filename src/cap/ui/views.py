@@ -744,7 +744,7 @@ _ADAPTER_FOR = {
     "instagram": "instagram",
     "tiktok": "tiktok",
 }
-_ADAPTER_GROUP = {"facebook": "meta", "instagram": "meta"}
+_ADAPTER_GROUP: dict[str, str] = {}  # one adapter per destination (22 Oct)
 
 
 def publish_results(record: PostRecord) -> list[dict[str, Any]]:

@@ -27,8 +27,11 @@ from cap.release import Manifest
 GRAPH = "https://graph.facebook.com/v21.0"
 
 
-class MetaAdapter:
-    name = "meta"
+class _MetaAccount:
+    """The connected Page (and its linked Instagram account): what both Meta adapters
+    share. Not an adapter itself; each destination has its own."""
+
+    name = ""
 
     def __init__(self) -> None:
         data = connections.load("meta")
@@ -101,23 +104,37 @@ class MetaAdapter:
             r.raise_for_status()
             return str(r.json()["id"])
 
+
+class FacebookAdapter(_MetaAccount):
+    """Facebook Reel from the vertical cut. Its own adapter, so a retry after an
+    Instagram failure never posts the Reel twice (re-verification, 22 Oct)."""
+
+    name = "facebook"
+
     def upload(self, release: Manifest) -> Upload:
         video = release.video("short")
         fb = self._facebook_reel(release.text_for("facebook").description, video.path)
-        out = Upload(fb, f"https://www.facebook.com/reel/{fb}")
-        out.also["facebook"] = (fb, out.url)
+        return Upload(fb, f"https://www.facebook.com/reel/{fb}")
+
+
+class InstagramAdapter(_MetaAccount):
+    """Instagram Reel: the Graph API fetches the video from a public URL, so this works
+    only once the app is served publicly (CAP_PUBLIC_BASE_URL); from the laptop it
+    refuses with that reason and can be retried later."""
+
+    name = "instagram"
+
+    def upload(self, release: Manifest) -> Upload:
         base = os.environ.get("CAP_PUBLIC_BASE_URL", "").rstrip("/")
-        if self.ig_id and base:
-            try:
-                ig = self._instagram_reel(
-                    release.text_for("instagram").description,
-                    f"{base}/assets/{release.post_id}/final/{video.path.name}",
-                )
-                out.also["instagram"] = (ig, "")
-            except Exception as e:  # noqa: BLE001 - one platform failing does not undo the other
-                out.errors["instagram"] = f"{type(e).__name__}: {str(e)[:160]}"
-        elif self.ig_id:
-            out.errors["instagram"] = (
+        if not self.ig_id:
+            raise RuntimeError("no Instagram account is linked to the Facebook Page")
+        if not base:
+            raise RuntimeError(
                 "Instagram needs the video at a public URL; not possible from the laptop"
             )
-        return out
+        video = release.video("short")
+        ig = self._instagram_reel(
+            release.text_for("instagram").description,
+            f"{base}/assets/{release.post_id}/final/{video.path.name}",
+        )
+        return Upload(ig, "")

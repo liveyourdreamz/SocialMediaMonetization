@@ -263,7 +263,9 @@ def check_approval(record: PostRecord) -> None:
     s = get_settings()
     if record.flags.canary:
         raise PublishRefusedError("flagged record: canary posts are never published")
-    if record.status != PostStatus.APPROVED:
+    # published counts too: a retry sends only the destinations that have no id yet
+    # (the publisher skips the rest), so a platform that failed can be tried again
+    if record.status not in (PostStatus.APPROVED, PostStatus.PUBLISHED):
         raise PublishRefusedError(f"record status is {record.status.value}")
     if a.decision != Decision.APPROVE:
         raise PublishRefusedError("the card holds no approve decision")
