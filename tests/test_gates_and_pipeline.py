@@ -46,7 +46,7 @@ def test_happy_path_reaches_queue(client, record, tmp_path):
     p1 = [c for c in client.calls if c.spec.prompt_id == "P1"]
     assert len(p1) == 4
     for c in p1:
-        variant = next(v for v in out.variants if v.platform.value in c.user)
+        variant = next(v for v in out.variants if f'platform="{v.platform.value}"' in c.user)
         assert c.user == _judge_user_message(out, variant)
         assert c.user_tail == "" and c.sources == []
         assert "<rulebook version" in c.system[-1]["text"]
