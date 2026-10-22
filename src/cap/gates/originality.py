@@ -86,6 +86,15 @@ class InMemoryHistory:
         )
 
 
+_ARABIC_MARKS = re.compile(r"[\u064B-\u065F\u0670\u0640]")  # harakat, dagger alif, tatweel
+
+
+def _plain(text: str) -> str:
+    """Lower case without Arabic vowel marks: "مِنَ المَدار" and "فَلَك" match the
+    anchors "من المدار" and "فلك" (22 Oct: a marked Arabic post would have failed)."""
+    return _ARABIC_MARKS.sub("", text.lower())
+
+
 def check_originality(
     record: PostRecord,
     history: HistoryIndex,
@@ -103,9 +112,9 @@ def check_originality(
         if sim > best:
             best, nearest = sim, pid
     share = skeleton_share(record.draft.script, [s for _, s in past])
-    lowered = text.lower()
+    lowered = _plain(text)
     anchor_present = bool(anchor_elements) and any(
-        re.search(r"\b" + re.escape(a.lower()) + r"\b", lowered) for a in anchor_elements
+        re.search(r"\b" + re.escape(_plain(a)) + r"\b", lowered) for a in anchor_elements
     )
     footage_ok = record.media_manifest.third_party_footage_share <= float(
         p["third_party_footage_cap"]

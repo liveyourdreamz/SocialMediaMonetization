@@ -82,8 +82,18 @@ def hard_rules(record: PostRecord, variant: Variant, rulebook: Rulebook) -> list
     # R-12: a post with factual claims carries a source list. After D41 the facts gate
     # runs first, so the list holds only links that confirmed a claim; a test-log claim
     # counts as sourced. Fires when claims exist and not one of them was confirmed.
+    # In flag mode (D41, the default) it does not fire: the facts gate owns sourcing and
+    # flags every unconfirmed claim on the card for Hemant; rejecting here would undo
+    # that choice (22 Oct: a post whose research found nothing was rejected by R-12).
+    from cap.config import get_settings
+
     confirmed = any(c.status == "supported" for c in record.draft.claims)
-    if record.draft.claims and not record.draft.source_list and not confirmed:
+    if (
+        get_settings().fact_mode == "block"
+        and record.draft.claims
+        and not record.draft.source_list
+        and not confirmed
+    ):
         findings.append(
             RuleFinding(
                 rule_id="R-12",

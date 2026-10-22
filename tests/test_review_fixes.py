@@ -256,3 +256,37 @@ def test_m6_concurrent_saves_of_one_post_never_collide(tmp_path):
     assert not errors, errors
     assert not list((tmp_path / "posts").glob("*.tmp"))
     FileStore(tmp_path).get(rec.post_id)  # the file on disk is whole
+
+
+# ---- R-12 follows the fact mode (22 Oct, found by the full-run test) ---------------
+
+
+@pytest.mark.parametrize("mode,fires", [("flag", False), ("block", True)])
+def test_r12_rejects_unsourced_claims_only_in_block_mode(monkeypatch, record, mode, fires):
+    from cap.config import get_settings
+    from cap.gates.ethics import hard_rules
+    from cap.rulebook import load_rulebook
+    from cap.schema.post_record import Claim, Platform, Variant
+
+    monkeypatch.setenv("CAP_FACT_MODE", mode)
+    get_settings.cache_clear()
+    record.draft.claims = [Claim(text="Silk is protein.", status="unsupported")]
+    record.draft.source_list = []
+    v = Variant(platform=Platform.YOUTUBE_LONG, title="t", caption="c", script_cut="s")
+    ids = [f.rule_id for f in hard_rules(record, v, load_rulebook())]
+    assert ("R-12" in ids) is fires, ids
+    get_settings.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "script",
+    ["مِنَ المَدارِ، هذا ما أراه.", "أنا فَلَك، قمر قديم.", "في سِجِلّي رقم واحد."],
+)
+def test_arabic_anchor_matches_with_or_without_vowel_marks(script):
+    from cap.characters import ANCHOR_ELEMENTS
+    from cap.gates import InMemoryHistory, check_originality
+
+    rec = PostRecord(channel_id=Channel.C)
+    rec.draft.title, rec.draft.script = "الشرانق", script
+    g = check_originality(rec, InMemoryHistory(), ANCHOR_ELEMENTS["C"])
+    assert g.anchor_present, script

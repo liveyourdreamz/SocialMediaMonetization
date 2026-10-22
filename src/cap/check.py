@@ -268,3 +268,78 @@ def run(offline: bool = False, out: Callable[[str], None] = print) -> int:
         else f"{failed} check(s) FAILED; fix these before filing a brief"
     )
     return 1 if failed else 0
+
+
+FULL_RUN_TOPICS = {
+    "A": "How a rainbow works",
+    "B": "How cocoons work",
+    "C": "كيف تعمل الشرانق",
+}
+
+
+def full_run(out: Callable[[str], None] = print, channels: str = "ABC") -> int:
+    """One real brief per channel through the whole pipeline: the real model at every
+    step, research, the four gates, the voice, the video, then a stand-in approval and
+    a publish to a local check folder. Nothing goes to your queue or to any platform.
+    It reports the step and the reason for the first thing that fails in each run."""
+    import tempfile
+
+    from cap.approval import token as tok
+    from cap.approval.app import Store
+    from cap.config import get_settings
+    from cap.demo.seed import run_brief
+    from cap.publisher import LocalFolderAdapter, publish_to
+    from cap.schema.post_record import PostStatus
+
+    s = get_settings()
+    if s.model_backend.value != "anthropic":
+        out("full run needs your API key (the mock backend proves nothing new here)")
+        return 1
+    out(
+        f"full run: one {s.video_length_s}s post per channel, real model, up to "
+        f"{s.max_claims} claims; this takes a few minutes and uses API credit"
+    )
+    failed = 0
+    dest = Path(tempfile.mkdtemp(prefix="cap-full-run-"))
+    for ch in channels:
+        topic = FULL_RUN_TOPICS[ch]
+        t0 = time.time()
+        try:
+            rec = run_brief(Store(), ch, topic)
+        except Exception as e:  # noqa: BLE001 - reported with the channel
+            failed += 1
+            out(f"  FAIL {ch} {topic}: crashed in the pipeline: {type(e).__name__}: {e}"[:400])
+            if os.environ.get("CAP_CHECK_TRACE"):
+                out(traceback.format_exc())
+            continue
+        took = time.time() - t0
+        if rec.status != PostStatus.AWAITING_APPROVAL:
+            failed += 1
+            step = rec.flags.stopped_at or rec.status.value
+            out(f"  FAIL {ch} {topic}: stopped at {step}: {rec.flags.stop_reason or ''}"[:400])
+            for line in rec.history[-4:]:
+                out(f"         {line[:200]}")
+            continue
+        try:
+            rec.status = PostStatus.APPROVED  # stand-in approval, in memory only
+            t = tok.issue(rec.post_id, rec.asset.sha256, s.approvers[0], "approve", canary=False)
+            publish_to(rec, Path(rec.asset.uri), t, [LocalFolderAdapter(dest)])
+            if rec.status != PostStatus.PUBLISHED:
+                raise RuntimeError(f"status after publish: {rec.status.value}")
+        except Exception as e:  # noqa: BLE001
+            failed += 1
+            out(f"  FAIL {ch} {topic}: publish step: {type(e).__name__}: {e}"[:400])
+            continue
+        unconfirmed = sum(1 for c in rec.draft.claims if c.status != "supported")
+        out(
+            f"  ok   {ch} {topic}: {took:.0f}s end to end · {rec.asset.duration_s:.0f}s video"
+            f"{' + Short' if rec.asset.short_uri else ''} · {len(rec.draft.claims)} claims "
+            f"({unconfirmed} unconfirmed) · published to {dest / rec.post_id}"
+        )
+    out("")
+    out(
+        "full run passed on every channel"
+        if not failed
+        else f"{failed} channel(s) FAILED; the line above each says where and why"
+    )
+    return 1 if failed else 0

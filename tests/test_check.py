@@ -393,3 +393,63 @@ def test_characters_check_names_the_channel_whose_block_the_critic_refuses(monke
     with pytest.raises(RuntimeError, match="channel A: P3: no rate"):
         check._characters()
     get_settings.cache_clear()
+
+
+def _full_run_env(monkeypatch, tmp_path, fixtures_fn):
+    from cap.config import get_settings
+    from cap.models import MockClient
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
+    monkeypatch.setenv("CAP_RENDERER", "text")
+    monkeypatch.setenv("CAP_MODEL_BACKEND", "anthropic")
+    monkeypatch.setenv("CAP_ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+    get_settings.cache_clear()
+    monkeypatch.setattr("cap.models.get_client", lambda fixtures=None: MockClient(fixtures_fn()))
+    monkeypatch.setattr(
+        "cap.research.find_sources",
+        lambda topic, ch, claims=None: ([], ["research: nothing found"]),
+    )
+
+
+def test_full_run_takes_a_post_from_idea_to_a_published_file(monkeypatch, tmp_path):
+    from cap import check
+    from cap.config import get_settings
+    from cap.demo import happy_fixtures
+
+    _full_run_env(monkeypatch, tmp_path, happy_fixtures)
+    lines: list[str] = []
+    assert check.full_run(out=lines.append, channels="A") == 0, lines
+    assert any(ln.startswith("  ok   A How a rainbow works") for ln in lines), lines
+    assert lines[-1] == "full run passed on every channel"
+    get_settings.cache_clear()
+
+
+def test_full_run_names_the_step_and_reason_when_a_post_stops(monkeypatch, tmp_path):
+    from cap import check
+    from cap.config import get_settings
+    from cap.demo import happy_fixtures
+
+    def blocked():
+        f = happy_fixtures()
+        f[("P3", "default")] = {"status": "blocked", "blocked_reason": "no speaking rate"}
+        return f
+
+    _full_run_env(monkeypatch, tmp_path, blocked)
+    lines: list[str] = []
+    assert check.full_run(out=lines.append, channels="B") == 1
+    fail = next(ln for ln in lines if ln.startswith("  FAIL B"))
+    assert "stopped at draft" in fail and "no speaking rate" in fail, lines
+    get_settings.cache_clear()
+
+
+def test_full_run_refuses_without_a_key(monkeypatch, tmp_path):
+    from cap import check
+    from cap.config import get_settings
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CAP_MODEL_BACKEND", "mock")
+    get_settings.cache_clear()
+    lines: list[str] = []
+    assert check.full_run(out=lines.append) == 1 and "API key" in lines[0]
+    get_settings.cache_clear()

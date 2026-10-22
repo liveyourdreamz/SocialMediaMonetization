@@ -7,6 +7,7 @@ cap harness run [--runs N] run the regression sets (mock backend unless configur
 cap demo                   run one fake Patch episode through the pipeline (mock)
 cap smoke                  the whole laptop loop through the real app, no browser (mock)
 cap check                  this machine against the real services (key, model, voice, ffmpeg)
+cap check --full           ...then one real post per channel, idea to published file
 cap serve [--demo]         run the app locally (Portfolio, queue, card, digest, operator)
                            with demo posts queued; asks for the API key on first run
 cap key                    enter or change the Anthropic API key (hidden; local .env only)
@@ -43,6 +44,12 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("demo")
     ck = sub.add_parser("check")
     ck.add_argument("--offline", action="store_true", help="skip checks that need the network")
+    ck.add_argument(
+        "--full",
+        action="store_true",
+        help="after the checks, one real post per channel end to end (uses API credit)",
+    )
+    ck.add_argument("--channels", default="ABC", help="with --full: which channels")
     sm = sub.add_parser("smoke")
     sm.add_argument("--dir", default="cap-data-smoke", help="scratch folder (wiped first)")
     sv = sub.add_parser("serve")
@@ -133,7 +140,13 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "check":
         from cap import check
 
-        return check.run(offline=args.offline)
+        code = check.run(offline=args.offline)
+        if args.full:
+            if code:
+                print("full run skipped: fix the failed checks first")
+                return code
+            return check.full_run(channels=args.channels.upper())
+        return code
     elif args.cmd == "smoke":
         from pathlib import Path
 
