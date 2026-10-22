@@ -81,7 +81,10 @@ def _p9_user_message(record: PostRecord) -> str:
         {"platform": v.platform.value, "title": v.title, "caption": v.caption}
         for v in record.variants
     ]
+    from cap.post_context import post_context
+
     return (
+        f"{post_context(record)}\n"
         f"<title>{record.draft.title}</title>\n"
         f"<script>{record.draft.script}</script>\n"
         f"<caption>{record.draft.caption}</caption>\n"

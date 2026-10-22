@@ -109,7 +109,10 @@ def _judge_user_message(record: PostRecord, variant: Variant) -> str:
     system block. The variant text is the pipeline's own output, not fetched text, so
     it is not wrapped as untrusted."""
     sponsor = record.sponsor.model_dump_json() if record.sponsor else "null"
+    from cap.post_context import post_context
+
     return (
+        f"{post_context(record)}\n"
         f'<variant platform="{variant.platform.value}">\n'
         f"<title>{variant.title}</title>\n"
         f"<script>{variant.script_cut or record.draft.script}</script>\n"

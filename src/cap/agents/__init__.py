@@ -20,6 +20,7 @@ from cap.agents.outputs import (
 )
 from cap.models import ModelClient, ModelResult, SourceDoc
 from cap.policy import AI_ROLE_DISCLOSURE_KEY, disclosure_block
+from cap.post_context import post_context
 from cap.prompts import spec
 from cap.schema.post_record import (
     Claim,
@@ -65,6 +66,7 @@ def draft(
     limit = get_settings().max_claims
     statics = [character_block, disclosure_block()]
     user1 = (
+        f"{post_context(record)}\n"
         f"<brief>{record.brief.model_dump_json()}</brief>\n"
         f"<opening_line_slot>{OPENING_LINE_SLOT}</opening_line_slot>\n"
         f"<claim_limit>Make at most {limit} factual claims in the whole script. A claim is "
@@ -85,7 +87,7 @@ def draft(
 
     r2 = client.run(
         spec("P2", "2"),
-        f"<script>{record.draft.script}</script>",
+        f"{post_context(record)}\n<script>{record.draft.script}</script>",
         P2Call2Output,
         sources=sources,
         user_tail=f"<test_log>{test_log}</test_log>\n<claim_limit>List at most {limit} "
@@ -159,7 +161,10 @@ def critique(
     """P3, one pass only (PRD agent 5). The issues are stored on the record so they
     travel to the gates and are revealed on the card after the verdict (D33)."""
     draft_json = record.draft.model_dump_json(include={"title", "script", "caption", "claims"})
-    user = f"<draft>{draft_json}</draft>\n<brief>{record.brief.model_dump_json()}</brief>"
+    user = (
+        f"{post_context(record)}\n<draft>{draft_json}</draft>\n"
+        f"<brief>{record.brief.model_dump_json()}</brief>"
+    )
     r = client.run(
         spec("P3"), user, P3Output, static_blocks=[character_block] if character_block else None
     )
@@ -186,6 +191,8 @@ def adapt(record: PostRecord, client: ModelClient, platforms: list[Platform]) ->
     agent 6 diff check) by requiring every numeral in a variant to appear in the
     script or title."""
     user = (
+        f"{post_context(record)}\n"
+        f"<brief>{record.brief.model_dump_json()}</brief>\n"
         f"<title>{record.draft.title}</title>\n<script>{record.draft.script}</script>\n"
         f"<caption>{record.draft.caption}</caption>\n"
         f"<platforms>{[p.value for p in platforms]}</platforms>"
@@ -233,6 +240,7 @@ def write_canary(
     card can reveal it and the spot check can target it."""
     user = (
         f"<fault_type>{fault_type.value}</fault_type>\n"
+        f"<base_post_context>{post_context(record)}</base_post_context>\n"
         f"<placement>{placement}</placement>\n"
         f"<base_draft>{json.dumps(base_draft, ensure_ascii=False)}</base_draft>"
     )

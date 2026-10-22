@@ -30,6 +30,7 @@ import unicodedata
 from cap.agents import AgentBlockedError
 from cap.agents.outputs import P10CallAOutput, P10VerifyOutput
 from cap.models import ModelClient, SourceDoc
+from cap.post_context import post_context
 from cap.prompts import spec
 from cap.schema.post_record import Claim, ClaimCheckResult, ClaimStatus, FactsGate, PostRecord
 
@@ -73,6 +74,7 @@ def discover_claims(
     ]
     res = client.run(
         spec("P10", "A"),
+        f"{post_context(record)}\n"
         f"<title>{record.draft.title}</title>\n<script>{record.draft.script}</script>\n"
         f"<variants>{json.dumps(variants, ensure_ascii=False)}</variants>",
         P10CallAOutput,
