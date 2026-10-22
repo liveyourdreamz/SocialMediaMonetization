@@ -13,13 +13,15 @@ from cap.approval.app import Store, create_app
 from cap.demo.seed import seed_store
 from cap.schema.post_record import Channel, PostStatus
 from cap.ui.tokens import is_current
+from tests.conftest import SIGNIN
 
 
 class Browser(TestClient):
     """A TestClient that signs in with a POST and sends the CSRF token on every form."""
 
     def sign_in(self, name: str) -> None:
-        r = self.post("/login", data={"name": name})
+        self.get("/login")  # the sign-in form sets its CSRF cookie
+        r = self.form("/login", secret=SIGNIN[name])
         assert r.status_code == 303, r.text
 
     def form(self, url: str, **data: str):

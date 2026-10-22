@@ -12,6 +12,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from cap.secretfile import restrict_to_owner
+
 KEY = "CAP_ANTHROPIC_API_KEY"
 BACKEND = "CAP_MODEL_BACKEND"
 
@@ -48,29 +50,70 @@ def write_key(path: Path, key: str | None) -> None:
     else:
         kept.append(f"# {KEY}=")
     path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    restrict_to_owner(path)
+
+
+# Sign-in secrets: three groups of four from letters and digits that cannot be misread
+# (no 0/o, 1/l/i), typed on a phone's lower-case keyboard. 31^12 is about 2^59.
+SIGNIN = "CAP_SIGNIN_SECRETS"
+_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+PEOPLE = ("hemant", "layla")  # the approver and the Arabic reviewer (D5, D19)
+
+
+def new_signin_secret() -> str:
+    import secrets
+
+    return "-".join("".join(secrets.choice(_ALPHABET) for _ in range(4)) for _ in range(3))
+
+
+def _people() -> list[str]:
+    from cap.config import Settings
+
+    s = Settings()
+    return list(dict.fromkeys([*PEOPLE, *s.approvers, *s.arabic_reviewers]))
+
+
+def signin_secrets(path: Path) -> dict[str, str]:
+    """Person -> sign-in secret, as stored in .env (for the start-up banner)."""
+    import json
+
+    for ln in path.read_text(encoding="utf-8").splitlines() if path.exists() else []:
+        if ln.startswith(f"{SIGNIN}="):
+            try:
+                found = json.loads(ln.split("=", 1)[1].strip().strip("'"))
+            except ValueError:
+                return {}
+            return {str(k): str(v) for k, v in found.items()} if isinstance(found, dict) else {}
+    return {}
 
 
 def ensure_local_secrets(path: Path) -> None:
-    """A random approval-signing key and a phone passcode, written once into .env. The
-    public default key would let anyone on the Wi-Fi forge a sign-in cookie."""
+    """A random approval-signing key and one sign-in secret per person, written once
+    into .env, which is then readable by its owner only. The public default key would
+    let anyone on the Wi-Fi forge an approval; a shared code would let one reviewer
+    sign in as another. The old shared passcode line is dropped."""
+    import json
     import secrets
 
     text = path.read_text(encoding="utf-8") if path.exists() else ""
-    have = {ln.split("=", 1)[0] for ln in text.splitlines() if "=" in ln and not ln.startswith("#")}
-    add: list[str] = []
+    lines = [ln for ln in text.splitlines() if not ln.startswith("CAP_LOCAL_PASSCODE=")]
+    have = {ln.split("=", 1)[0] for ln in lines if "=" in ln and not ln.startswith("#")}
     if "CAP_APPROVAL_SIGNING_KEY" not in have:
-        add.append(f"CAP_APPROVAL_SIGNING_KEY={secrets.token_hex(32)}")
-    if "CAP_LOCAL_PASSCODE" not in have:
-        add.append(f"CAP_LOCAL_PASSCODE={secrets.randbelow(900000) + 100000}")
-    if add:
-        sep = "" if not text or text.endswith("\n") else "\n"
-        path.write_text(text + sep + "\n".join(add) + "\n", encoding="utf-8")
+        lines.append(f"CAP_APPROVAL_SIGNING_KEY={secrets.token_hex(32)}")
+    current = signin_secrets(path)
+    wanted = {p: current.get(p) or new_signin_secret() for p in _people()}
+    wanted.update(current)
+    if wanted != current:
+        lines = [ln for ln in lines if not ln.startswith(f"{SIGNIN}=")]
+        lines.append(f"{SIGNIN}={json.dumps(wanted)}")
+    if lines != text.splitlines():
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    restrict_to_owner(path)
 
 
 def read_passcode(path: Path) -> str:
-    for ln in path.read_text(encoding="utf-8").splitlines() if path.exists() else []:
-        if ln.startswith("CAP_LOCAL_PASSCODE="):
-            return ln.split("=", 1)[1].strip()
+    """Gone: the shared phone passcode was replaced by per-person secrets
+    (signin_secrets). Kept, always empty, until the start-up banner stops asking."""
     return ""
 
 

@@ -16,13 +16,18 @@ from cap.schema.post_record import Brief, Channel, Lane, PostRecord
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
-__all__ = ["SOURCES", "TEST_LOG", "ok", "source_docs"]
+__all__ = ["SIGNIN", "laptop_wifi", "SOURCES", "TEST_LOG", "ok", "source_docs"]
+
+# each person's laptop sign-in secret in the suite (cap.setup generates real ones)
+SIGNIN = {"hemant": "hemant-test-code", "layla": "layla-test-code"}
 
 
 @pytest.fixture(autouse=True)
 def _local_settings(monkeypatch):
     monkeypatch.setenv("CAP_ENV", "test")
     monkeypatch.setenv("CAP_DEV_REVIEWER_HEADER", "true")
+    monkeypatch.setenv("CAP_TEST_CLIENT", "true")  # X-Reviewer and the TestClient hosts
+    monkeypatch.setenv("CAP_SIGNIN_SECRETS", json.dumps(SIGNIN))
     monkeypatch.setenv("CAP_ARABIC_REVIEWERS", '["layla"]')
     monkeypatch.setenv("CAP_RENDERER", "text")
     monkeypatch.setenv("CAP_VOICE", "silent")
@@ -30,6 +35,15 @@ def _local_settings(monkeypatch):
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+def laptop_wifi(monkeypatch, ip: str) -> None:
+    """Make `ip` this machine's Wi-Fi address for the Host check (cap.approval.hosts)."""
+    try:
+        from cap.approval import hosts
+    except ImportError:  # the pre-fix code, when a new test is run against it
+        return
+    monkeypatch.setattr(hosts, "lan_ipv4", lambda: frozenset({ip}))
 
 
 @pytest.fixture

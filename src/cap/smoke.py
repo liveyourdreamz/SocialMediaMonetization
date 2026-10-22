@@ -10,6 +10,7 @@ failure stops it with a non-zero exit.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import time
@@ -44,6 +45,10 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
     os.environ["CAP_PUBLISHER"] = "local"
     os.environ.setdefault("CAP_DEV_REVIEWER_HEADER", "true")
     os.environ.setdefault("CAP_ARABIC_REVIEWERS", '["layla"]')
+    from cap.setup import new_signin_secret
+
+    codes = {"hemant": new_signin_secret(), "layla": new_signin_secret()}  # this run's only
+    os.environ["CAP_SIGNIN_SECRETS"] = json.dumps(codes)
     from fastapi.testclient import TestClient
 
     from cap.approval.app import FileStore, create_app
@@ -68,15 +73,21 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
         store = FileStore(data)
         store.publisher = LocalFolderAdapter(data / "published")
         seed_store(store, demo=True, canary=True)
-        api = TestClient(create_app(store), follow_redirects=False)
+        api = TestClient(
+            create_app(store), base_url="http://127.0.0.1:8000", follow_redirects=False
+        )
 
         def form(url: str, **d: str):
             d["csrf"] = api.cookies.get("cap_csrf") or ""
             return api.post(url, data=d)
 
+        def sign_in(person: str):
+            api.get("/login")  # sets the sign-in form's CSRF cookie
+            return form("/login", secret=codes[person])
+
         r = api.get("/")
         step("signed-out visit redirects to /login", r.status_code in (303, 307, 401))
-        r = api.post("/login", data={"name": "hemant"})
+        r = sign_in("hemant")
         step("sign in as hemant", r.status_code == 303, f"status {r.status_code}")
         r = api.get("/")
         step("Portfolio renders", r.status_code == 200 and "Portfolio" in r.text)
@@ -198,7 +209,7 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
         )
         r = form("/logout")
         step("sign out", r.status_code == 303)
-        r = api.post("/login", data={"name": "layla"})
+        r = sign_in("layla")
         step("sign in as layla (Arabic reviewer)", r.status_code == 303)
         r = api.get("/queue")
         step("Layla's queue renders RTL", r.status_code == 200 and 'dir="rtl"' in r.text)

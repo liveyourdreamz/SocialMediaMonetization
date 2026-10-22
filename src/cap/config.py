@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="CAP_", env_file=".env", extra="ignore")
 
     env: str = "local"
-    # Foundation stand-in for Google sign-in: a reviewer identity from a header. Off
-    # unless switched on explicitly, and never with the default signing key outside local.
+    # The laptop sign-in (a per-person secret typed on /login) when Google sign-in is
+    # not set up. Off unless switched on (`cap serve` does); refused outside local.
     dev_reviewer_header: bool = False
     # D5: who may approve. The token issuer and the publisher both check this list.
     approvers: list[str] = Field(default_factory=lambda: ["hemant"])
@@ -80,9 +80,17 @@ class Settings(BaseSettings):
     # Approval token signing key (HMAC). Local default is for tests only; the validator
     # below refuses it outside local.
     approval_signing_key: SecretStr = SecretStr(LOCAL_DEFAULT_KEY)
-    # Sign-in from another device on the network (the phone) needs this passcode; the
-    # laptop itself (127.0.0.1) does not. Generated into .env on first run.
-    local_passcode: SecretStr | None = None
+    # The laptop sign-in: person -> their own secret, generated into .env on first run
+    # (cap.setup). The secret alone identifies the person; no name is typed.
+    signin_secrets: dict[str, SecretStr] = Field(default_factory=dict)
+    # Test suite only: honour the X-Reviewer header and the TestClient host names.
+    # Has no effect unless CAP_ENV=test, so `cap serve` (local) never honours it.
+    test_client: bool = False
+
+    @property
+    def test_client_on(self) -> bool:
+        return self.test_client and self.env == "test"
+
     # The address the platforms send OAuth callbacks to; set when the app is reached
     # through a proxy or a public host. Empty: built from the request.
     public_base_url: str = ""

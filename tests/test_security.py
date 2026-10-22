@@ -6,61 +6,55 @@ from fastapi.testclient import TestClient
 
 from cap.approval.app import Store, create_app
 from cap.demo.seed import seed_store
+from tests.conftest import SIGNIN, laptop_wifi
 
 
 @pytest.fixture
 def lan(tmp_path, monkeypatch):
-    """The app as the laptop serves it: dev sign-in on, a passcode in .env, and a
-    client that is NOT this machine (another device on the Wi-Fi)."""
+    """The app as `cap serve` runs it (CAP_ENV=local, so no test allowance), with
+    each person's secret in the settings, the laptop's browser and the phone."""
     from cap.config import get_settings
 
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CAP_ENV", "local")
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
     monkeypatch.setenv("CAP_RENDERER", "text")
-    monkeypatch.setenv("CAP_DEV_REVIEWER_HEADER", "true")
-    monkeypatch.setenv("CAP_LOCAL_PASSCODE", "482913")
+    laptop_wifi(monkeypatch, "192.168.1.20")
     get_settings.cache_clear()
     store = Store()
     seed_store(store)
     app = create_app(store)
-    phone = TestClient(app, client=("192.168.1.50", 50000), follow_redirects=False)
-    laptop = TestClient(app, follow_redirects=False)  # "testclient" counts as this machine
+    phone = TestClient(
+        app,
+        base_url="http://192.168.1.20:8000",
+        client=("192.168.1.50", 50000),
+        follow_redirects=False,
+    )
+    laptop = TestClient(app, base_url="http://127.0.0.1:8000", follow_redirects=False)
     yield store, phone, laptop
     get_settings.cache_clear()
 
 
-def test_finding_1_a_device_on_the_wifi_needs_the_passcode(lan):
-    store, phone, laptop = lan
-    assert "Passcode" in phone.get("/login").text
-    r = phone.post("/login", data={"name": "hemant"})
-    assert r.status_code == 403 and "cap_reviewer" not in r.cookies
-    r = phone.post("/login", data={"name": "hemant", "passcode": "000000"})
-    assert r.status_code == 403
-    r = phone.post("/login", data={"name": "hemant", "passcode": "482913"})
-    assert r.status_code == 303 and r.cookies.get("cap_reviewer")
-    # the laptop itself signs in with the name alone
-    assert laptop.post("/login", data={"name": "hemant"}).status_code == 303
+def sign_in(c: TestClient, secret: str):
+    c.get("/login")
+    return c.post("/login", data={"secret": secret, "csrf": c.cookies.get("cap_csrf", "")})
 
 
-def test_finding_1_the_api_header_works_only_from_this_machine(lan):
-    store, phone, laptop = lan
-    assert phone.get("/api/queue", headers={"X-Reviewer": "hemant"}).status_code == 401
-    assert laptop.get("/api/queue", headers={"X-Reviewer": "hemant"}).status_code == 200
-
-
-def test_finding_1_first_run_writes_a_random_signing_key_and_passcode(tmp_path):
-    from cap.setup import ensure_local_secrets, read_passcode
+def test_finding_1_first_run_writes_a_random_signing_key_and_one_secret_each(tmp_path):
+    from cap.setup import ensure_local_secrets, signin_secrets
 
     env = tmp_path / ".env"
-    env.write_text("CAP_MODEL_BACKEND=mock\n")
+    env.write_text("CAP_MODEL_BACKEND=mock\nCAP_LOCAL_PASSCODE=482913\n")
     ensure_local_secrets(env)
     text = env.read_text()
     key = [ln for ln in text.splitlines() if ln.startswith("CAP_APPROVAL_SIGNING_KEY=")][0].split(
         "="
     )[1]
     assert len(key) == 64 and key != "local-dev-only-not-a-secret"
-    code = read_passcode(env)
-    assert len(code) == 6 and code.isdigit()
+    codes = signin_secrets(env)
+    assert set(codes) >= {"hemant", "layla"} and codes["hemant"] != codes["layla"]
+    assert all(len(c) >= 10 and c == c.lower() for c in codes.values())
+    assert "CAP_LOCAL_PASSCODE" not in text  # the shared passcode is gone
     ensure_local_secrets(env)  # a second run keeps them
     assert env.read_text() == text
 
@@ -141,7 +135,7 @@ def test_finding_6_uploads_must_be_real_images_and_are_capped(lan):
     from PIL import Image
 
     store, phone, laptop = lan
-    laptop.post("/login", data={"name": "hemant"})
+    assert sign_in(laptop, SIGNIN["hemant"]).status_code == 303
     png = io.BytesIO()
     Image.new("RGB", (8, 8)).save(png, "PNG")
     files = [("media", (f"s{i}.png", png.getvalue(), "image/png")) for i in range(12)]

@@ -6,7 +6,8 @@ model client's untrusted-text boundary (it is never rendered raw into a prompt).
 A failed fetch says why, in the document body and the post's log, as
 "[fetch failed: <what>]": a 403 from a site that blocks scripts, a timeout, a bad
 certificate. Wikipedia is read through its REST API, which is what it asks bots to
-use and which returns clean article HTML.
+use and which returns clean article HTML. Only public addresses are fetched, every
+redirect hop included (cap.safehttp).
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+
+from cap.safehttp import BlockedURLError, PinnedTransport, resolve_public
 
 MAX_CHARS = 20_000
 # Sites that gate on the User-Agent want a name, a version and a way to reach the
@@ -79,35 +82,15 @@ MAX_BYTES = 2_000_000  # stop reading a page after this; 20k characters are kept
 MAX_HOPS = 5
 
 
-class BlockedURLError(RuntimeError):
-    pass
-
-
 def check_public(url: str) -> None:
-    """Refuse anything that is not a public http(s) address: loopback, private,
-    link-local (cloud metadata), reserved, or a name that resolves to one of those."""
-    import ipaddress
-    import socket
-
+    """Refuse, before any request, anything that is not a public http(s) address:
+    the scheme, an address literal, or a name ANY of whose DNS answers is not public.
+    The connection itself is vetted again and pinned by safehttp.PinnedTransport,
+    so a name that changes its answer in between gains nothing."""
     u = urlparse(url)
     if u.scheme not in ("http", "https") or not u.hostname:
         raise BlockedURLError("only public http(s) pages")
-    host = u.hostname
-    try:
-        infos = socket.getaddrinfo(host, u.port or (443 if u.scheme == "https" else 80))
-    except socket.gaierror as e:
-        raise httpx.ConnectError(f"cannot resolve {host}") from e
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
-            raise BlockedURLError(f"{host} is not a public address")
+    resolve_public(u.hostname, u.port or (443 if u.scheme == "https" else 80))
 
 
 def _get(c: httpx.Client, url: str, headers: dict[str, str]) -> httpx.Response:
@@ -169,7 +152,10 @@ def fetch_one(c: httpx.Client, url: str) -> tuple[str, str | None]:
 def fetch_sources(urls: list[str], timeout: float = 20.0) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     now = datetime.now(UTC).isoformat()
-    with httpx.Client(follow_redirects=False, timeout=timeout) as c:
+    # no proxy from the environment: a proxy would resolve the name itself, after the check
+    with httpx.Client(
+        transport=PinnedTransport(), follow_redirects=False, timeout=timeout, trust_env=False
+    ) as c:
         for url in urls:
             url = url.strip()
             if not url.startswith(("http://", "https://")):
