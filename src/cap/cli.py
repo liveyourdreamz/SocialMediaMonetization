@@ -13,6 +13,7 @@ cap serve [--demo]         run the app locally (Portfolio, queue, card, digest, 
 cap key                    enter or change the Anthropic API key (hidden; local .env only)
 cap tokens build|check     compile design/proof/tokens.json to the app's tokens.css
 cap youtube auth           one-time browser sign-in for YouTube uploads (laptop)
+cap youtube test           upload a 5-second PRIVATE test clip to the connected channel
 """
 
 from __future__ import annotations
@@ -68,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     k = sub.add_parser("key")
     k.add_argument("--no-check", action="store_true", help="do not test the key against Anthropic")
     yt = sub.add_parser("youtube")
-    yt.add_argument("action", choices=["auth"])
+    yt.add_argument("action", choices=["auth", "test"])
     t = sub.add_parser("tokens")
     t.add_argument("action", choices=["build", "check"])
     args = p.parse_args(argv)
@@ -107,8 +108,10 @@ def main(argv: list[str] | None = None) -> int:
             )
         print("restart the app for the change to take effect.")
     elif args.cmd == "youtube":
-        from cap.publisher.youtube import authorise
+        from cap.publisher.youtube import authorise, test_upload
 
+        if args.action == "test":
+            return test_upload()
         print("A browser window opens: sign in to the channel's Google account and allow uploads.")
         print(f"saved: {authorise()}  (git-ignored; set CAP_PUBLISHER=youtube in .env)")
     elif args.cmd == "tokens":

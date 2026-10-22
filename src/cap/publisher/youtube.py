@@ -157,3 +157,82 @@ class YouTubeAdapter:
             record.publish.platform_post_ids["youtube_short"] = sid
             record.publish.urls["youtube_short"] = f"https://www.youtube.com/shorts/{sid}"
         return vid
+
+
+# What YouTube's error reasons mean for Hemant, and what to do about each.
+_ADVICE = {
+    "quotaExceeded": "the project's daily YouTube quota is used up; try again tomorrow",
+    "uploadLimitExceeded": "this channel hit YouTube's upload limit; verify the channel "
+    "by phone at youtube.com/verify, or wait a day",
+    "youtubeSignupRequired": "this Google account has no YouTube channel yet; create one "
+    "at youtube.com/create_channel, then reconnect",
+    "forbidden": "the sign-in lacks upload permission; reconnect YouTube on Connections",
+    "invalid_grant": "the saved sign-in expired or was revoked; reconnect YouTube on Connections",
+    "accessNotConfigured": "the YouTube Data API v3 is not enabled for your Google Cloud "
+    "project; enable it in the console, then retry",
+}
+
+
+def explain(e: Exception) -> str:
+    """One line: what failed and what to do, never a secret."""
+    text = str(e)
+    reason = ""
+    content = getattr(e, "content", b"") or b""
+    try:
+        err = json.loads(content.decode("utf-8", "replace")).get("error", {})
+        reason = (err.get("errors") or [{}])[0].get("reason", "") or err.get("status", "")
+        text = err.get("message", text)
+    except (ValueError, AttributeError):
+        pass
+    for key, advice in _ADVICE.items():
+        if key in (reason or "") or key in text:
+            return f"{advice} (YouTube said: {text[:160]})"
+    status = getattr(getattr(e, "resp", None), "status", "")
+    return f"{type(e).__name__}{' ' + str(status) if status else ''}: {text[:300]}"
+
+
+def test_upload(out=print) -> int:  # type: ignore[no-untyped-def]
+    """A 5-second clip uploaded PRIVATE to the connected channel: proves the sign-in,
+    the permission and the upload path with nothing public. Prints the link."""
+    import subprocess
+    import tempfile
+
+    from cap.render import _ffmpeg_exe
+
+    clip = Path(tempfile.mkdtemp(prefix="cap-yt-test-")) / "cap-connection-test.mp4"
+    subprocess.run(
+        [
+            _ffmpeg_exe(), "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "testsrc=size=1280x720:rate=15:duration=5",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=5",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(clip),
+        ],
+        check=True,
+        capture_output=True,
+    )  # fmt: skip
+    out(f"made a 5-second test clip ({clip.stat().st_size // 1024} KB)")
+    try:
+        yt = _service()
+        try:
+            me = yt.channels().list(part="snippet", mine=True).execute()
+            name = (me.get("items") or [{}])[0].get("snippet", {}).get("title", "?")
+            out(f"signed in to the YouTube channel: {name}")
+        except Exception:  # noqa: BLE001 - older sign-ins have upload permission only
+            out("signed in (channel name not readable with this sign-in; fine for uploads)")
+        adapter = YouTubeAdapter()
+        adapter.privacy = "private"  # a test is never public, whatever the setting says
+        vid = adapter._upload_one(
+            yt,
+            clip,
+            "CAP connection test (private, safe to delete)",
+            "A 5-second test upload from the Content Agent Portfolio app. Private. "
+            "Delete it from YouTube Studio whenever you like.",
+            ["test"],
+        )
+    except Exception as e:  # noqa: BLE001 - one plain line, then a non-zero exit
+        out(f"FAIL youtube upload: {explain(e)}")
+        return 1
+    out(f"ok   uploaded PRIVATE: https://www.youtube.com/watch?v={vid}")
+    out("     it is visible only to you; YouTube may take a minute to finish processing")
+    out("     delete it in YouTube Studio > Content when you have seen it")
+    return 0

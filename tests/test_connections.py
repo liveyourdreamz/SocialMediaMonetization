@@ -214,7 +214,10 @@ def test_a_tour_post_never_leaves_the_laptop(world, monkeypatch):
     )
     api.form(f"/posts/{rec.post_id}/finalise")
     html = api.get(f"/posts/{rec.post_id}/preview").text
-    assert "A tour post goes to the folder on this laptop only" in html and "never sent to YouTube" in html
+    assert (
+        "A tour post goes to the folder on this laptop only" in html
+        and "never sent to YouTube" in html
+    )
     api.form(f"/posts/{rec.post_id}/publish", destinations=["youtube_long"])
     assert called == [[]] and store.get(rec.post_id).status == PostStatus.PUBLISHED
 
