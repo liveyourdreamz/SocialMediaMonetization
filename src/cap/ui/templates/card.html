@@ -52,13 +52,22 @@
 
   {% include "_content.html" %}
 
+  {% if not blind and record.flags.needs_decision %}
+  <section class="banner" role="note" style="border-left: 4px solid var(--color-signal, #b45309)">
+    <span class="eyebrow">You decide · {{ record.flags.needs_decision | length }} question{{ 's' if record.flags.needs_decision | length != 1 }}</span>
+    <span class="head">The checks could not settle {{ 'these' if record.flags.needs_decision | length != 1 else 'this' }}. Nothing stopped; it is your call.</span>
+    {% for q in record.flags.needs_decision %}<span class="facts">· {{ q }}</span>{% endfor %}
+    {% if record.approval.decisions_acknowledged %}<span class="facts">Reviewed and accepted by {{ record.approval.reviewer }}.</span>{% endif %}
+  </section>
+  {% endif %}
+
   {% if not blind and not closed %}
   <section class="stack">
     <h2 style="font-size: 16px; font-weight: 600">Does any of that change your mind?</h2>
     <p class="muted" style="font-size: 14px; line-height: 20px">One change allowed, by you only. Both verdicts are stored, so the digest can show whether the reveal is steering you.{% if record.flags.canary %} A canary is scored on the blind verdict; a change here is recorded but does not alter the score.{% endif %}</p>
     {% if record.approval.pre_reveal_decision.value == 'approve' %}
     <div style="display: flex; gap: 10px">
-      <form method="post" action="/posts/{{ card.post_id }}/finalise" style="flex: 1; display: flex"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary grow" type="submit">Keep approve</button></form>
+      <form method="post" action="/posts/{{ card.post_id }}/finalise" style="flex: 1; display: flex; flex-direction: column; gap: 8px"><input type="hidden" name="csrf" value="{{ csrf }}">{% if record.flags.needs_decision %}<label style="display: flex; gap: 10px; align-items: flex-start; min-height: 44px; font-size: 15px; line-height: 22px"><input type="checkbox" name="acknowledged" value="yes" required style="width: 20px; height: 20px; margin-top: 1px"><span>I reviewed the question{{ 's' if record.flags.needs_decision | length != 1 }} above and approve</span></label>{% endif %}<button class="btn primary grow" type="submit">Keep approve</button></form>
       <button class="btn secondary grow" type="button" data-open-sheet="reject">Change to reject</button>
     </div>
     <p class="meta" style="text-align: center">Keep approve signs the token bound to this exact render and puts the post in the outbox. Nothing leaves until Publish is pressed there.</p>

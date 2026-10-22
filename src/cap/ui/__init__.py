@@ -325,6 +325,7 @@ def ui_router(store: Store) -> APIRouter:
         reason_code: str | None = Form(default=None),
         opening_line: str | None = Form(default=None),
         spot_check_supported: str | None = Form(default=None),
+        acknowledged: str | None = Form(default=None),
         reviewer: Reviewer = Depends(current_reviewer),
     ) -> Response:
         _approver(reviewer)
@@ -340,6 +341,7 @@ def ui_router(store: Store) -> APIRouter:
                 reason_code=_enum(ReasonCode, reason_code, "reason"),
                 opening_line=opening_line,
                 spot_check_supported=_spot(spot_check_supported),
+                acknowledged=acknowledged == "yes",
             )
         except CardError as e:
             ctx = views.card_context(record, store, reviewer)

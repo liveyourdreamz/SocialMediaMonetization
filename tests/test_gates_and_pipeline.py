@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from cap.agents import AgentBlockedError, draft
+from cap.agents import draft
 from cap.demo import CHARACTER_BLOCK, TEST_LOG
 from cap.gates import (
     InMemoryHistory,
@@ -59,15 +59,19 @@ def test_happy_path_reaches_queue(client, record, tmp_path):
         assert c.nonce in c.system[0]["text"]
 
 
-def test_judge_disagreement_escalates_and_parks(fixtures, record, tmp_path):
+def test_judge_disagreement_goes_to_the_card_as_a_question(fixtures, record, tmp_path):
+    """D43: an escalation no longer parks; it reaches the card as a question for Hemant."""
     fixtures[("P1", "B")] = ok(
         verdict="escalate",
         rule_findings=[{"rule_id": "R-16", "outcome": "escalate", "evidence_span": "our test"}],
     )
     client = MockClient(fixtures)
     out = run_post(record, SOURCES, make_deps(client, record, tmp_path))
-    assert out.status == PostStatus.PARKED
+    assert out.status == PostStatus.AWAITING_APPROVAL, out.history[-3:]
     assert out.gates.ethics.verdict == Verdict.ESCALATE and out.gates.ethics.disagreement
+    assert out.flags.needs_decision and out.flags.needs_decision[0].startswith("Ethics")
+    assert "R-16" in out.flags.needs_decision[0]
+    assert not out.gates_cleared  # not publishable until Hemant settles it
 
 
 def test_hard_rule_fires_before_judges_and_stops_the_gate(record, client):
@@ -245,11 +249,14 @@ def test_null_source_claim_tries_every_source_and_keeps_drafter_fields(fixtures,
     assert gate.passed
 
 
-def test_blocked_discovery_parks(fixtures, record, tmp_path):
+def test_blocked_discovery_checks_the_drafters_claims(fixtures, record, tmp_path):
+    """D43: claim discovery declining no longer parks; the drafter's list is checked."""
     fixtures[("P10", "A")] = {"status": "blocked", "blocked_reason": "script missing"}
     client = MockClient(fixtures)
     out = run_post(record, SOURCES, make_deps(client, record, tmp_path))
-    assert out.status == PostStatus.PARKED and "P10 call A" in out.history[-1]
+    assert out.status == PostStatus.AWAITING_APPROVAL, out.history[-3:]
+    assert any("claim discovery declined" in h for h in out.history)
+    assert out.draft.claims
 
 
 def test_injection_flag_parks_never_fails(fixtures, record, tmp_path):
@@ -263,7 +270,9 @@ def test_injection_flag_parks_never_fails(fixtures, record, tmp_path):
 # ---- drafter code checks (Pack P2) ---------------------------------------------------
 
 
-def test_drafter_parks_on_uncovered_numeral(fixtures, record):
+def test_an_unlisted_number_becomes_a_claim(fixtures, record):
+    """D43 (22 Oct, "Why is Mars red" stopped on '30'): a number the drafter did not
+    list is added as a claim by code and checked like any other."""
     fixtures[("P2", "2")] = ok(
         claims=[
             {
@@ -275,8 +284,11 @@ def test_drafter_parks_on_uncovered_numeral(fixtures, record):
         ],
         numeral_check=[],
     )
-    with pytest.raises(AgentBlockedError, match="numerals"):
-        draft(record, MockClient(fixtures), source_docs(), CHARACTER_BLOCK, TEST_LOG)
+    out = draft(record, MockClient(fixtures), source_docs(), CHARACTER_BLOCK, TEST_LOG)
+    listed = " ".join(c.text for c in out.draft.claims)
+    for n in ("7", "3", "10", "12"):
+        assert n in listed, (n, listed)
+    assert any("added" in h and "numbers the drafter did not list" in h for h in out.history)
 
 
 def test_drafter_nulls_source_when_quote_is_not_in_source(fixtures, record):
@@ -333,12 +345,13 @@ def test_mfk_bands_and_heaviest_unclear_rule():
     assert mfk_band(0.0, [("child_subject_matter", "absent")]) == "clear"
 
 
-def test_mfk_doubtful_parks_for_hemant(fixtures, record, tmp_path):
+def test_mfk_doubtful_goes_to_the_card_for_hemant(fixtures, record, tmp_path):
     fixtures[("P9", "default")] = ok(
         factors=[{"factor_id": "child_subject_matter", "outcome": "unclear"}]
     )
     out = run_post(record, SOURCES, make_deps(MockClient(fixtures), record, tmp_path))
-    assert out.status == PostStatus.PARKED and "doubtful" in out.history[-1]
+    assert out.status == PostStatus.AWAITING_APPROVAL, out.history[-3:]
+    assert any(q.startswith("Made for kids: doubtful") for q in out.flags.needs_decision)
 
 
 def test_paid_promo_needs_ad_prefix(record, client):

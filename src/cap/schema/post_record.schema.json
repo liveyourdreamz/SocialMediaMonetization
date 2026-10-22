@@ -118,6 +118,13 @@
           "default": "",
           "title": "Token",
           "type": "string"
+        },
+        "decisions_acknowledged": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Decisions Acknowledged",
+          "type": "array"
         }
       },
       "title": "Approval",
@@ -715,6 +722,13 @@
           "default": "",
           "title": "Stop Reason",
           "type": "string"
+        },
+        "needs_decision": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Needs Decision",
+          "type": "array"
         }
       },
       "title": "Flags",

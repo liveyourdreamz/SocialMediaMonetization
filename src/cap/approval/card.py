@@ -239,6 +239,7 @@ def finalise(
     reason_code: ReasonCode | None = None,
     opening_line: str | None = None,
     spot_check_supported: bool | None = None,
+    acknowledged: bool = False,
 ) -> PostRecord:
     """Second step: the reviewer has seen the gates; may revise once (D33). Applies
     the status change and the canary outcome. Token issue is the caller's job (needs
@@ -272,6 +273,11 @@ def finalise(
             _check_approve_inputs(record, opening_line, spot_check_supported)
     if decision == Decision.APPROVE:
         _check_stage_one(record)
+        if record.flags.needs_decision and not acknowledged:
+            raise CardError(
+                "this post has questions only you can settle (shown above); tick that you "
+                "reviewed them to approve"
+            )
     if revising:
         if decision == Decision.APPROVE:
             record.human_contribution.text = (opening_line or "").strip()
@@ -288,6 +294,12 @@ def finalise(
         Decision.ESCALATE: PostStatus.PARKED,
     }[decision]
     a.decided_at = datetime.now(UTC)
+    if decision == Decision.APPROVE and record.flags.needs_decision:
+        a.decisions_acknowledged = list(record.flags.needs_decision)
+        record.log(
+            f"{reviewer} reviewed and accepted: "
+            + "; ".join(n.split(":")[0] for n in record.flags.needs_decision)
+        )
     if decision != Decision.APPROVE:
         chip = a.reason_code.value.replace("_", " ") if a.reason_code else "no reason chip"
         record.stop(

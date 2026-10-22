@@ -204,6 +204,7 @@ class FinaliseIn(BaseModel):
     reason_code: ReasonCode | None = None
     opening_line: str | None = None
     spot_check_supported: bool | None = None
+    acknowledged: bool = False
 
 
 def finalise_and_issue(store: Store, record: PostRecord, reviewer: str, **kw: Any) -> bool:
@@ -372,6 +373,7 @@ def api_router(store: Store) -> APIRouter:
                 reason_code=body.reason_code,
                 opening_line=body.opening_line,
                 spot_check_supported=body.spot_check_supported,
+                acknowledged=body.acknowledged,
             )
         except CardError as e:
             raise HTTPException(422, str(e)) from e

@@ -3,7 +3,7 @@ default 10) per post: the drafter is told, a draft over it is rewritten once, th
 
 import pytest
 
-from cap.agents import AgentBlockedError, draft
+from cap.agents import draft
 from cap.config import get_settings
 from cap.demo import CHARACTER_BLOCK, TEST_LOG
 from cap.models import MockClient
@@ -69,12 +69,13 @@ def test_over_the_limit_is_rewritten_once_then_fits(fixtures, record, limit):
     assert "the limit is 10" in str(rewrite.user)
 
 
-def test_still_over_after_the_rewrite_parks_with_the_count(fixtures, record, limit):
+def test_still_over_after_the_rewrite_continues_and_says_so(fixtures, record, limit):
     limit(3)
     _no_numerals(fixtures)
     fixtures[("P2", "2")] = _claims(5)
-    with pytest.raises(AgentBlockedError, match=r"5 claims after a rewrite; the limit is 3"):
-        draft(record, MockClient(fixtures), source_docs(), CHARACTER_BLOCK, TEST_LOG)
+    out = draft(record, MockClient(fixtures), source_docs(), CHARACTER_BLOCK, TEST_LOG)
+    assert len(out.draft.claims) == 5
+    assert any("still 5 claims after a rewrite (limit 3" in h for h in out.history)
 
 
 def test_the_limit_is_bounded(limit):

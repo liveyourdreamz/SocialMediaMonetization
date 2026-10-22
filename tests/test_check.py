@@ -432,7 +432,8 @@ def test_full_run_names_the_step_and_reason_when_a_post_stops(monkeypatch, tmp_p
 
     def blocked():
         f = happy_fixtures()
-        f[("P3", "default")] = {"status": "blocked", "blocked_reason": "no speaking rate"}
+        # the one draft-stage stop left (D43): the drafter writes nothing, even on retry
+        f[("P2", "1")] = {"status": "blocked", "blocked_reason": "no speaking rate"}
         return f
 
     _full_run_env(monkeypatch, tmp_path, blocked)

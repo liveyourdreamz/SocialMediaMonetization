@@ -51,7 +51,8 @@
 
     <div class="stack-sm">
       <input type="hidden" name="reason_code" value="" data-reason>
-      <button class="btn primary" type="submit" data-approve-submit>Approve</button>
+      {% if revising and record.flags.needs_decision %}<label style="display: flex; gap: 10px; align-items: flex-start; min-height: 44px; font-size: 15px; line-height: 22px"><input type="checkbox" name="acknowledged" value="yes" required style="width: 20px; height: 20px; margin-top: 1px"><span>I reviewed the question{{ 's' if record.flags.needs_decision | length != 1 }} on the card and approve</span></label>{% endif %}
+    <button class="btn primary" type="submit" data-approve-submit>Approve</button>
       <p class="meta" style="text-align: center">On the card <span class="tabular">{{ on_card_text }}</span> · expected {{ expected_text }}</p>
     </div>
   </form>

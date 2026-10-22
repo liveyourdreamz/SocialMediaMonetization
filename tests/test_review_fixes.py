@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from cap.agents import AgentBlockedError, draft
+from cap.agents import draft
 from cap.approval import token as tok
 from cap.demo import CHARACTER_BLOCK, TEST_LOG
 from cap.models import MockClient
@@ -147,20 +147,20 @@ def test_l1_a_failed_gate_rejects_before_a_made_for_kids_park(
 # ---- M4: numerals the viewer reads outside the script ------------------------------
 
 
-def test_m4_a_number_in_the_title_needs_a_claim_too(fixtures, record):
+def test_m4_a_number_in_the_title_becomes_a_claim(fixtures, record):
     call1 = dict(fixtures[("P2", "1")])
     call1["draft"] = {**call1["draft"], "title": "I tested it for 42 days"}
     fixtures[("P2", "1")] = call1
-    with pytest.raises(AgentBlockedError, match=r"\['42'\]"):
-        draft(record, MockClient(fixtures), source_docs(), CHARACTER_BLOCK, TEST_LOG)
+    out = draft(record, MockClient(fixtures), source_docs(), CHARACTER_BLOCK, TEST_LOG)
+    assert any("42" in c.text for c in out.draft.claims)
 
 
-def test_m4_a_number_on_screen_needs_a_claim_too(fixtures, record):
+def test_m4_a_number_on_screen_becomes_a_claim(fixtures, record):
     call1 = dict(fixtures[("P2", "1")])
     call1["draft"] = {**call1["draft"], "on_screen_text": ["99% fail"]}
     fixtures[("P2", "1")] = call1
-    with pytest.raises(AgentBlockedError, match="99"):
-        draft(record, MockClient(fixtures), source_docs(), CHARACTER_BLOCK, TEST_LOG)
+    out = draft(record, MockClient(fixtures), source_docs(), CHARACTER_BLOCK, TEST_LOG)
+    assert any("99" in c.text for c in out.draft.claims)
 
 
 # ---- H3: a local copy alone is not a publication -----------------------------------

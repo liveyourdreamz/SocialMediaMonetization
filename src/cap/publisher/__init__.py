@@ -84,8 +84,11 @@ def publish(
         raise PublishRefusedError("a guided-tour post never leaves this computer")
     if record.status != PostStatus.APPROVED:
         raise PublishRefusedError(f"record status is {record.status.value}")
-    if not record.gates.all_passed:
-        raise PublishRefusedError("a gate did not pass; R-20 forbids any override here")
+    if not record.gates_cleared:
+        raise PublishRefusedError(
+            "a gate did not pass and was not a question settled on the card; R-20 forbids "
+            "any other override"
+        )
     if record.sponsor is not None and record.sponsor.permit_status != "granted":
         raise PublishRefusedError("sponsored post without the UAE permit (PRD 4.6)")
     if not record.asset.sha256:

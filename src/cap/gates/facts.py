@@ -27,7 +27,6 @@ from __future__ import annotations
 import json
 import unicodedata
 
-from cap.agents import AgentBlockedError
 from cap.agents.outputs import P10CallAOutput, P10VerifyOutput
 from cap.models import ModelClient, SourceDoc
 from cap.post_context import post_context
@@ -82,8 +81,10 @@ def discover_claims(
         user_tail=f"<drafter_claims>{json.dumps(hints, ensure_ascii=False)}</drafter_claims>",
     )
     if res.output is None or res.output.status == "blocked":
-        reason = res.reason
-        raise AgentBlockedError(f"P10 call A: {reason}")
+        # D43: the drafter's list is checked instead; the post does not stop
+        why = res.output.blocked_reason if res.output else res.reason
+        record.log(f"claim discovery declined ({str(why)[:160]}); checking the drafter's list")
+        return [c.model_copy() for c in record.draft.claims], [], False
     by_text = {c.text: c for c in record.draft.claims}
     claims: list[Claim] = []
     for c in res.output.claims:

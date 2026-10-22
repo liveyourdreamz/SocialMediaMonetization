@@ -329,6 +329,8 @@ class Approval(Strict):
     edits: list[str] = Field(default_factory=list)  # PRD 4.5: reviewer edits as a diff log
     stage_one: StageOneReview | None = None
     token: str = ""
+    # D43: the needs_decision items the approver reviewed and accepted after the reveal
+    decisions_acknowledged: list[str] = Field(default_factory=list)
 
 
 class Publish(Strict):
@@ -367,6 +369,9 @@ class Flags(Strict):
     # where the post stopped (a workflow step key) and why, written when it stops
     stopped_at: str = ""
     stop_reason: str = ""
+    # D43: questions a gate could not settle (an ethics escalation, a made-for-kids
+    # doubt). The post goes on to the card; Hemant settles each one there.
+    needs_decision: list[str] = Field(default_factory=list)
 
 
 class PostRecord(Strict):
@@ -388,6 +393,26 @@ class PostRecord(Strict):
     metrics: Metrics = Field(default_factory=Metrics)
     flags: Flags = Field(default_factory=Flags)
     history: list[str] = Field(default_factory=list)  # audit trail lines, append only
+
+    @property
+    def gates_cleared(self) -> bool:
+        """Publishable as far as the gates go: everything passed, or the only open
+        items are the questions the approver settled on the card (D43). A gate that
+        failed outright (a duplicate, an ethics fail, a likely made-for-kids post, a
+        missing Ad prefix, endorsement wording) is never cleared by anyone (R-20)."""
+        g = self.gates
+        if g.all_passed:
+            return True
+        hard_fail = (
+            not g.originality.passed
+            or g.ethics.verdict == Verdict.FAIL
+            or not g.facts.passed
+            or not g.disclosure.ad_prefix_ok
+            or g.disclosure.mfk_band == "likely"
+        )
+        if hard_fail or not self.flags.needs_decision:
+            return False
+        return set(self.flags.needs_decision) <= set(self.approval.decisions_acknowledged)
 
     def stop(self, step: str, reason: str, status: PostStatus | None = None) -> None:
         """Record where and why the post stopped; the workflow bar reads these."""

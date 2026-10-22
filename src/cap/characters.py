@@ -51,6 +51,13 @@ Write the episode from your own knowledge of the topic, plus any pages, test log
 
 CHARACTER_BLOCKS: dict[str, str] = {"A": PATCH_EN, "B": FALAK_EN, "C": FALAK_AR}
 
+# D43: the character's own opener, added by code when a script lacks every anchor.
+OPENERS: dict[str, str] = {
+    "A": "Let's take it apart.",
+    "B": "From orbit, here's what I see.",
+    "C": "من المدار، هذا ما أراه.",
+}
+
 # What the originality gate must find in the title or script (any one is enough).
 ANCHOR_ELEMENTS: dict[str, list[str]] = {
     "A": ["take it apart", "Patch", "test log"],

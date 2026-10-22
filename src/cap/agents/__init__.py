@@ -77,13 +77,29 @@ def draft(
         user1 += f"\n<critique>{critique}</critique>\n<previous_draft>{record.draft.script}</previous_draft>"
     r1 = client.run(spec("P2", "1"), user1, P2Call1Output, sources=sources, static_blocks=statics)
     if r1.output is None or r1.output.status == "blocked" or r1.output.draft is None:
-        raise _blocked("P2 call 1", r1)
+        # D43: one retry with the reason; every value it could be missing is in post_context
+        why = r1.output.blocked_reason if r1.output else r1.reason
+        record.log(f"drafter declined ({str(why)[:160]}); retrying with the reason")
+        retry = (
+            f"{user1}\n<previous_attempt_blocked>{why}</previous_attempt_blocked>\n"
+            "<instruction>Every value this post needs is in post_context above and is "
+            "given. Write the script now; where something is genuinely unknown, write "
+            "around it rather than blocking.</instruction>"
+        )
+        r1 = client.run(
+            spec("P2", "1"), retry, P2Call1Output, sources=sources, static_blocks=statics
+        )
+        if r1.output is None or r1.output.status == "blocked" or r1.output.draft is None:
+            raise _blocked("P2 call 1", r1)
     d = r1.output.draft
     record.draft.title, record.draft.script = d.title, d.script
     record.draft.shot_list, record.draft.caption = d.shot_list, d.caption
     record.draft.on_screen_text, record.draft.thumbnail_text = d.on_screen_text, d.thumbnail_text
     if record.draft.script.count(OPENING_LINE_SLOT) != 1:
-        raise AgentBlockedError("P2 call 1: opening-line slot must appear exactly once")
+        # D43: repaired, not parked: exactly one slot, at the start
+        body = record.draft.script.replace(OPENING_LINE_SLOT, "").strip()
+        record.draft.script = f"{OPENING_LINE_SLOT} {body}"
+        record.log("repaired: the opening-line slot is now once, at the start")
 
     r2 = client.run(
         spec("P2", "2"),
@@ -94,11 +110,15 @@ def draft(
         "claims. Where one sentence states related facts, list it as one claim.</claim_limit>",
         static_blocks=statics,
     )
+    listed = []
     if r2.output is None or r2.output.status == "blocked":
-        raise _blocked("P2 call 2", r2)
+        why = r2.output.blocked_reason if r2.output else r2.reason
+        record.log(f"claim list declined ({str(why)[:160]}); the facts check lists them")
+    else:
+        listed = list(r2.output.claims)
     bodies = {src.url: src.body for src in sources}
     claims = []
-    for c in r2.output.claims:
+    for c in listed:
         claim = Claim(
             text=c.text,
             source_url=c.source_url,
@@ -113,11 +133,13 @@ def draft(
         claims.append(claim)
     if len(claims) > limit:
         if not _refit:
-            raise AgentBlockedError(
-                f"P2: {len(claims)} claims after a rewrite; the limit is {limit} "
-                "(CAP_MAX_CLAIMS). Narrow the topic or raise the limit."
+            record.log(
+                f"still {len(claims)} claims after a rewrite (limit {limit}, CAP_MAX_CLAIMS); "
+                "continuing, every claim is checked"
             )
-        record.log(f"drafted {len(claims)} claims, over the limit of {limit}: rewriting to fit")
+        else:
+            record.log(f"drafted {len(claims)} claims, over the limit of {limit}: rewriting to fit")
+    if len(claims) > limit and _refit:
         note = (
             f"The script makes {len(claims)} factual claims; the limit is {limit}. Keep the "
             f"{limit} that carry the explanation, cut or merge the rest, and remove any "
@@ -148,11 +170,26 @@ def draft(
     )
     missing = sorted(set(_numerals(seen)) - set(_numerals(covered)))
     if missing:
-        raise AgentBlockedError(
-            f"P2: numerals on screen, in the title or the script with no claim: {missing}"
-        )
+        # D43: a number nobody listed becomes a claim, checked like every other
+        added = _claims_for_numerals(missing, seen)
+        record.draft.claims += added
+        record.log(f"added {len(added)} claim(s) for numbers the drafter did not list: {missing}")
     record.log(f"drafted: {len(record.draft.claims)} claims")
     return record
+
+
+def _claims_for_numerals(numerals: list[str], text: str) -> list[Claim]:
+    """The sentence (or line) that carries each unlisted number, as a claim to check."""
+    pieces = [p.strip() for p in re.split(r"(?<=[.!?])\s+|\n+", text) if p.strip()]
+    out: list[Claim] = []
+    seen_text: set[str] = set()
+    for n in numerals:
+        hit = next((p for p in pieces if n in _numerals(p)), n)
+        hit = hit.replace(OPENING_LINE_SLOT, "").strip() or n
+        if hit not in seen_text:
+            seen_text.add(hit)
+            out.append(Claim(text=hit))
+    return out
 
 
 def critique(
@@ -169,7 +206,9 @@ def critique(
         spec("P3"), user, P3Output, static_blocks=[character_block] if character_block else None
     )
     if r.output is None or r.output.status == "blocked":
-        raise _blocked("P3", r)
+        why = r.output.blocked_reason if r.output else r.reason
+        record.log(f"critic declined ({str(why)[:160]}); draft kept as written")
+        return record, True
     record.draft.critic_verdict = r.output.verdict
     record.draft.critic_issues = [
         CriticIssue(
@@ -199,7 +238,10 @@ def adapt(record: PostRecord, client: ModelClient, platforms: list[Platform]) ->
     )
     r = client.run(spec("P7"), user, P7Output, static_blocks=[disclosure_block()])
     if r.output is None or r.output.status == "blocked":
-        raise _blocked("P7", r)
+        why = r.output.blocked_reason if r.output else r.reason
+        record.log(f"adapter declined ({str(why)[:160]}); variants built from the draft")
+        record.variants = _variants_from_draft(record, platforms)
+        return record
     script_numerals = set(_numerals(record.draft.script + " " + record.draft.title))
     record.variants = []
     for v in r.output.variants:
@@ -223,8 +265,36 @@ def adapt(record: PostRecord, client: ModelClient, platforms: list[Platform]) ->
             )
         )
     if not record.variants:
-        raise AgentBlockedError("P7: no variant survived the code checks")
+        record.log("no adapted variant passed the checks; variants built from the draft")
+        record.variants = _variants_from_draft(record, platforms)
     return record
+
+
+def _variants_from_draft(record: PostRecord, platforms: list[Platform]) -> list[Variant]:
+    """D43: the draft itself, per platform, with the disclosure in every caption. A
+    Short is the whole script when the episode fits 60 s, else none."""
+    from cap.policy import AI_ROLE_DISCLOSURE
+
+    caption = record.draft.caption.strip()
+    if AI_ROLE_DISCLOSURE_KEY not in caption.lower():
+        caption = f"{caption} {AI_ROLE_DISCLOSURE}".strip()
+    script = record.draft.script.replace(OPENING_LINE_SLOT, "").strip()
+    out = []
+    for p in platforms:
+        if p == Platform.YOUTUBE_SHORT and record.brief.length_s > 60:
+            continue
+        out.append(
+            Variant(
+                platform=p,
+                title=record.draft.title[:100],
+                caption=caption,
+                duration_s=record.brief.length_s,
+                script_cut=script if p == Platform.YOUTUBE_SHORT else "",
+                on_screen_text=record.draft.on_screen_text,
+                thumbnail_text=record.draft.thumbnail_text,
+            )
+        )
+    return out
 
 
 def write_canary(

@@ -155,6 +155,17 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
             return _park(record, "injection suspected in fetched content; parked for review")
         anchors = deps.anchor_elements.get(record.channel_id.value, [])
         record.gates.originality = _originality_over_variants(record, deps, anchors)
+        if not record.gates.originality.passed and not record.gates.originality.anchor_present:
+            # D43: the signature phrase is missing; add the character's opener and recheck
+            from cap.agents import OPENING_LINE_SLOT
+            from cap.characters import OPENERS
+
+            opener = OPENERS.get(record.channel_id.value, "")
+            if opener:
+                rest = record.draft.script.replace(OPENING_LINE_SLOT, "").strip()
+                record.draft.script = f"{OPENING_LINE_SLOT} {opener} {rest}"
+                record.log(f'repaired: added the signature opener "{opener}"')
+                record.gates.originality = _originality_over_variants(record, deps, anchors)
         record.gates.ethics = check_ethics(record, deps.client)
         record.gates.disclosure = check_disclosure(record, deps.client)
         # a gate that failed outright rejects, before any park (a failure is not a question)
@@ -172,13 +183,30 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
             record.stop("checks", "gates failed: " + ", ".join(hard))
             record.log("gates failed: " + ", ".join(hard))
             return _put(record, parked_reason="gates failed")
+        # D43: a question a gate could not settle goes to the card for Hemant to decide
         if record.gates.ethics.verdict.value == "escalate":
-            return _park(record, "ethics gate escalated")
+            eg = record.gates.ethics
+            views = [
+                f"judge {j.judge} ({j.platform.value}): {j.verdict.value}"
+                + (f", {j.explanation[:160]}" if j.explanation else "")
+                for j in eg.judges
+                if j.verdict.value != "pass"
+            ]
+            rules = f" Rules: {', '.join(eg.rule_ids)}." if eg.rule_ids else ""
+            why = ("; ".join(views) or "the judges did not agree") + rules
+            record.flags.needs_decision.append(f"Ethics: the judges escalated this. {why}"[:500])
         if record.gates.disclosure.mfk_band in ("doubtful", "unscored"):
-            return _park(
-                record, f"made-for-kids {record.gates.disclosure.mfk_band}: Hemant decides"
+            band = record.gates.disclosure.mfk_band
+            factors = ", ".join(record.gates.disclosure.mfk_factors) or "no factor detail"
+            record.flags.needs_decision.append(
+                f"Made for kids: {band} ({factors}). Approving keeps it 'not made for kids'."
             )
-        if not record.gates.all_passed:
+        if record.flags.needs_decision:
+            record.log(
+                f"{len(record.flags.needs_decision)} question(s) for you on the card: "
+                + "; ".join(n.split(":")[0] for n in record.flags.needs_decision)
+            )
+        if _still_failing(record):
             record.status = PostStatus.REJECTED
             record.stop("checks", "gates failed: " + ", ".join(_failed_gates(record)))
             record.log("gates failed: " + ", ".join(_failed_gates(record)))
@@ -298,6 +326,24 @@ def _park(record: PostRecord, reason: str) -> PipelineState:
     record.status = PostStatus.PARKED
     record.log(f"parked: {reason}")
     return _put(record, parked_reason=reason)
+
+
+def _still_failing(record: PostRecord) -> bool:
+    """Failures that are not questions for Hemant: these reject (D43 keeps them)."""
+    g = record.gates
+    if g.all_passed:
+        return False
+    asked = bool(record.flags.needs_decision)
+    ethics_bad = g.ethics.verdict.value == "fail" or (
+        g.ethics.verdict.value != "pass" and not asked
+    )
+    mfk_question = g.disclosure.mfk_band in ("doubtful", "unscored")
+    disclosure_bad = (
+        not g.disclosure.ad_prefix_ok
+        or g.disclosure.mfk_band == "likely"
+        or (not g.disclosure.passed and not mfk_question)
+    )
+    return ethics_bad or disclosure_bad or not g.originality.passed or not g.facts.passed
 
 
 def _failed_gates(record: PostRecord) -> list[str]:
