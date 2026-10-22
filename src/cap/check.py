@@ -144,12 +144,16 @@ def _voice() -> str:
 
 
 def _fetch() -> str:
+    """Real pages the way research reads them: a plain site and a Wikipedia article
+    (served compressed, read through its REST API)."""
     from cap.fetch import fetch_sources
 
-    docs = fetch_sources(["https://example.com/"], timeout=15)
-    if not docs or docs[0]["body"].startswith("[fetch failed"):
-        raise RuntimeError(docs[0]["body"] if docs else "no document")
-    return f"example.com: {len(docs[0]['body'])} chars of text"
+    urls = ["https://example.com/", "https://en.wikipedia.org/wiki/Silk"]
+    docs = fetch_sources(urls, timeout=15)
+    bad = [d for d in docs if d["body"].startswith("[fetch failed")]
+    if len(docs) != len(urls) or bad:
+        raise RuntimeError("; ".join(f"{d['url']}: {d['body']}" for d in bad) or "no document")
+    return " · ".join(f"{d['url'].split('/')[2]}: {len(d['body'])} chars" for d in docs)
 
 
 def _model() -> str:
@@ -213,15 +217,19 @@ def _characters() -> str:
 
 
 def _youtube() -> str:
+    """The Connections page is what publishing uses; the old CAP_PUBLISHER setting only
+    matters for the scheduler. Reports the connected account, never a token."""
+    from cap import connections
     from cap.config import get_settings
 
+    if connections.youtube_credentials_json() is not None:
+        account = connections.load("youtube").get("account") or {}
+        name = account.get("name") or account.get("title") or "connected"
+        return f"connected on Connections ({name}); run youtube-test.bat to try an upload"
     s = get_settings()
-    if s.publisher != "youtube":
-        raise Skip(f"publisher is '{s.publisher}' (local folder); YouTube not in use yet")
-    tok = Path(s.data_dir) / "youtube-token.json"
-    if not tok.exists():
-        raise RuntimeError("publisher youtube but no token; run `uv run cap youtube auth`")
-    return "token present"
+    if s.publisher == "youtube" and (Path(s.data_dir) / "youtube-token.json").exists():
+        return "connected with the older sign-in file; run youtube-test.bat to try an upload"
+    raise Skip("not connected yet: open Connections in the app and connect YouTube")
 
 
 def run(offline: bool = False, out: Callable[[str], None] = print) -> int:

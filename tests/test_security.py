@@ -154,3 +154,30 @@ def test_finding_6_uploads_must_be_real_images_and_are_capped(lan):
     assert r.status_code == 303
     rec = next(p for p in store.posts.values() if p.brief.topic == "Batteries")
     assert any("10 screenshot(s) attached" in h for h in rec.history)
+
+
+@pytest.mark.parametrize("encoding", ["gzip", "deflate", "identity"])
+def test_compressed_pages_are_read_once_not_decoded_twice(monkeypatch, encoding):
+    """22 Oct on Hemant's laptop: every real page failed with 'incorrect header check'.
+    Sites send gzip; the capped reader decoded it and then copied the gzip header."""
+    import gzip
+    import zlib
+
+    from cap import fetch
+
+    html = b"<html><body><article>Silk is a protein fibre.</article></body></html>"
+    packed = {"gzip": gzip.compress, "deflate": zlib.compress, "identity": lambda b: b}[encoding](
+        html
+    )
+
+    def handler(req):
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html", "content-encoding": encoding},
+            content=packed,
+        )
+
+    monkeypatch.setattr(fetch, "check_public", lambda url: None)
+    with httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=False) as c:
+        text, _ = fetch.fetch_one(c, "https://example.org/silk")
+    assert "Silk is a protein fibre." in text

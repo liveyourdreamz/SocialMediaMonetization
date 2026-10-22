@@ -126,8 +126,15 @@ def _get(c: httpx.Client, url: str, headers: dict[str, str]) -> httpx.Response:
                 if size >= MAX_BYTES:
                     break
             body = b"".join(chunks)
-            out = httpx.Response(r.status_code, headers=r.headers, content=body, request=r.request)
-            return out
+            # iter_bytes() has already undone gzip/brotli/deflate; a copy that kept the
+            # Content-Encoding header would decode it a second time (22 Oct: every
+            # compressed page failed with "incorrect header check")
+            headers = {
+                k: v
+                for k, v in r.headers.items()
+                if k.lower() not in ("content-encoding", "content-length", "transfer-encoding")
+            }
+            return httpx.Response(r.status_code, headers=headers, content=body, request=r.request)
     raise BlockedURLError("too many redirects")
 
 

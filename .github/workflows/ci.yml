@@ -34,6 +34,9 @@ jobs:
         run: ./run.sh --smoke
       - name: Check (the real-service seams that can run without a key)
         run: uv run cap check --offline
+      - name: Fetch real pages over the network (gzip, redirects, Wikipedia)
+        # the offline check skips this; 22 Oct every real page failed on the laptop
+        run: uv run python -c "from cap.check import _fetch; print(_fetch())"
 
   windows:
     # The laptop path Hemant actually uses: install.bat (the downloaded bootstrap) fetches

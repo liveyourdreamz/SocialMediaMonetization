@@ -453,3 +453,23 @@ def test_full_run_refuses_without_a_key(monkeypatch, tmp_path):
     lines: list[str] = []
     assert check.full_run(out=lines.append) == 1 and "API key" in lines[0]
     get_settings.cache_clear()
+
+
+def test_youtube_check_reads_the_connections_page(monkeypatch, tmp_path):
+    """22 Oct: the check said 'YouTube not in use yet' because it read only the old
+    CAP_PUBLISHER setting; publishing uses the Connections page."""
+    import pytest
+
+    from cap import check, connections
+    from cap.check import Skip
+    from cap.config import get_settings
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
+    get_settings.cache_clear()
+    with pytest.raises(Skip, match="open Connections"):
+        check._youtube()
+    monkeypatch.setattr(connections, "youtube_credentials_json", lambda: {"token": "x"})
+    monkeypatch.setattr(connections, "load", lambda p: {"account": {"name": "Falak Explains"}})
+    assert "Falak Explains" in check._youtube()
+    get_settings.cache_clear()
