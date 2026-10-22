@@ -1399,6 +1399,11 @@
   },
   "additionalProperties": false,
   "properties": {
+    "schema_version": {
+      "default": 2,
+      "title": "Schema Version",
+      "type": "integer"
+    },
     "post_id": {
       "title": "Post Id",
       "type": "string"

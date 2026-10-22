@@ -20,8 +20,19 @@ class ModelBackend(StrEnum):
     ANTHROPIC = "anthropic"  # production: API key from Secret Manager (D31)
 
 
+# The app writes .env as UTF-8 (cap.setup). Said explicitly: a pydantic-settings that
+# falls back to the locale reads it as cp1252 on Windows, and an Arabic reviewer name or
+# a smart quote then breaks start-up. (cap.setup also rewrites a cp1252 .env as UTF-8.)
+ENV_FILE_ENCODING = "utf-8"
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="CAP_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="CAP_",
+        env_file=".env",
+        env_file_encoding=ENV_FILE_ENCODING,
+        extra="ignore",
+    )
 
     env: str = "local"
     # The laptop sign-in (a per-person secret typed on /login) when Google sign-in is

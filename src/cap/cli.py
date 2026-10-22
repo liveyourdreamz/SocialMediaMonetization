@@ -11,6 +11,7 @@ cap check --full           ...then one real post per channel, idea to published 
 cap serve [--demo]         run the app locally (Portfolio, queue, card, digest, operator)
                            with demo posts queued; asks for the API key on first run
 cap key                    enter or change the Anthropic API key (hidden; local .env only)
+cap update [--branch B]    bring this folder up to date (best effort; install.bat runs it)
 cap tokens build|check     compile design/proof/tokens.json to the app's tokens.css
 cap youtube auth           one-time browser sign-in for YouTube uploads (laptop)
 cap youtube test           upload a 5-second PRIVATE test clip to the connected channel
@@ -20,6 +21,13 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from cap.config import Settings
+
+ALREADY_RUNNING = 3  # cap serve: another window serves this data folder; it was opened
 
 
 def utf8_console() -> None:
@@ -66,6 +74,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="three channels, a canary, example analytics, an Arabic reviewer",
     )
+    up = sub.add_parser("update")
+    up.add_argument("--dir", default=".", help="the app folder (a git checkout)")
+    up.add_argument("--branch", default="bootstrap")
     k = sub.add_parser("key")
     k.add_argument("--no-check", action="store_true", help="do not test the key against Anthropic")
     yt = sub.add_parser("youtube")
@@ -92,8 +103,6 @@ def main(argv: list[str] | None = None) -> int:
             assert "<role>" in text, key
         print(f"{len(SPECS)} prompt calls load from pack v{pack_version()}")
     elif args.cmd == "key":
-        from pathlib import Path
-
         from cap.setup import check_key, ensure_env, read_key
 
         ensure_env(Path(".env"), force=True)
@@ -150,80 +159,145 @@ def main(argv: list[str] | None = None) -> int:
                 return code
             return check.full_run(channels=args.channels.upper())
         return code
-    elif args.cmd == "smoke":
-        from pathlib import Path
+    elif args.cmd == "update":
+        from cap import updater
 
+        return updater.main(["--dir", args.dir, "--branch", args.branch])
+    elif args.cmd == "smoke":
         from cap import smoke
 
         return smoke.run(Path(args.dir).resolve())
     elif args.cmd == "serve":
-        import os
-        import shutil
-        import threading
-        import webbrowser
-        from pathlib import Path
+        return _serve(args)
+    return 0
 
-        from cap.setup import ensure_env
 
-        model = ensure_env(Path(".env"))
-        os.environ.setdefault("CAP_DEV_REVIEWER_HEADER", "true")
-        if args.demo:
-            os.environ.setdefault("CAP_ARABIC_REVIEWERS", '["layla"]')
-            os.environ.setdefault("CAP_PILOT_START", "2026-09-08")
-        from cap.config import get_settings
+def signin_secrets(env: Path) -> dict[str, str]:
+    """Who signs in from the phone with what: per-person secrets when cap.setup has them
+    (signin_secrets), else the shared passcode."""
+    from cap import setup
 
-        get_settings.cache_clear()
-        settings = get_settings()
-        if settings.env not in ("local", "test"):
-            print("cap serve is for local runs only", file=sys.stderr)
-            return 2
-        import uvicorn
+    per_person = getattr(setup, "signin_secrets", None)
+    if callable(per_person):
+        return dict(per_person(env))
+    code = setup.read_passcode(env)
+    return {"passcode": code} if code else {}
 
-        from cap.approval.app import FileStore, create_app
-        from cap.demo.seed import seed_store
-        from cap.publisher import LocalFolderAdapter
 
-        data = Path(settings.data_dir)
-        if args.reset and data.exists():
-            shutil.rmtree(data)
-        store = FileStore(data)
-        if settings.publisher == "youtube":
-            from cap.publisher.youtube import YouTubeAdapter
+def _open_later(url: str, delay: float = 1.5) -> None:
+    import threading
+    import webbrowser
 
-            store.publisher = YouTubeAdapter()
-        else:
-            store.publisher = LocalFolderAdapter(data / "published")
-        if not store.posts:
-            if settings.renderer == "video":
-                print("first run: rendering the demo posts (voice + video), about a minute...")
-            seed_store(store, demo=args.demo, canary=args.canary or args.demo)
-        print(
-            f"records in {data.resolve()}: {len(store.posts)} posts, {len(store.queue())} waiting"
+    threading.Timer(delay, lambda: webbrowser.open(url)).start()
+
+
+def _serve(args: argparse.Namespace) -> int:
+    import os
+    import shutil
+
+    from cap.setup import ensure_env
+
+    env_file = Path(".env")
+    model = ensure_env(env_file)
+    os.environ.setdefault("CAP_DEV_REVIEWER_HEADER", "true")
+    if args.demo:
+        os.environ.setdefault("CAP_ARABIC_REVIEWERS", '["layla"]')
+        os.environ.setdefault("CAP_PILOT_START", "2026-09-08")
+    from cap.config import get_settings
+
+    get_settings.cache_clear()
+    settings = get_settings()
+    if settings.env not in ("local", "test"):
+        print("cap serve is for local runs only", file=sys.stderr)
+        return 2
+
+    # Before anything reads the records: a second launch must not touch the first
+    # window's posts (it used to mark them interrupted, then fail on the port).
+    from cap import instance
+
+    data = Path(settings.data_dir)
+    lock = instance.InstanceLock(data, args.port)
+    try:
+        lock.acquire()
+    except instance.AlreadyRunningError as e:
+        return _already_running(e.port, args.open, "The app is already running in another window.")
+    if instance.port_in_use(args.port):
+        lock.release()
+        return _already_running(
+            args.port,
+            args.open,
+            f"Something is already using port {args.port}: probably the app in another "
+            "window (an older build). Close that window to restart it.",
         )
-        if settings.model_backend.value != model:
-            print(f"note: CAP_MODEL_BACKEND in the environment overrides .env ({model})")
-        from cap.version import build_id
+    try:
+        if args.reset and data.exists():
+            for child in data.iterdir():
+                if child.is_dir():
+                    shutil.rmtree(child)
+                elif child != lock.path:
+                    child.unlink()
+        return _run_app(args, settings, data, model, env_file)
+    finally:
+        lock.release()
 
-        print(f"build: {build_id()}")
-        from cap.setup import read_passcode
 
-        if read_passcode(Path(".env")) and args.host not in ("127.0.0.1", "localhost"):
-            print(f"phone sign-in passcode: {read_passcode(Path('.env'))} (the laptop needs none)")
-        if settings.model_backend.value == "anthropic":
-            print("model backend: anthropic (real drafts and judges)")
-        else:
-            print("model backend: mock (sample drafts). `uv run cap key` adds your key.")
-        local_url = f"http://127.0.0.1:{args.port}/login"
-        if settings.google_enabled:
-            how = "Google sign-in is on"
-        else:
-            how = "sign in as hemant" + (" (or layla for channel C)" if args.demo else "")
-        print(f"open {local_url} and {how}")
-        if args.host == "0.0.0.0":  # noqa: S104
-            print(f"on your phone: http://<this laptop's address>:{args.port}/login")
-        if args.open:
-            threading.Timer(1.5, lambda: webbrowser.open(local_url)).start()
-        uvicorn.run(create_app(store), host=args.host, port=args.port)
+def _already_running(port: int, open_browser: bool, why: str) -> int:
+    url = f"http://127.0.0.1:{port}/"
+    print(why)
+    if open_browser:
+        import webbrowser
+
+        print(f"Opening {url} in your browser instead of starting a second copy.")
+        webbrowser.open(url)
+    else:
+        print(f"It is at {url}; not starting a second copy.")
+    return ALREADY_RUNNING
+
+
+def _run_app(
+    args: argparse.Namespace, settings: Settings, data: Path, model: str, env_file: Path
+) -> int:
+    import uvicorn
+
+    from cap import lan
+    from cap.approval.app import FileStore, create_app
+    from cap.demo.seed import seed_store
+    from cap.publisher import LocalFolderAdapter
+    from cap.ui import templates
+    from cap.version import build_id
+
+    store = FileStore(data)
+    if settings.publisher == "youtube":
+        from cap.publisher.youtube import YouTubeAdapter
+
+        store.publisher = YouTubeAdapter()
+    else:
+        store.publisher = LocalFolderAdapter(data / "published")
+    if not store.posts:
+        if settings.renderer == "video":
+            print("first run: rendering the demo posts (voice + video), about a minute...")
+        seed_store(store, demo=args.demo, canary=args.canary or args.demo)
+    print(f"records in {data.resolve()}: {len(store.posts)} posts, {len(store.queue())} waiting")
+    if settings.model_backend.value != model:
+        print(f"note: CAP_MODEL_BACKEND in the environment overrides .env ({model})")
+    print(f"build: {build_id()}")
+    if settings.model_backend.value == "anthropic":
+        print("model backend: anthropic (real drafts and judges)")
+    else:
+        print("model backend: mock (sample drafts). `uv run cap key` adds your key.")
+    local_url = f"http://127.0.0.1:{args.port}/login"
+    if settings.google_enabled:
+        how = "Google sign-in is on"
+    else:
+        how = "sign in as hemant" + (" (or layla for channel C)" if args.demo else "")
+    print(f"open {local_url} and {how} (the laptop needs no passcode)")
+    if args.host == "0.0.0.0":  # noqa: S104 - the phone path is the point of this host
+        addresses = lan.lan_ipv4()
+        templates.env.globals["phone_urls"] = lan.phone_urls(args.port, addresses)  # Operator
+        print(lan.phone_block(args.port, signin_secrets(env_file), addresses))
+    if args.open:
+        _open_later(local_url)
+    uvicorn.run(create_app(store), host=args.host, port=args.port)
     return 0
 
 
