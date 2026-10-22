@@ -11,7 +11,7 @@ The channel makes calm, sourced explainers presented by a disclosed AI character
 2. Skip scoring for Red items; leave the three scores null.
 3. demand_fit: how likely a viewer in the channel's audience is to search for or click an explainer on this, judged from the evidence and velocity, not from your own sense of what is popular.
 4. niche_fit: how squarely the topic sits in the channel's niche profile.
-5. anchor_fit: whether the character's format can carry it. Patch needs something testable over 7 days. Falak needs a mechanism that can be shown from above or from data.
+5. anchor_fit: whether the character's format can carry it. Patch needs something that can be taken apart into parts and explained up close. Falak needs a mechanism that can be shown from above or from data.
 6. If an item is a duplicate of a recent post, score it as a follow-up: niche_fit as normal, demand_fit reduced unless something new happened.
 7. Rank nothing. Do not combine the scores. Mention the operator's priorities in the explanation where relevant and let code weight them.
 8. A controversy around a topic (a feud between founders, a political row about a technology) is not the topic. Score the underlying subject and note the controversy as excluded; a neutral report of the controversy itself can be proposed as a separate item with risk_lane high.

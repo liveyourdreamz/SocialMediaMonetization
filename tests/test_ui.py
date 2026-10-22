@@ -478,3 +478,20 @@ def test_a_post_that_has_not_reached_the_queue_shows_progress_not_a_crash(world)
     html = api.get(f"/posts/{rec.post_id}").text
     assert "Stopped at" in html and "voice service unreachable" in html and "Step " in html
     assert "refresh" not in html
+
+
+def test_a_tour_post_says_plainly_it_is_not_sent_to_youtube(world):
+    """22 Oct: the Driftpad tour post was 'published' and Hemant looked for it on
+    YouTube. The Outbox must say it is never sent there, and where the file went."""
+    from cap.schema.post_record import PostStatus
+
+    store, api = world
+    rec = next(iter(store.posts.values())).model_copy(deep=True)
+    rec.post_id = "tour-check-0001"
+    rec.flags.tour, rec.flags.canary = True, False
+    rec.status = PostStatus.APPROVED
+    rec.approval.token = "x"
+    store.put(rec)
+    page = api.get(f"/posts/{rec.post_id}/preview").text
+    assert "never sent to YouTube" in page and "Not to YouTube." in page
+    assert "tour-check-0001" in page  # the folder it is saved to

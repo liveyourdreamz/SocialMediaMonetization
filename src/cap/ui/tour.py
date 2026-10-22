@@ -144,9 +144,10 @@ STOPS: list[Stop] = [
     Stop(
         "publish",
         "Publish",
-        "The publisher verifies the token and the file hash, refuses canaries and "
-        "changed renders, then sends to every destination you ticked, recording each "
-        "result or error separately. A tour post goes to the local folder only; a real "
+        "This tour post is not sent to YouTube: it is saved to a folder on this laptop. "
+        "For a real post, the publisher verifies the token and the file hash, refuses "
+        "canaries and changed renders, then sends to every destination you ticked, "
+        "recording each result or error separately. A real "
         "post goes to your connected channels: YouTube unlisted with the synthetic-media "
         "flag, a Facebook Reel, Instagram when the video has a public URL, TikTok.",
         needs="published",

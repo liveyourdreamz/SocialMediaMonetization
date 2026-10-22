@@ -369,6 +369,7 @@ def ui_router(store: Store) -> APIRouter:
             ],
             any_connected=len(available) > 1,
             results=views.publish_results(record),
+            local_dir=str((store.local_published_dir() / record.post_id).resolve()),
             content_rtl=views.is_rtl(record.channel_id.value),
             channel_label=views.channel_label(record.channel_id.value),
             refusal=request.query_params.get("refused", ""),
@@ -721,6 +722,7 @@ def ui_router(store: Store) -> APIRouter:
             stops=tour.STOPS,
             platforms=[conn.status(k) for k in conn.PLATFORMS],
             results=views.publish_results(record),
+            local_dir=str((store.local_published_dir() / record.post_id).resolve()),
             **tour.context(record, n, pkg),
         )
 
