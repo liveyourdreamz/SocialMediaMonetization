@@ -46,19 +46,44 @@ def calls(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
 
-def test_every_call_that_reads_the_post_carries_every_expected_value(calls):
-    reads_post = {"P1", "P2", "P3", "P7", "P9"} | {"P10"}
+WRITERS = {"P2", "P3", "P7"}
+CHECKERS = {"P1", "P9"} | {"P10"}
+COMMON = (
+    "length_s: 30",
+    "youtube_short: title at most 100 characters; duration at most 60 seconds",
+    "[[HEMANT_OPENING_LINE]] marks where",
+)
+
+
+def test_writers_get_every_value_as_given(calls):
     seen = set()
     for c in calls:
-        if c.spec.prompt_id == "P10" and c.spec.call != "A":
-            continue  # the verifiers judge one claim against one page and nothing else
-        if c.spec.prompt_id not in reads_post:
+        if c.spec.prompt_id in WRITERS:
+            seen.add(c.spec.prompt_id)
+            text = c.user + c.user_tail
+            for v in NEEDED + COMMON:
+                assert v in text, (c.spec.prompt_id, c.spec.call, v)
+    assert seen == WRITERS, seen
+
+
+def test_checkers_get_what_the_brief_recorded_never_a_relaxed_rule(calls):
+    """Regression run 22 Oct: told "a claim without a source is expected", a judge
+    could pass an unsourced health claim (R-09); told "sponsored: no", it escalated
+    real sponsored posts it could see. Checkers get the record, not instructions."""
+    seen = set()
+    for c in calls:
+        pid = c.spec.prompt_id
+        if pid not in CHECKERS or (pid == "P10" and c.spec.call != "A"):
             continue
-        seen.add(c.spec.prompt_id)
+        seen.add(pid)
         text = c.user + c.user_tail
-        for v in NEEDED:
-            assert v in text, (c.spec.prompt_id, c.spec.call, v)
-    assert seen >= {"P1", "P2", "P3", "P7", "P9", "P10"}, seen
+        for v in COMMON:
+            assert v in text, (pid, v)
+        assert "never overrides what the content shows" in text
+        assert "relaxes no rule that requires a visible source" in text
+        assert "not a defect" not in text and "affiliate links: none" not in text
+        assert "do not report any of them as missing" not in text
+    assert seen == CHECKERS, seen
 
 
 def test_the_verifiers_stay_blind(calls):

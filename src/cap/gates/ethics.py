@@ -112,7 +112,7 @@ def _judge_user_message(record: PostRecord, variant: Variant) -> str:
     from cap.post_context import post_context
 
     return (
-        f"{post_context(record)}\n"
+        f"{post_context(record, 'checker')}\n"
         f'<variant platform="{variant.platform.value}">\n'
         f"<title>{variant.title}</title>\n"
         f"<script>{variant.script_cut or record.draft.script}</script>\n"

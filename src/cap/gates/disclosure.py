@@ -67,8 +67,16 @@ def mfk_score(factors: Sequence[tuple[str, str]]) -> float:
 
 
 def mfk_band(score: float, factors: Sequence[tuple[str, str]] = ()) -> Band:
+    """Subject matter and stated audience outweigh visuals (P9, the FTC's position;
+    regression run 22 Oct: puppets in an adult horror comedy scored "likely" on visuals
+    alone). With both heaviest factors judged absent the post is clear whatever it
+    looks like; "likely" needs one of them present, else the most is "doubtful"."""
+    heaviest = [out for fid, out in factors if fid in HEAVIEST]
+    if heaviest and len(heaviest) == len(HEAVIEST) and all(o == "absent" for o in heaviest):
+        return "clear"
+    heavy_present = any(fid in HEAVIEST and out == "present" for fid, out in factors)
     if score >= MFK_LIKELY:
-        return "likely"
+        return "likely" if heavy_present or not factors else "doubtful"
     if score >= MFK_DOUBTFUL:
         return "doubtful"
     if any(fid in HEAVIEST and out == "unclear" for fid, out in factors):
@@ -84,7 +92,7 @@ def _p9_user_message(record: PostRecord) -> str:
     from cap.post_context import post_context
 
     return (
-        f"{post_context(record)}\n"
+        f"{post_context(record, 'checker')}\n"
         f"<title>{record.draft.title}</title>\n"
         f"<script>{record.draft.script}</script>\n"
         f"<caption>{record.draft.caption}</caption>\n"

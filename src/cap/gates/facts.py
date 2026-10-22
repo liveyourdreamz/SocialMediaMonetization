@@ -73,7 +73,7 @@ def discover_claims(
     ]
     res = client.run(
         spec("P10", "A"),
-        f"{post_context(record)}\n"
+        f"{post_context(record, 'checker')}\n"
         f"<title>{record.draft.title}</title>\n<script>{record.draft.script}</script>\n"
         f"<variants>{json.dumps(variants, ensure_ascii=False)}</variants>",
         P10CallAOutput,

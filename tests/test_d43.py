@@ -150,3 +150,26 @@ def test_the_card_shows_the_question_and_needs_the_tick(fixtures, record, tmp_pa
     assert store.get(rec.post_id).status == PostStatus.AWAITING_APPROVAL
     api.form(f"/posts/{rec.post_id}/finalise", acknowledged="yes")
     assert store.get(rec.post_id).status == PostStatus.APPROVED
+
+
+# ---- made-for-kids bands (regression run 22 Oct: 10/15 -> 14/15) -------------------
+
+
+def test_visuals_alone_never_make_a_post_likely_made_for_kids():
+    from cap.gates.disclosure import mfk_band, mfk_score
+
+    visuals = [
+        ("child_subject_matter", "absent"),
+        ("intended_audience_children", "absent"),
+        ("child_characters_or_toys", "present"),
+        ("child_oriented_language", "present"),
+        ("child_oriented_music_or_animation", "present"),
+        ("child_celebrities_or_influencers", "present"),
+    ]
+    assert mfk_band(mfk_score(visuals), visuals) == "clear"
+    unsure = [("child_subject_matter", "unclear"), ("intended_audience_children", "unclear")]
+    unsure += visuals[2:]
+    assert mfk_band(mfk_score(unsure), unsure) == "doubtful"  # Hemant decides
+    kids = [("child_subject_matter", "present"), ("intended_audience_children", "present")]
+    kids += visuals[2:]
+    assert mfk_band(mfk_score(kids), kids) == "likely"
