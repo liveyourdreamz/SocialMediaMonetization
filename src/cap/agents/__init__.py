@@ -49,6 +49,7 @@ def draft(
     character_block: str,
     test_log: str = "",
     critique: str = "",
+    _refit: bool = True,
 ) -> PostRecord:
     """P2, two calls (D27): call 1 writes the script from the brief, the character block,
     the disclosure fields and the sources (plus the critic's notes on a revision); call
@@ -57,11 +58,18 @@ def draft(
     Code checks after call 2 (Pack P2): every numeral in the script appears in some
     claim's text, else the post parks; each source_quote is an exact substring of its
     cited source, else the claim's source_url is nulled for gate 10 to settle; the
-    opening-line slot appears exactly once."""
+    opening-line slot appears exactly once; at most settings.max_claims claims (one
+    rewrite to fit, then the post parks with the count)."""
+    from cap.config import get_settings
+
+    limit = get_settings().max_claims
     statics = [character_block, disclosure_block()]
     user1 = (
         f"<brief>{record.brief.model_dump_json()}</brief>\n"
-        f"<opening_line_slot>{OPENING_LINE_SLOT}</opening_line_slot>"
+        f"<opening_line_slot>{OPENING_LINE_SLOT}</opening_line_slot>\n"
+        f"<claim_limit>Make at most {limit} factual claims in the whole script. A claim is "
+        "a statement of fact a viewer could check, and every number is one. Explain the "
+        "rest with reasoning and analogy, not further facts.</claim_limit>"
     )
     if critique:
         user1 += f"\n<critique>{critique}</critique>\n<previous_draft>{record.draft.script}</previous_draft>"
@@ -80,7 +88,8 @@ def draft(
         f"<script>{record.draft.script}</script>",
         P2Call2Output,
         sources=sources,
-        user_tail=f"<test_log>{test_log}</test_log>",
+        user_tail=f"<test_log>{test_log}</test_log>\n<claim_limit>List at most {limit} "
+        "claims. Where one sentence states related facts, list it as one claim.</claim_limit>",
         static_blocks=statics,
     )
     if r2.output is None or r2.output.status == "blocked":
@@ -100,6 +109,27 @@ def draft(
                 claim.source_url = None  # gate 10 settles it
                 claim.source_quote = None
         claims.append(claim)
+    if len(claims) > limit:
+        if not _refit:
+            raise AgentBlockedError(
+                f"P2: {len(claims)} claims after a rewrite; the limit is {limit} "
+                "(CAP_MAX_CLAIMS). Narrow the topic or raise the limit."
+            )
+        record.log(f"drafted {len(claims)} claims, over the limit of {limit}: rewriting to fit")
+        note = (
+            f"The script makes {len(claims)} factual claims; the limit is {limit}. Keep the "
+            f"{limit} that carry the explanation, cut or merge the rest, and remove any "
+            "number that is not among them."
+        )
+        return draft(
+            record,
+            client,
+            sources,
+            character_block,
+            test_log,
+            critique=(critique + "\n" + note).strip(),
+            _refit=False,
+        )
     record.draft.claims = claims
     record.draft.source_list = sorted(
         {c.source_url for c in claims if c.source_url and not c.source_url.startswith("testlog://")}

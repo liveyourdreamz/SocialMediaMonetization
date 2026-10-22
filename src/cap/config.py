@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     # confirms is shown on the card as unconfirmed and Hemant decides. "block": any
     # unconfirmed claim rejects the post (the PRD's original agent-10 guardrail).
     fact_mode: Literal["flag", "block"] = "flag"
+    # 22 Oct 2026: the most factual claims one post may make (CAP_MAX_CLAIMS in .env).
+    # The drafter is told the limit when it writes and when it lists claims; a draft
+    # over it is rewritten once to fit, then parked with the count if still over.
+    max_claims: int = Field(default=10, ge=1, le=50)
     voice: Literal["edge", "silent"] = "edge"
 
     # Where approved posts go: "local" (a folder under data_dir) or "youtube" (a real
