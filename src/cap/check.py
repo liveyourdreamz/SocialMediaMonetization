@@ -182,6 +182,36 @@ def _model() -> str:
     )
 
 
+def _characters() -> str:
+    """The real critic (P3) once per character, with the block a real brief uses. The
+    mock never reads a character block, so a gap in one (22 Oct: Falak had no speaking
+    rate) only shows when the real model refuses. A refusal here names the gap."""
+    from cap.agents import AgentBlockedError, critique
+    from cap.characters import CHARACTER_BLOCKS, KNOWLEDGE_NOTE
+    from cap.config import get_settings
+    from cap.demo.seed import new_brief
+    from cap.models import AnthropicClient
+
+    if get_settings().model_backend.value != "anthropic":
+        raise Skip("mock backend (no key); the character blocks are not exercised")
+    client = AnthropicClient()
+    sample = {
+        "A": ("How a rainbow works", "Let's take it apart. Sunlight enters a raindrop and bends."),
+        "B": ("How cocoons work", "From orbit, here's what I see. A caterpillar spins silk."),
+        "C": ("كيف تعمل الشرانق", "من المدار، هذا ما أراه. اليرقة تغزل الحرير."),
+    }
+    done = []
+    for ch, (topic, script) in sample.items():
+        rec = new_brief(ch, topic)
+        rec.draft.title, rec.draft.script = topic, "[[HEMANT_OPENING_LINE]] " + script
+        try:
+            critique(rec, client, CHARACTER_BLOCKS[ch] + "\n\n" + KNOWLEDGE_NOTE)
+        except AgentBlockedError as e:
+            raise RuntimeError(f"channel {ch}: {str(e)[:300]}") from e
+        done.append(f"{ch} {rec.draft.critic_verdict}")
+    return "critic ran on every character: " + ", ".join(done)
+
+
 def _youtube() -> str:
     from cap.config import get_settings
 
@@ -205,9 +235,15 @@ def run(offline: bool = False, out: Callable[[str], None] = print) -> int:
         ("voice (edge-tts)", _voice),
         ("source fetch", _fetch),
         ("model (real call)", _model),
+        ("characters (real critic)", _characters),
         ("youtube", _youtube),
     ]
-    network = {"voice (edge-tts)", "source fetch", "model (real call)"}
+    network = {
+        "voice (edge-tts)",
+        "source fetch",
+        "model (real call)",
+        "characters (real critic)",
+    }
     failed = 0
     out("checking this machine against the real services:")
     for name, fn in checks:

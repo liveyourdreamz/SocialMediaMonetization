@@ -360,3 +360,36 @@ def test_the_fetcher_refuses_internal_addresses_and_redirects_to_them(monkeypatc
     assert all(r and r.startswith("refused:") for r in reasons[:4]), reasons
     assert "internal secret" not in str(docs)
     assert fetch.failed_reason(docs[4]) is None and len(docs[4]["body"]) <= fetch.MAX_CHARS
+
+
+def test_characters_check_names_the_channel_whose_block_the_critic_refuses(monkeypatch, tmp_path):
+    """22 Oct: the real critic refused Falak (no speaking rate). The check must say which."""
+    import pytest
+
+    from cap import agents, check
+    from cap.agents import AgentBlockedError
+    from cap.config import get_settings
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CAP_MODEL_BACKEND", "anthropic")
+    monkeypatch.setenv("CAP_ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+    get_settings.cache_clear()
+    seen: list[str] = []
+
+    def fake(rec, client, block):
+        seen.append(rec.channel_id.value)
+        assert "words a minute" in block  # what P3 needs, in every block it is given
+        if rec.channel_id.value == "B" and "140 words" not in block:
+            raise AgentBlockedError("P3: no speaking rate")
+        rec.draft.critic_verdict = "revise"
+        return rec, False
+
+    monkeypatch.setattr(agents, "critique", fake)
+    out = check._characters()
+    assert seen == ["A", "B", "C"] and "A revise" in out
+    monkeypatch.setattr(
+        agents, "critique", lambda *a: (_ for _ in ()).throw(AgentBlockedError("P3: no rate"))
+    )
+    with pytest.raises(RuntimeError, match="channel A: P3: no rate"):
+        check._characters()
+    get_settings.cache_clear()
