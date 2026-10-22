@@ -290,8 +290,6 @@ def full_run(out: Callable[[str], None] = print, channels: str = "ABC") -> int:
     step, research, the four gates, the voice, the video, then a stand-in approval and
     a publish to a local check folder. Nothing goes to your queue or to any platform.
     It reports the step and the reason for the first thing that fails in each run."""
-    import tempfile
-
     from cap.approval import token as tok
     from cap.approval.app import Store
     from cap.config import get_settings
@@ -308,7 +306,10 @@ def full_run(out: Callable[[str], None] = print, channels: str = "ABC") -> int:
         f"{s.max_claims} claims; this takes a few minutes and uses API credit"
     )
     failed = 0
-    dest = Path(tempfile.mkdtemp(prefix="cap-full-run-"))
+    # next to every other published copy, where Hemant can find it (not a temp folder)
+    dest = (Path(s.data_dir) / "published" / "full-test").resolve()
+    dest.mkdir(parents=True, exist_ok=True)
+    out(f"videos go to {dest} (never to YouTube)")
     for ch in channels:
         topic = FULL_RUN_TOPICS[ch]
         t0 = time.time()
