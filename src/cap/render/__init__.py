@@ -11,9 +11,11 @@ Picture: scenes (cap.render.scenes). The character (Patch or Falak, drawn from t
     card ends it. No generated faces, no stock footage, nothing pretending to be a
     person; reconstructed app views are labelled as reconstructions.
 Assembly: ffmpeg, the static binary that imageio-ffmpeg ships.
-Output: the long-form 1920x1080 mp4 (what the approval token binds to), a 1080x1920
-    Short when the post has a Short cut, a thumbnail png. C2PA signing (D29) is not
-    done here yet and the preview says so.
+Output: the long-form 1920x1080 mp4, a 1080x1920 Short when the post has a Short
+    cut, a thumbnail png. Twice per post: the review render before approval (the
+    opening line a visible placeholder) and the final render after it (the line
+    spoken); the approval token binds the final files through the release manifest
+    (cap.release). C2PA signing (D29) is not done here yet and the preview says so.
 
 Everything the picture shows comes from the approved record; the renderer never
 invents words. Rendering is deterministic apart from the voice service.
@@ -27,6 +29,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -36,6 +39,9 @@ from cap.schema.post_record import Platform, PostRecord
 
 FONTS = Path(__file__).resolve().parent / "fonts"
 OPENING_SLOT = "[[HEMANT_OPENING_LINE]]"
+OPENING_PLACEHOLDER = "Your opening line goes here"
+PLACEHOLDER_UNIT = f"[{OPENING_PLACEHOLDER}]"  # the review render's stand-in paragraph
+Stage = Literal["review", "final"]
 
 # Proof tokens (light theme), copied so the renderer has no web dependency.
 GROUND, SURFACE, INK, MUTED, LINE, ACCENT = (
@@ -71,10 +77,20 @@ class RenderError(RuntimeError):
 # ---------------------------------------------------------------- text helpers
 
 
-def script_text(record: PostRecord, cut: str | None = None) -> str:
+def script_text(record: PostRecord, cut: str | None = None, stage: Stage = "review") -> str:
+    """The narration for one stage (review C1). The review render, made before
+    approval, marks the opening line's moment with a visible placeholder paragraph;
+    the final render, made after approval, speaks the approver's line there (and opens
+    with it when a script lost its slot). A final render without a line refuses."""
     text = cut or record.draft.script
+    if stage == "review":
+        return text.replace(OPENING_SLOT, f"\n\n{PLACEHOLDER_UNIT}\n\n").strip()
     human = record.human_contribution.text.strip()
-    return text.replace(OPENING_SLOT, human if human else "").strip()
+    if not human:
+        raise RenderError("the final render needs the approver's opening line")
+    if OPENING_SLOT not in text:
+        return f"{human} {text.strip()}"
+    return text.replace(OPENING_SLOT, human).strip()
 
 
 def _clean(p: str) -> str:
@@ -457,8 +473,13 @@ def _media_files(record: PostRecord) -> list[Path]:
     return sorted(p for p in d.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"))
 
 
-def render(record: PostRecord, out_dir: Path, *, voice_fn=speak) -> RenderResult:  # type: ignore[no-untyped-def]
-    """Render the approved package. `voice_fn` is injectable so tests run offline."""
+def render(  # type: ignore[no-untyped-def]
+    record: PostRecord, out_dir: Path, *, voice_fn=speak, stage: Stage = "review"
+) -> RenderResult:
+    """Render one stage of the package into <out_dir>/<post_id>/ (review) or
+    <out_dir>/<post_id>/final/ (final, after approval). `voice_fn` is injectable so
+    tests run offline. The review render shows a silent "your opening line goes
+    here" card where the approver's line will be; the final render speaks it."""
     from cap.render import scenes as sc
 
     s = get_settings()
@@ -467,7 +488,7 @@ def render(record: PostRecord, out_dir: Path, *, voice_fn=speak) -> RenderResult
     lang = s.channel_languages.get(channel, "en")
     arabic = lang == "ar"
     voice = VOICES.get((character, lang), "en-GB-RyanNeural")
-    work = out_dir / record.post_id
+    work = out_dir / record.post_id / ("final" if stage == "final" else "")
     work.mkdir(parents=True, exist_ok=True)
     sources = sorted(
         {
@@ -483,8 +504,14 @@ def render(record: PostRecord, out_dir: Path, *, voice_fn=speak) -> RenderResult
         if not paras:
             raise RenderError("nothing to say: the script is empty")
         lay = sc.layout(size)
+        said = sc.units(paras)
+        # the review placeholder is its own silent card, planned around (not through)
+        # the scene rules so the review and final cuts share their pictures
+        slot_at = said.index(PLACEHOLDER_UNIT) if PLACEHOLDER_UNIT in said else None
+        if slot_at is not None:
+            said.pop(slot_at)
         plan = sc.plan(
-            [title, *sc.units(paras)],
+            [title, *said],
             character=character or "Patch",
             title=title,
             topic=record.brief.topic,
@@ -493,19 +520,25 @@ def render(record: PostRecord, out_dir: Path, *, voice_fn=speak) -> RenderResult
             arabic=arabic,
         )
         plan[0].kind = "talk"  # the title is spoken over the character, then the story
+        if slot_at is not None:
+            plan.insert(
+                slot_at + 1,
+                sc.Scene(kind="opening_slot", text=PLACEHOLDER_UNIT, sentences=[PLACEHOLDER_UNIT]),
+            )
         plan.append(sc.Scene(kind="sources", text="", sentences=[]))
         segs: list[Path] = []
         t_run = 0.0
         total = 0.0
         for i, scene in enumerate(plan):
             mp3 = work / f"{name}-{i:03d}.mp3"
-            if scene.kind == "sources":
+            silent = scene.kind in ("sources", "opening_slot")
+            if silent:
                 _silence(3.0, mp3)
             else:
                 voice_fn(scene.text, voice, mp3)
             dur = _duration(mp3)
             n = max(2, int(round(dur * sc.FPS)))
-            levels = sc.loudness(mp3, n) if scene.kind != "sources" else [0.0] * n
+            levels = [0.0] * n if silent else sc.loudness(mp3, n)
             seg = work / f"{name}-{i:03d}.mp4"
 
             def frames(scene=scene, n=n, levels=levels, t0=t_run):  # type: ignore[no-untyped-def]
@@ -527,14 +560,16 @@ def render(record: PostRecord, out_dir: Path, *, voice_fn=speak) -> RenderResult
             p_.unlink(missing_ok=True)
         return video, total
 
-    video, duration = build(script_text(record), record.draft.title, (1920, 1080), "long")
+    video, duration = build(
+        script_text(record, stage=stage), record.draft.title, (1920, 1080), "long"
+    )
     short: Path | None = None
     cut = next(
         (v for v in record.variants if v.platform == Platform.YOUTUBE_SHORT and v.script_cut), None
     )
     if cut:
         short, _ = build(
-            script_text(record, cut.script_cut),
+            script_text(record, cut.script_cut, stage),
             cut.title or record.draft.title,
             (1080, 1920),
             "short",

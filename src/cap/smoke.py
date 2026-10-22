@@ -1,7 +1,7 @@
 """`cap smoke`: the whole laptop loop, driven through the real app without a browser.
 
 Sign in -> file a brief -> pipeline (fetch stand-in, draft, gates, video render with
-the silent voice) -> queue -> blind card -> approve -> token -> Outbox preview ->
+the silent voice) -> queue -> blind card -> approve -> final render -> token -> Outbox ->
 publish to a folder -> restart and find it. Mock model backend, no network. It runs
 on Windows, Mac and Linux, in CI from the launchers, and on a laptop as
 `uv run cap smoke` when something looks wrong. Every step prints a line; the first
@@ -46,6 +46,7 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
     os.environ.setdefault("CAP_ARABIC_REVIEWERS", '["layla"]')
     from fastapi.testclient import TestClient
 
+    from cap.approval import release_job
     from cap.approval.app import FileStore, create_app
     from cap.config import get_settings
     from cap.demo.seed import seed_store
@@ -126,7 +127,18 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
         )
         step("verdict recorded", r.status_code == 303, f"status {r.status_code}")
         r = form(f"/posts/{post_id}/finalise")
-        step("approval finalised, token issued", r.status_code == 303 and bool(rec.approval.token))
+        step("approval finalised, final video started", r.status_code == 303)
+        release_job.wait(post_id, timeout=120)
+        final = next((Path(f.uri) for f in rec.release.files if f.role == "long"), None)
+        step(
+            "final video rendered with the opening line, token issued",
+            rec.release.status.value == "ready"
+            and bool(rec.approval.token)
+            and final is not None
+            and final.exists()
+            and final != Path(rec.asset.uri),
+            rec.release.error,
+        )
         step(
             "post waits in the Outbox (not published yet)",
             rec.status == PostStatus.APPROVED and not (data / "published" / post_id).exists(),

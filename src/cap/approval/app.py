@@ -9,7 +9,9 @@ JSON, under /api, same rules, same store:
   GET  /api/posts/{id}/card       one card
   POST /api/posts/{id}/stage-one  Arabic reviewer's pass (channel C, D19)
   POST /api/posts/{id}/verdict    first verdict (D33 pre-reveal) -> revealed gates
-  POST /api/posts/{id}/finalise   optional single revision, then token issue on approve
+  POST /api/posts/{id}/finalise   optional single revision; on approve the final render
+                                  starts, and the token is issued when it is done
+  GET  /api/posts/{id}/release    the final release: status, error, token present
 
 Identity: cap.approval.identity (header or signed cookie, opt-in, local only).
 """
@@ -29,7 +31,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from cap.approval import token as tok
+from cap.approval import release_job
 from cap.approval.card import (
     CanaryMissedError,
     CardError,
@@ -42,7 +44,14 @@ from cap.approval.card import (
 from cap.approval.identity import Reviewer, reviewer_identity
 from cap.config import get_settings
 from cap.publisher import PlatformAdapter, PublishRefusedError
-from cap.schema.post_record import Channel, Decision, PostRecord, PostStatus, ReasonCode
+from cap.schema.post_record import (
+    Channel,
+    Decision,
+    PostRecord,
+    PostStatus,
+    ReasonCode,
+    ReleaseStatus,
+)
 
 
 class Store:
@@ -208,65 +217,58 @@ class FinaliseIn(BaseModel):
 
 
 def finalise_and_issue(store: Store, record: PostRecord, reviewer: str, **kw: Any) -> bool:
-    """Shared by the API and the HTML app: finalise, pause on a missed canary, issue
-    the token on approve. Returns whether a token was issued. Raises CardError."""
+    """Shared by the API and the HTML app: finalise, pause on a missed canary, and on
+    approve start the final render (cap.approval.release_job), which issues the token
+    once the final files exist (review C1). Returns whether the final render started.
+    Raises CardError."""
     try:
         finalise(record, reviewer=reviewer, **kw)
     except CanaryMissedError:
         store.pause(f"canary missed on {record.post_id} by {reviewer}")
         store.put(record)
         return False
-    issued = False
-    if record.status == PostStatus.APPROVED:
-        t = tok.issue(
-            record.post_id, record.asset.sha256, reviewer, "approve", canary=record.flags.canary
-        )
-        record.approval.token = t.encode()
-        issued = True
-        record.log("approved: token issued; waiting in the outbox for the publisher")
     store.put(record)
-    return issued
+    if record.status != PostStatus.APPROVED:
+        return False
+    try:
+        release_job.start(store, record)
+    except PublishRefusedError as e:  # the approval does not hold for release: say so
+        record.release.status = ReleaseStatus.FAILED
+        record.release.error = str(e)
+        record.log(f"final video not started: {e}")
+        store.put(record)
+        return False
+    return True
 
 
 def publish_now(
     store: Store, record: PostRecord, destinations: list[str] | None = None
 ) -> str | None:
-    """The plain-code publisher (PRD 4.6) on one approved post: verifies the token
-    against the rendered file's hash and refuses canaries, failed gates, changed
-    files and anything not approved. Returns the refusal text, or None on success.
+    """The plain-code publisher (PRD 4.6) on one approved post; cap.release.authorise
+    decides, before every upload, whether it may go. Returns the refusal text, or
+    None when the publisher ran (each destination's result is on the record).
     `destinations` are the Outbox's choices (youtube_long, facebook, ...); the local
     folder is always first. A tour post never leaves the laptop. The scheduler calls
     this at the posting slot; the Outbox button calls it now."""
     from cap.publisher import adapters_for, publish_to
+    from cap.release import decode_token
 
-    if not record.approval.token:
-        return "no approval token on the record"
     chosen = [] if record.flags.tour else list(destinations or [])
     if store.publisher is not None and destinations is None and not record.flags.tour:
         # a programmatic call (the scheduler, a test) uses the configured publisher;
         # the Outbox always passes a list, so the ticked boxes decide there
         adapters: list[PlatformAdapter] = [store.publisher]
-        record.publish.destinations = [store.publisher.name]
+        wanted = [store.publisher.name]
     else:
         adapters = adapters_for(chosen, store.local_published_dir())
-        record.publish.destinations = ["local", *chosen]
+        wanted = ["local", *chosen]
     try:
-        publish_to(
-            record,
-            Path(record.asset.uri),
-            tok.ApprovalToken.decode(record.approval.token),
-            adapters,
-        )
+        record.publish.destinations = wanted
+        publish_to(record, decode_token(record), adapters, save=store.put)
     except PublishRefusedError as e:
         record.log(f"publish refused: {e}")
         store.put(record)
         return str(e)
-    except Exception as e:  # noqa: BLE001 - a platform error on the first destination
-        record.publish.errors[adapters[0].name] = f"{type(e).__name__}: {str(e)[:200]}"
-        record.log(f"publish failed at {adapters[0].name}: {type(e).__name__}")
-        store.put(record)
-        return f"{adapters[0].name}: {type(e).__name__}: {str(e)[:120]}"
-    store.put(record)
     return None
 
 
@@ -365,7 +367,7 @@ def api_router(store: Store) -> APIRouter:
         _approver(reviewer)
         record = store.get(post_id)
         try:
-            issued = finalise_and_issue(
+            started = finalise_and_issue(
                 store,
                 record,
                 reviewer.name,
@@ -387,11 +389,27 @@ def api_router(store: Store) -> APIRouter:
         out: dict[str, Any] = {
             "post_id": record.post_id,
             "status": record.status.value,
-            "token_issued": issued,
+            # the final render runs in the background; GET .../release says when the
+            # token is there
+            "final_render_started": started,
         }
         if record.flags.canary:
             out["canary"] = record.flags.canary_outcome
         return out
+
+    @r.get("/posts/{post_id}/release")
+    def release_state(
+        post_id: str, reviewer: Reviewer = Depends(reviewer_identity)
+    ) -> dict[str, Any]:
+        _approver(reviewer)
+        record = store.get(post_id)
+        return {
+            "post_id": record.post_id,
+            "status": record.status.value,
+            "release": record.release.status.value,
+            "error": record.release.error,
+            "token_issued": bool(record.approval.token),
+        }
 
     return r
 

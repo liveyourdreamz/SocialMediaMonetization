@@ -2,7 +2,9 @@
 
 Unaudited developer apps may post only to the connected account, as private; the
 privacy level is SELF_ONLY until the app passes TikTok's audit. Not yet run against a
-live account by us: the Connections screen says so.
+live account by us: the Connections screen says so. What it posts (the release's
+Short, its title, the AI-generated and branded-content declarations) comes from the
+verified manifest (cap.release), never from the record.
 """
 
 from __future__ import annotations
@@ -13,7 +15,8 @@ from pathlib import Path
 import httpx
 
 from cap import connections
-from cap.schema.post_record import PostRecord
+from cap.publisher import Upload
+from cap.release import Manifest
 
 API = "https://open.tiktokapis.com/v2"
 CHUNK = 10 * 1024 * 1024
@@ -29,8 +32,9 @@ class TikTokAdapter:
         if not self.token:
             raise RuntimeError("TikTok is not connected; open Connections in the app")
 
-    def upload(self, record: PostRecord, asset: Path) -> str:
-        video = Path(record.asset.short_uri) if record.asset.short_uri else asset
+    def upload(self, release: Manifest) -> Upload:
+        video: Path = release.video("short").path
+        text = release.text_for("tiktok")
         size = video.stat().st_size
         chunk = min(CHUNK, size)
         n_chunks = max(1, (size + chunk - 1) // chunk)
@@ -41,12 +45,13 @@ class TikTokAdapter:
                 headers={**headers, "Content-Type": "application/json; charset=UTF-8"},
                 json={
                     "post_info": {
-                        "title": record.draft.title[:150],
+                        "title": text.title[:150],
                         "privacy_level": "SELF_ONLY",
                         "disable_duet": False,
                         "disable_comment": False,
                         "disable_stitch": False,
-                        "is_aigc": True,
+                        "is_aigc": release.flags.synthetic_media,
+                        "brand_content_toggle": release.flags.paid_promotion,
                     },
                     "source_info": {
                         "source": "FILE_UPLOAD",
@@ -90,5 +95,4 @@ class TikTokAdapter:
                         raise RuntimeError(f"TikTok: {s.json().get('data')}")
                     break
                 time.sleep(3)
-        record.publish.urls["tiktok"] = "https://www.tiktok.com/ (private until the app is audited)"
-        return str(publish_id)
+        return Upload(str(publish_id), "https://www.tiktok.com/ (private until the app is audited)")

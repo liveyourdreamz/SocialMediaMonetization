@@ -10,6 +10,8 @@ Updated for the decisions after PRD v1.0:
 * D33: approval stores a pre-reveal and a post-reveal verdict.
 * D34: approval carries a reason chip and a spot-check result.
 * D23: a canary flag that the publisher refuses and the history index skips.
+* Review C1/C2: a release sub-record holds the final render (the approver's opening
+  line spoken), its manifest hash and its state, apart from the review render.
 """
 
 from __future__ import annotations
@@ -284,7 +286,10 @@ class Gates(Strict):
 
 
 class Asset(Strict):
-    uri: str = ""  # the long-form file the approval token binds to
+    """The REVIEW render: what the card plays, with the opening line as a visible
+    placeholder. What is published is the final render in `Release`."""
+
+    uri: str = ""  # the long-form review file
     sha256: str = ""
     c2pa_manifest_uri: str = ""
     short_uri: str = ""
@@ -292,6 +297,32 @@ class Asset(Strict):
     duration_s: float = 0.0
     voice: str = ""  # the voice id used (edge-tts now, ElevenLabs later)
     kind: Literal["text", "video"] = "text"
+
+
+class ReleaseStatus(StrEnum):
+    NONE = "none"  # not approved yet, or approved before releases existed
+    PREPARING = "preparing"  # the final render is running
+    READY = "ready"  # final files, manifest and token in place
+    FAILED = "failed"  # the final render or the token issue failed; `error` says why
+
+
+class ReleaseFile(Strict):
+    role: Literal["long", "short", "thumbnail"]
+    uri: str
+    sha256: str  # at render time; the publisher re-hashes the file on disk
+
+
+class Release(Strict):
+    """The final package: rendered after approval with the opening line spoken and
+    shown (review C1). The approval token binds `manifest_sha256`, the hash of the
+    canonical manifest of these files and every text and flag that goes out (C2)."""
+
+    status: ReleaseStatus = ReleaseStatus.NONE
+    files: list[ReleaseFile] = Field(default_factory=list)
+    manifest_sha256: str = ""
+    error: str = ""
+    attempts: int = 0
+    prepared_at: datetime | None = None
 
 
 class SpotCheck(Strict):
@@ -388,6 +419,7 @@ class PostRecord(Strict):
     variants: list[Variant] = Field(default_factory=list)
     gates: Gates = Field(default_factory=Gates)
     asset: Asset = Field(default_factory=Asset)
+    release: Release = Field(default_factory=Release)
     approval: Approval = Field(default_factory=Approval)
     publish: Publish = Field(default_factory=Publish)
     metrics: Metrics = Field(default_factory=Metrics)

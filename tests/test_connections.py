@@ -8,8 +8,9 @@ import httpx
 import pytest
 
 from cap import connections as conn
+from cap.approval import release_job
 from cap.approval.app import FileStore
-from cap.publisher import LocalFolderAdapter
+from cap.publisher import LocalFolderAdapter, Upload
 from cap.schema.post_record import PostStatus
 from tests.test_ui import Browser, create_app
 
@@ -115,6 +116,7 @@ def test_outbox_offers_connected_destinations_and_records_each_result(world, mon
         spot_check_supported="yes",
     )
     api.form(f"/posts/{post.post_id}/finalise")
+    release_job.wait(post.post_id, 30)
     html = api.get(f"/posts/{post.post_id}/preview").text
     assert (
         "Where it goes" in html
@@ -145,14 +147,13 @@ def test_outbox_offers_connected_destinations_and_records_each_result(world, mon
     class FakeYouTube:
         name = "youtube"
 
-        def upload(self, record, asset):
-            record.publish.urls["youtube"] = "https://www.youtube.com/watch?v=vid1"
-            return "vid1"
+        def upload(self, release):
+            return Upload("vid1", "https://www.youtube.com/watch?v=vid1")
 
     class FailingTikTok:
         name = "tiktok"
 
-        def upload(self, record, asset):
+        def upload(self, release):
             raise RuntimeError("app not audited")
 
     import cap.publisher as pub
@@ -213,6 +214,7 @@ def test_a_tour_post_never_leaves_the_laptop(world, monkeypatch):
         spot_check_supported="yes",
     )
     api.form(f"/posts/{rec.post_id}/finalise")
+    release_job.wait(rec.post_id, 30)
     html = api.get(f"/posts/{rec.post_id}/preview").text
     assert (
         "A tour post goes to the folder on this laptop only" in html

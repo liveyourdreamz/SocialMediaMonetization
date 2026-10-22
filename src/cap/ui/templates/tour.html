@@ -182,9 +182,9 @@
     <span>Duration</span><span>{{ record.asset.duration_s | round | int }} s</span>
     <span>Voice</span><span>{{ record.asset.voice or '—' }}</span>
     <span>Short</span><span>{{ 'rendered' if record.asset.short_uri else '—' }}</span>
-    <span>Bound hash</span><span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all">{{ record.asset.sha256 }}</span>
+    <span>Review cut hash</span><span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all">{{ record.asset.sha256 }}</span>
   </div>
-  <p class="muted" style="font-size: 14px; line-height: 20px">The hash above is what your approval token will bind to. If the file changes after you approve, the publisher refuses it.</p>
+  <p class="muted" style="font-size: 14px; line-height: 20px">This is the review cut. After you approve, the final cut is rendered with your opening line; the token binds its release manifest, and if any file, text or flag changes after that, the publisher refuses it.</p>
 
   {# ---- 10 card ------------------------------------------------------------------ #}
   {% elif stop.key == 'card' and ready %}
@@ -230,7 +230,7 @@
   {% if ready %}
   <div class="card tight kv">
     <span>Token</span><span>issued and held by the server; it is never shown on any page</span>
-    <span>Bound to</span><span>post {{ record.post_id[:8] }}… · hash {{ record.asset.sha256[:16] }}… · {{ record.approval.reviewer }}</span>
+    <span>Bound to</span><span>post {{ record.post_id[:8] }}… · manifest {{ record.release.manifest_sha256[:16] }}… · {{ record.approval.reviewer }}</span>
     <span>Status</span><span>{{ record.status.value }}</span>
   </div>
   <div class="card stack"><span style="font-size: 15px; line-height: 22px">The Outbox preview shows the exact package per platform: your line in place of the slot, the title, caption, the Short, the thumbnail, the sources list. Press <strong>Publish now</strong> there.</span><a class="btn primary" href="/posts/{{ record.post_id }}/preview">Open the Outbox preview</a></div>

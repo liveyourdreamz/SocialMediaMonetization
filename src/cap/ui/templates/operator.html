@@ -67,7 +67,7 @@
       <a class="card tight link" href="/posts/{{ p.post_id }}/preview" style="gap: 4px">
         <div class="row"><span class="tag">{{ p.channel_id.value }}</span><span class="meta">approved {{ p.approval.decided_at | day(False, True) if p.approval.decided_at else '' }}</span></div>
         <span class="read" style="font-size: 16px">{{ p.draft.title }}</span>
-        <span class="meta">See what goes out, then publish</span>
+        <span class="meta">{% if p.release.status.value == 'preparing' %}Preparing the final video{% elif p.release.status.value == 'ready' %}See what goes out, then publish{% else %}The final video is not made yet: open it to see why{% endif %}</span>
       </a>
       {% endfor %}
       {% else %}<div class="card tight muted">Nothing waiting. An approval puts the post here with its token; it leaves when you (today) or the scheduler (later) press Publish.</div>{% endif %}
@@ -85,7 +85,7 @@
         <span class="meta" style="font-family: var(--font-mono)">{% for k, v in p.publish.platform_post_ids.items() %}{{ k }}: {{ v }}{% endfor %}</span>
       </div>
       {% endfor %}
-      {% else %}<div class="card tight muted">Nothing published yet. An approval issues the token; the publisher verifies it against the rendered file and writes the post to the local folder (the YouTube adapter replaces that step).</div>{% endif %}
+      {% else %}<div class="card tight muted">Nothing published yet. An approval makes the final video and issues the token; the publisher verifies it against the release manifest and writes the post to the local folder (the YouTube adapter replaces that step).</div>{% endif %}
     </div>
   </section>
 
@@ -130,7 +130,7 @@
       <span>Blind-first (D33)</span><span>{{ 'on' if settings.blind_first_enabled else 'off' }} · review at {{ settings.blind_review_point_cards }} cards</span>
       <span>Canary schedule (P14)</span><span>{% for n, m in settings.canary_schedule %}1 in {{ n }}{% if m %} for {{ m }} cards{% else %} after{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</span>
       <span>"Other" flag (D34)</span><span>above {{ (settings.reject_other_share_flag * 100) | round | int }}% of rejections</span>
-      <span>Approval token TTL</span><span>7 days, bound to the rendered file's hash</span>
+      <span>Approval token TTL</span><span>7 days, bound to the release manifest (every file, text and flag); re-issue on the Outbox</span>
     </div>
   </section>
 

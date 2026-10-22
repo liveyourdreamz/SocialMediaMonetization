@@ -98,11 +98,12 @@ def test_finding_2_a_platform_error_never_shows_the_app_secret(tmp_path, monkeyp
 
 
 def test_finding_3_a_tour_post_never_reaches_the_configured_platform(tmp_path, monkeypatch):
-    from cap.approval import token as tok
-    from cap.approval.app import publish_now
+    from cap.approval import release_job
+    from cap.approval.app import finalise_and_issue, publish_now
+    from cap.approval.card import record_verdict
     from cap.config import get_settings
     from cap.demo.seed import demo_post
-    from cap.schema.post_record import PostStatus
+    from cap.schema.post_record import Decision, PostStatus
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
@@ -113,24 +114,28 @@ def test_finding_3_a_tour_post_never_reaches_the_configured_platform(tmp_path, m
     class FakeYouTube:
         name = "youtube"
 
-        def upload(self, record, asset):
-            uploads.append(record.post_id)
+        def upload(self, release):
+            uploads.append(release.post_id)
             return "VIDEO123"
 
     store = Store()
     store.publisher = FakeYouTube()  # what CAP_PUBLISHER=youtube configures
     rec = demo_post()
     rec.flags.tour = True
-    rec.status = PostStatus.APPROVED
-    rec.approval.token = tok.issue(
-        rec.post_id, rec.asset.sha256, "hemant", "approve", canary=False
-    ).encode()
     store.put(rec)
+    record_verdict(
+        rec, Decision.APPROVE, reviewer="hemant", time_on_card_s=999,
+        opening_line="x", spot_check_supported=True,
+    )  # fmt: skip
+    finalise_and_issue(store, rec, "hemant", acknowledged=True)
+    release_job.wait(rec.post_id, 30)
     try:
         for chosen in ([], ["youtube_long"]):  # nothing ticked, or YouTube ticked
             rec.status = PostStatus.APPROVED
+            rec.publish.platform_post_ids.clear()
             assert publish_now(store, rec, chosen) is None
             assert uploads == [] and rec.publish.destinations == ["local"]
+            assert rec.status == PostStatus.PUBLISHED
     finally:
         get_settings.cache_clear()
 

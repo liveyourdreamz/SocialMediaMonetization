@@ -132,6 +132,7 @@
     },
     "Asset": {
       "additionalProperties": false,
+      "description": "The REVIEW render: what the card plays, with the opening line as a visible\nplaceholder. What is published is the final render in `Release`.",
       "properties": {
         "uri": {
           "default": "",
@@ -1083,6 +1084,92 @@
       "title": "ReasonCode",
       "type": "string"
     },
+    "Release": {
+      "additionalProperties": false,
+      "description": "The final package: rendered after approval with the opening line spoken and\nshown (review C1). The approval token binds `manifest_sha256`, the hash of the\ncanonical manifest of these files and every text and flag that goes out (C2).",
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/ReleaseStatus",
+          "default": "none"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/ReleaseFile"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "manifest_sha256": {
+          "default": "",
+          "title": "Manifest Sha256",
+          "type": "string"
+        },
+        "error": {
+          "default": "",
+          "title": "Error",
+          "type": "string"
+        },
+        "attempts": {
+          "default": 0,
+          "title": "Attempts",
+          "type": "integer"
+        },
+        "prepared_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prepared At"
+        }
+      },
+      "title": "Release",
+      "type": "object"
+    },
+    "ReleaseFile": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "long",
+            "short",
+            "thumbnail"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "uri": {
+          "title": "Uri",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "uri",
+        "sha256"
+      ],
+      "title": "ReleaseFile",
+      "type": "object"
+    },
+    "ReleaseStatus": {
+      "enum": [
+        "none",
+        "preparing",
+        "ready",
+        "failed"
+      ],
+      "title": "ReleaseStatus",
+      "type": "string"
+    },
     "RuleFinding": {
       "additionalProperties": false,
       "properties": {
@@ -1366,6 +1453,9 @@
     },
     "asset": {
       "$ref": "#/$defs/Asset"
+    },
+    "release": {
+      "$ref": "#/$defs/Release"
     },
     "approval": {
       "$ref": "#/$defs/Approval"

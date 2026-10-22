@@ -4,21 +4,27 @@ Set-up, once, on the laptop: `cap youtube auth` opens the browser, Hemant signs 
 the channel's Google account and grants youtube.upload; the refresh token is kept in
 <data_dir>/youtube-token.json (git-ignored). Then CAP_PUBLISHER=youtube.
 
-What is uploaded: the long-form mp4 (the file the approval token is bound to), with
-the title, the description (caption, sources, the AI-character disclosure), tags, the
-thumbnail, `selfDeclaredMadeForKids=false` (D12) and `containsSyntheticMedia=true`
-(disclosure, R-16); the Short as a second video when one exists. Privacy defaults to
-unlisted so the first uploads can be checked on the channel before anyone sees them.
+What is uploaded comes from the verified release manifest (cap.release), never from
+the record: one adapter per cut ("long": the episode with the thumbnail; "short":
+the Short, titled with #Shorts), each with its variant's title, description and
+tags, and the manifest's flags for made-for-kids (D12), synthetic media (R-16) and
+paid promotion. YouTube's limits are applied here, the same way every time: titles
+cut at a word under 100 characters (room left for " #Shorts"), no < or > in titles or
+descriptions, descriptions cut to 5000 UTF-8 bytes. Privacy defaults to unlisted so
+the first uploads can be checked on the channel before anyone sees them.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 from cap.config import get_settings
-from cap.policy import AI_ROLE_DISCLOSURE
-from cap.schema.post_record import PostRecord
+from cap.publisher import Upload
+from cap.release import Manifest, PlatformFlags, description_for
+
+__all__ = ["YouTubeAdapter", "description_for", "youtube_description", "youtube_title"]
 
 YOUTUBE_AUTH_PORT = 8765  # register http://localhost:8765/ on the OAuth client
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
@@ -81,82 +87,100 @@ def _service():  # type: ignore[no-untyped-def]
     return build("youtube", "v3", credentials=creds, cache_discovery=False)
 
 
-def description_for(record: PostRecord) -> str:
-    sources = sorted(
-        {
-            c.source_url
-            for c in record.draft.claims
-            if c.source_url
-            and not c.source_url.startswith("testlog://")
-            and c.status == "supported"  # never publish a link that confirmed nothing
-        }
-    )
-    lines = [record.draft.caption.strip(), ""]
-    if sources:
-        lines += ["Sources:"] + sources + [""]
-    if AI_ROLE_DISCLOSURE not in record.draft.caption:
-        lines.append(AI_ROLE_DISCLOSURE)
-    lines.append(
-        "Voice and visuals are synthetic; the script is reviewed and approved by a person before publishing."
-    )
-    return "\n".join(lines).strip()
+TITLE_MAX = 100
+DESCRIPTION_MAX_BYTES = 5000
+SHORTS_TAG = " #Shorts"
+
+
+def _no_angles(text: str) -> str:
+    return text.replace("<", "").replace(">", "")
+
+
+def youtube_title(title: str, short: bool = False) -> str:
+    """At most 100 characters with the #Shorts tag included, cut at a word, no < or >
+    (YouTube refuses them)."""
+    clean = " ".join(_no_angles(title).split())
+    room = TITLE_MAX - (len(SHORTS_TAG) if short else 0)
+    if len(clean) > room:
+        head = clean[: room + 1]  # one more, so a word ending exactly at the limit stays
+        clean = (head.rsplit(" ", 1)[0] if " " in head else clean[:room]).rstrip()
+    return clean + (SHORTS_TAG if short else "")
+
+
+def youtube_description(text: str) -> str:
+    """No < or >, at most 5000 bytes of UTF-8 (an Arabic character is two), never a
+    character cut in half."""
+    data = _no_angles(text).encode("utf-8")[:DESCRIPTION_MAX_BYTES]
+    return data.decode("utf-8", "ignore")
+
+
+def video_body(
+    title: str, description: str, tags: tuple[str, ...], flags: PlatformFlags, privacy: str
+) -> dict[str, dict[str, object]]:
+    """The videos.insert body: the texts and every declaration from the manifest."""
+    return {
+        "snippet": {
+            "title": title,
+            "description": youtube_description(description),
+            "tags": list(tags[:20]),
+            "categoryId": "27",  # Education
+        },
+        "status": {
+            "privacyStatus": privacy,
+            "selfDeclaredMadeForKids": flags.made_for_kids,
+            "containsSyntheticMedia": flags.synthetic_media,
+        },
+        "paidProductPlacementDetails": {"hasPaidProductPlacement": flags.paid_promotion},
+    }
 
 
 class YouTubeAdapter:
-    name = "youtube"
+    """One cut per adapter, so each is recorded and retried on its own (review H5)."""
 
-    def __init__(self) -> None:
+    def __init__(self, cut: Literal["long", "short"] = "long") -> None:
+        self.cut = cut
+        self.name = "youtube" if cut == "long" else "youtube_short"
         self.privacy = get_settings().youtube_privacy
 
-    def _upload_one(self, yt, path: Path, title: str, description: str, tags: list[str]) -> str:  # type: ignore[no-untyped-def]
+    def _upload_one(self, yt, path: Path, body: dict[str, dict[str, object]]) -> str:  # type: ignore[no-untyped-def]
         from googleapiclient.http import MediaFileUpload
 
-        body = {
-            "snippet": {
-                "title": title[:100],
-                "description": description[:5000],
-                "tags": tags[:20],
-                "categoryId": "27",
-            },  # 27 = Education
-            "status": {
-                "privacyStatus": self.privacy,
-                "selfDeclaredMadeForKids": False,
-                "containsSyntheticMedia": True,
-            },
-        }
         media = MediaFileUpload(
             str(path), chunksize=8 * 1024 * 1024, resumable=True, mimetype="video/mp4"
         )
-        req = yt.videos().insert(part="snippet,status", body=body, media_body=media)
+        req = yt.videos().insert(part=",".join(body), body=body, media_body=media)
         resp = None
         while resp is None:
             _, resp = req.next_chunk()
         return str(resp["id"])
 
-    def upload(self, record: PostRecord, asset: Path) -> str:
+    def upload(self, release: Manifest) -> Upload:
+        if self.cut == "short" and release.file("short") is None:
+            raise RuntimeError("this release has no Short")
         yt = _service()
-        description = description_for(record)
-        tags = [t for t in record.brief.topic.split() if len(t) > 3][:10]
-        vid = self._upload_one(yt, asset, record.draft.title, description, tags)
-        record.publish.urls["youtube"] = f"https://www.youtube.com/watch?v={vid}"
-        thumb = Path(record.asset.thumbnail_uri) if record.asset.thumbnail_uri else None
-        if thumb and thumb.exists():
+        text = release.text_for("youtube_short" if self.cut == "short" else "youtube_long")
+        body = video_body(
+            youtube_title(text.title, short=self.cut == "short"),
+            text.description,
+            text.tags,
+            release.flags,
+            self.privacy,
+        )
+        vid = self._upload_one(yt, release.video(self.cut).path, body)
+        if self.cut == "short":
+            return Upload(vid, f"https://www.youtube.com/shorts/{vid}")
+        errors: dict[str, str] = {}
+        thumb = release.file("thumbnail")
+        if thumb is not None:
             try:
                 from googleapiclient.http import MediaFileUpload
 
                 yt.thumbnails().set(
-                    videoId=vid, media_body=MediaFileUpload(str(thumb), mimetype="image/png")
+                    videoId=vid, media_body=MediaFileUpload(str(thumb.path), mimetype="image/png")
                 ).execute()
-            except Exception as e:  # a thumbnail is not worth failing the publish for
-                record.log(f"thumbnail not set: {type(e).__name__}")
-        short = Path(record.asset.short_uri) if record.asset.short_uri else None
-        if short and short.exists():
-            cut = next((v for v in record.variants if v.platform.value == "youtube_short"), None)
-            title = (cut.title if cut and cut.title else record.draft.title) + " #Shorts"
-            sid = self._upload_one(yt, short, title, description, tags)
-            record.publish.platform_post_ids["youtube_short"] = sid
-            record.publish.urls["youtube_short"] = f"https://www.youtube.com/shorts/{sid}"
-        return vid
+            except Exception as e:  # noqa: BLE001 - a thumbnail is not worth failing the publish for
+                errors["youtube_thumbnail"] = f"thumbnail not set: {type(e).__name__}"
+        return Upload(vid, f"https://www.youtube.com/watch?v={vid}", errors=errors)
 
 
 # What YouTube's error reasons mean for Hemant, and what to do about each.
@@ -220,15 +244,15 @@ def test_upload(out=print) -> int:  # type: ignore[no-untyped-def]
         except Exception:  # noqa: BLE001 - older sign-ins have upload permission only
             out("signed in (channel name not readable with this sign-in; fine for uploads)")
         adapter = YouTubeAdapter()
-        adapter.privacy = "private"  # a test is never public, whatever the setting says
-        vid = adapter._upload_one(
-            yt,
-            clip,
+        body = video_body(
             "CAP connection test (private, safe to delete)",
             "A 5-second test upload from the Content Agent Portfolio app. Private. "
             "Delete it from YouTube Studio whenever you like.",
-            ["test"],
+            ("test",),
+            PlatformFlags(made_for_kids=False, synthetic_media=True, paid_promotion=False),
+            "private",  # a test is never public, whatever the setting says
         )
+        vid = adapter._upload_one(yt, clip, body)
     except Exception as e:  # noqa: BLE001 - one plain line, then a non-zero exit
         out(f"FAIL youtube upload: {explain(e)}")
         return 1

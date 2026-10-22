@@ -104,7 +104,8 @@ STOPS: list[Stop] = [
         "against the promised 30, the 11-of-14 action items with 2 invented, the export "
         "failing twice on day 5, the verdict stamp. Screenshots uploaded with a brief "
         "take the panel instead. ffmpeg assembles the long video, the Short and a "
-        "thumbnail; the file's hash is recorded for the approval token.",
+        "thumbnail. This is the review cut: where your opening line goes it shows a "
+        "card saying so, because you have not written it yet.",
         needs="asset",
     ),
     Stop(
@@ -135,8 +136,9 @@ STOPS: list[Stop] = [
     Stop(
         "outbox",
         "The Outbox",
-        "Finalising issues a signed token bound to the post, the video's hash and your "
-        "name. The post waits in the Outbox with a preview of exactly what goes out per "
+        "Approving renders the final video with your opening line spoken, then issues a "
+        "signed token bound to the post, its release manifest (every file, title, "
+        "caption and platform flag) and your name. The post waits in the Outbox with a preview of exactly what goes out per "
         "platform and the destinations to choose from: the connected channels are "
         'ticked, the rest say "connect it first". Nothing has left the laptop yet.',
         needs="token",
@@ -145,8 +147,9 @@ STOPS: list[Stop] = [
         "publish",
         "Publish",
         "This tour post is not sent to YouTube: it is saved to a folder on this laptop. "
-        "For a real post, the publisher verifies the token and the file hash, refuses "
-        "canaries and changed renders, then sends to every destination you ticked, "
+        "For a real post, the publisher re-checks your approval, rebuilds the release "
+        "manifest from the files on disk and verifies the token against it, refuses "
+        "canaries and anything changed, then sends to every destination you ticked, "
         "recording each result or error separately. A real "
         "post goes to your connected channels: YouTube unlisted with the synthetic-media "
         "flag, a Facebook Reel, Instagram when the video has a public URL, TikTok.",

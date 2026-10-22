@@ -11,7 +11,6 @@ once the renderer is real and gate latency matters.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypedDict
@@ -29,6 +28,7 @@ from cap.gates import (
     check_originality,
 )
 from cap.models import ModelClient, SourceDoc
+from cap.render.package import render_stage
 from cap.schema.post_record import OriginalityGate, Platform, PostRecord, PostStatus
 
 
@@ -214,40 +214,32 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
         return _put(record)
 
     def n_render(state: PipelineState) -> PipelineState:
+        """The REVIEW render (review C1): what the card plays, the opening line a
+        visible placeholder. The final render runs after approval (cap.approval.
+        release_job) and is what the token binds."""
         record = _rec(state)
         record.status = PostStatus.RENDERING
         _progress(deps, record)
-        deps.render_dir.mkdir(parents=True, exist_ok=True)
-        if get_settings().renderer == "video":
-            from cap.render import RenderError, render, silent_voice, speak
+        kind = get_settings().renderer
+        try:
+            r = render_stage(record, deps.render_dir, "review", kind)
+        except Exception as e:  # the voice service, ffmpeg: fail closed, say why
+            from cap.render import RenderError
 
-            voice_fn = speak if get_settings().voice == "edge" else silent_voice
-            try:
-                r = render(record, deps.render_dir, voice_fn=voice_fn)
-            except RenderError as e:
-                return _park(record, f"render failed: {e}")
-            except Exception as e:  # the voice service, ffmpeg: fail closed, say why
-                return _park(record, f"render failed: {type(e).__name__}: {str(e)[:200]}")
-            record.asset.uri = str(r.video)
-            record.asset.sha256 = r.sha256
-            record.asset.short_uri = str(r.short) if r.short else ""
-            record.asset.thumbnail_uri = str(r.thumbnail)
+            why = str(e) if isinstance(e, RenderError) else f"{type(e).__name__}: {str(e)[:200]}"
+            return _park(record, f"render failed: {why}")
+        record.asset.uri = str(r.files["long"])
+        record.asset.sha256 = r.sha256
+        record.asset.kind = r.kind
+        if r.kind == "video":
+            record.asset.short_uri = str(r.files["short"]) if "short" in r.files else ""
+            record.asset.thumbnail_uri = str(r.files["thumbnail"])
             record.asset.duration_s = round(r.duration_s, 1)
             record.asset.voice = r.voice
-            record.asset.kind = "video"
             record.log(
-                f"rendered {r.duration_s:.0f}s long-form{' and a Short' if r.short else ''} with voice {r.voice}"
+                f"rendered {r.duration_s:.0f}s long-form{' and a Short' if 'short' in r.files else ''}"
+                f" with voice {r.voice} (review cut)"
             )
-        else:
-            # Foundation stand-in: a text manifest of what would be rendered. The hash
-            # binding and the approval token are real either way.
-            path = deps.render_dir / f"{record.post_id}.render.txt"
-            content = f"{record.draft.title}\n\n{record.draft.script}\n"
-            data = content.encode("utf-8")
-            path.write_bytes(data)  # bytes, not write_text: no newline translation on Windows
-            record.asset.uri = str(path)
-            record.asset.sha256 = hashlib.sha256(data).hexdigest()  # the bytes on disk
-            record.asset.kind = "text"
         record.status = PostStatus.AWAITING_APPROVAL
         prepare_card(record)  # D34: spot check and reading threshold fixed at queue time
         record.log("queued for approval")

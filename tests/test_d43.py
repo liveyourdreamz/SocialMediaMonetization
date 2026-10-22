@@ -4,8 +4,8 @@ card for Hemant; only outright failures reject."""
 
 import pytest
 
+from cap import release
 from cap.agents import OPENING_LINE_SLOT, adapt, critique, draft
-from cap.approval import token as tok
 from cap.approval.card import CardError, finalise, record_verdict
 from cap.demo import CHARACTER_BLOCK, TEST_LOG
 from cap.models import MockClient
@@ -50,16 +50,15 @@ def test_approving_an_escalated_post_needs_the_tick(fixtures, record, tmp_path):
 def test_the_publisher_takes_a_settled_post_and_refuses_an_unsettled_one(
     fixtures, record, tmp_path
 ):
-    rec = _escalated(fixtures, record, tmp_path)
-    asset = tmp_path / "ep.txt"
-    asset.write_text("render")
-    rec.asset.uri, rec.asset.sha256 = str(asset), tok.sha256_file(asset)
-    rec.status = PostStatus.APPROVED
-    t = tok.issue(rec.post_id, rec.asset.sha256, "hemant", "approve", canary=False)
+    rec = _approve(_escalated(fixtures, record, tmp_path), acknowledged=True)
+    final = tmp_path / "final.txt"
+    final.write_text("final render with the line")
+    t = release.seal(rec, {"long": final})
+    unsettled = rec.model_copy(deep=True)
+    unsettled.approval.decisions_acknowledged = []
     with pytest.raises(PublishRefusedError, match="settled on the card"):
-        publish(rec.model_copy(deep=True), asset, t, DryRunAdapter())
-    rec.approval.decisions_acknowledged = list(rec.flags.needs_decision)
-    assert publish(rec, asset, t, DryRunAdapter()).status == PostStatus.PUBLISHED
+        publish(unsettled, t, DryRunAdapter())
+    assert publish(rec, t, DryRunAdapter()).status == PostStatus.PUBLISHED
 
 
 def test_an_outright_ethics_fail_still_rejects(fixtures, record, tmp_path):
