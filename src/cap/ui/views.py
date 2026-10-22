@@ -15,9 +15,8 @@ from cap.approval.app import Store, card_for
 from cap.approval.identity import Reviewer
 from cap.config import get_settings
 from cap.gates.verdict import confirmed_sources
+from cap.render import OPENING_SLOT
 from cap.schema.post_record import Decision, PostRecord, PostStatus, ReasonCode
-
-OPENING_SLOT = "[[HEMANT_OPENING_LINE]]"
 
 LABELS = {
     "en": {
@@ -226,9 +225,15 @@ def card_context(
         ("Third-party footage", f"{round(media['third_party_footage_share'] * 100)}%"),
         (
             "Voice",
-            f"{get_settings().channel_characters.get(record.channel_id.value, '')}, ElevenLabs",
+            f"{get_settings().channel_characters.get(record.channel_id.value, '')}, "
+            f"edge-tts neural voice{f' ({record.asset.voice})' if record.asset.voice else ''}",
         ),
-        ("Synthetic label", "on, C2PA signed" if media["synthetic_elements_present"] else "off"),
+        (
+            "Synthetic label",
+            "on: AI-character label on every frame; provenance signing (C2PA) not yet implemented"
+            if media["synthetic_elements_present"]
+            else "off",
+        ),
         ("Real person shown", "yes" if media["real_person_depicted"] else "no"),
         ("Sponsor", card.sponsor["name"] if card.sponsor else "none"),
     ]
@@ -646,10 +651,21 @@ def outbox(store: Store) -> list[PostRecord]:
     return sorted(out, key=lambda p: p.approval.decided_at or p.created_at)
 
 
+def _narration(record: PostRecord, cut: str | None = None) -> str:
+    """The script as the final render voices it (the one rule: cap.render.script_text);
+    before an opening line exists, as the review render shows it."""
+    from cap.render import script_text
+
+    if record.human_contribution.text.strip():
+        return script_text(record, cut, "final")
+    return script_text(record, cut, "review")
+
+
 def package(record: PostRecord) -> dict[str, Any]:
     """Exactly what goes out, per platform, as the adapters will receive it."""
-    human = record.human_contribution.text.strip()
-    script = record.draft.script.replace(OPENING_SLOT, human) if human else record.draft.script
+    from cap.pipeline import confirmed_sources
+
+    script = _narration(record)
     base = {
         "title": record.draft.title,
         "caption": record.draft.caption,
@@ -667,22 +683,57 @@ def package(record: PostRecord) -> dict[str, Any]:
                 "title": v.title or base["title"],
                 "caption": v.caption or base["caption"],
                 "duration_s": v.duration_s,
-                "script": (v.script_cut.replace(OPENING_SLOT, human) if human else v.script_cut)
-                or script,
+                "script": (_narration(record, v.script_cut) if v.script_cut else "") or script,
                 "on_screen_text": list(v.on_screen_text) or base["on_screen_text"],
                 "thumbnail_text": v.thumbnail_text or base["thumbnail_text"],
             }
         )
     if not cuts:  # no platform cuts recorded: the base package is the one cut
         cuts.append({"platform": "youtube long", "duration_s": 0, **base})
-    asset = Path(record.asset.uri) if record.asset.uri else None
+    final = next((Path(f.uri) for f in record.release.files if f.role == "long"), None)
     return {
         "base": base,
         "cuts": cuts,
-        "asset_name": asset.name if asset else "",
-        "asset_exists": bool(asset and asset.exists()),
-        "sha256": record.asset.sha256,
+        "asset_name": final.name if final else "",
+        "asset_exists": bool(final and final.exists()),
+        "sha256": record.release.manifest_sha256,
         "token_present": bool(record.approval.token),
+    }
+
+
+RELEASE_TEXT = {
+    "none": "The final video has not been made yet.",
+    "preparing": "Preparing the final video with your opening line.",
+    "ready": "The final video is ready.",
+    "failed": "The final video could not be made.",
+}
+
+
+def release_view(record: PostRecord) -> dict[str, Any]:
+    """The Outbox's view of the final release: its state in words, the files to play,
+    the token's state and which action is offered (make it, retry, re-issue)."""
+    from cap.approval import release_job
+    from cap.release import token_state
+
+    rel = record.release
+    status, error = rel.status.value, rel.error
+    if status == "preparing" and not release_job.is_running(record.post_id):
+        # the job died with the app (a restart): say so and offer the retry
+        status, error = "failed", "interrupted: the app restarted while it ran"
+    names = {f.role: Path(f.uri).name for f in rel.files}
+    tstate = token_state(record) if status == "ready" else "none"
+    return {
+        "status": status,
+        "text": RELEASE_TEXT[status],
+        "error": error,
+        "long": names.get("long", ""),
+        "short": names.get("short", ""),
+        "thumbnail": names.get("thumbnail", ""),
+        "video": record.asset.kind == "video" and "long" in names,
+        "token": tstate,
+        "can_make": status in ("none", "failed") and release_job.can_start(record),
+        "can_reissue": status == "ready" and tstate != "valid",
+        "publishable": status == "ready" and tstate == "valid",
     }
 
 
@@ -822,11 +873,19 @@ def workflow(record: PostRecord) -> dict[str, Any]:
         nxt = "Read it, then approve or reject" if blind else "Keep or change your verdict"
         href = f"/posts/{pid}"
     elif current == "publish":
-        headline, nxt, href = (
-            "Approved, waiting to publish",
-            "Choose where it goes and publish",
-            f"/posts/{pid}/preview#publish",
-        )
+        rel = release_view(record)
+        if rel["status"] == "preparing":
+            headline, nxt = (
+                "Preparing the final video",
+                "Nothing to do yet; this page updates itself",
+            )
+        elif rel["status"] in ("failed", "none"):
+            headline, nxt = rel["text"], "See why and make it again"
+        elif rel["can_reissue"]:
+            headline, nxt = "Approved; the token needs re-issuing", "Re-issue the token"
+        else:
+            headline, nxt = "Approved, waiting to publish", "Choose where it goes and publish"
+        href = f"/posts/{pid}/preview#publish"
     else:
         doing = {
             "brief": "Brief filed",
@@ -846,7 +905,8 @@ def workflow(record: PostRecord) -> dict[str, Any]:
         "reason": reason,
         "next": nxt,
         "href": href,
-        "running": st in _RUNNING,
+        "running": st in _RUNNING
+        or (st == "approved" and record.release.status.value == "preparing"),
         "stopped": bool(stopped),
         "finished": st == "published",
     }

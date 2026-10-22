@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from cap.approval import release_job
 from cap.approval.app import Store, create_app
 from cap.approval.token import ApprovalToken, verify
 from cap.config import get_settings
@@ -61,12 +62,20 @@ def test_api_full_approval_flow(client, record, tmp_path):
     assert r.status_code == 200 and r.json() == {
         "post_id": post.post_id,
         "status": "approved",
+        "final_render_started": True,
+    }
+    release_job.wait(post.post_id, 30)
+    assert api.get(f"/api/posts/{post.post_id}/release", headers=H).json() == {
+        "post_id": post.post_id,
+        "status": "approved",
+        "release": "ready",
+        "error": "",
         "token_issued": True,
     }
     stored = store.get(post.post_id)
     assert stored.status == PostStatus.APPROVED
     t = ApprovalToken.decode(stored.approval.token)
-    assert verify(t, post.post_id, stored.asset.sha256) == (True, "ok")
+    assert verify(t, post.post_id, stored.release.manifest_sha256) == (True, "ok")
 
     # closed: nothing more can happen to it through the API
     assert (

@@ -287,14 +287,15 @@ FULL_RUN_TOPICS = {
 
 def full_run(out: Callable[[str], None] = print, channels: str = "ABC") -> int:
     """One real brief per channel through the whole pipeline: the real model at every
-    step, research, the four gates, the voice, the video, then a stand-in approval and
+    step, research, the four gates, the voice, the review video, then an approval
+    through the real card functions (a stage one for channel C, the verdict with an
+    opening line and the spot check, finalise), the final render with that line, and
     a publish to a local check folder. Nothing goes to your queue or to any platform.
     It reports the step and the reason for the first thing that fails in each run."""
-    from cap.approval import token as tok
     from cap.approval.app import Store
     from cap.config import get_settings
     from cap.demo.seed import run_brief
-    from cap.publisher import LocalFolderAdapter, publish_to
+    from cap.publisher import LocalFolderAdapter
     from cap.schema.post_record import PostStatus
 
     s = get_settings()
@@ -313,8 +314,9 @@ def full_run(out: Callable[[str], None] = print, channels: str = "ABC") -> int:
     for ch in channels:
         topic = FULL_RUN_TOPICS[ch]
         t0 = time.time()
+        store = Store()
         try:
-            rec = run_brief(Store(), ch, topic)
+            rec = run_brief(store, ch, topic)
         except Exception as e:  # noqa: BLE001 - reported with the channel
             failed += 1
             out(f"  FAIL {ch} {topic}: crashed in the pipeline: {type(e).__name__}: {e}"[:400])
@@ -330,16 +332,13 @@ def full_run(out: Callable[[str], None] = print, channels: str = "ABC") -> int:
                 out(f"         {line[:200]}")
             continue
         try:
-            rec.status = PostStatus.APPROVED  # stand-in approval, in memory only
-            # the stand-in approver settles the card's questions, as Hemant would (D43)
-            rec.approval.decisions_acknowledged = list(rec.flags.needs_decision)
-            t = tok.issue(rec.post_id, rec.asset.sha256, s.approvers[0], "approve", canary=False)
-            publish_to(rec, Path(rec.asset.uri), t, [LocalFolderAdapter(dest)])
-            if rec.status != PostStatus.PUBLISHED:
-                raise RuntimeError(f"status after publish: {rec.status.value}")
+            _approve_and_publish(store, rec, LocalFolderAdapter(dest))
+        except Skip as e:
+            out(f"  skip {ch} {topic}: reached your queue in {took:.0f}s; {e}"[:400])
+            continue
         except Exception as e:  # noqa: BLE001
             failed += 1
-            out(f"  FAIL {ch} {topic}: publish step: {type(e).__name__}: {e}"[:400])
+            out(f"  FAIL {ch} {topic}: approval or publish step: {type(e).__name__}: {e}"[:400])
             continue
         unconfirmed = sum(1 for c in rec.draft.claims if c.status != "supported")
         out(
@@ -354,3 +353,46 @@ def full_run(out: Callable[[str], None] = print, channels: str = "ABC") -> int:
         else f"{failed} channel(s) FAILED; the line above each says where and why"
     )
     return 1 if failed else 0
+
+
+FULL_RUN_OPENING_LINE = "This is a full test run, approved by the check."
+
+
+def _approve_and_publish(store, rec, adapter) -> None:  # type: ignore[no-untyped-def]
+    """The real card path, in memory: stage one (channel C), the verdict with the
+    opening line and the spot check, finalise, the final render, then the publisher.
+    Every rule the card and the publisher enforce applies, none is set by hand."""
+    from cap.approval import release_job
+    from cap.approval.app import finalise_and_issue, publish_now
+    from cap.approval.card import record_stage_one, record_verdict
+    from cap.config import get_settings
+    from cap.schema.post_record import Channel, Decision, PostStatus, ReleaseStatus
+
+    s = get_settings()
+    approver = s.approvers[0]
+    if rec.channel_id == Channel.C:
+        if not s.arabic_reviewers:
+            raise Skip(
+                "not approved or published: channel C needs an Arabic reviewer "
+                "(CAP_ARABIC_REVIEWERS) for its stage-one pass (D19)"
+            )
+        record_stage_one(
+            rec, reviewer=s.arabic_reviewers[0], decision=Decision.APPROVE, notes="full run",
+            time_on_card_s=rec.approval.expected_reading_s,
+        )  # fmt: skip
+    record_verdict(
+        rec,
+        Decision.APPROVE,
+        reviewer=approver,
+        time_on_card_s=rec.approval.expected_reading_s,
+        opening_line=FULL_RUN_OPENING_LINE,
+        spot_check_supported=True if rec.approval.spot_check else None,
+    )
+    finalise_and_issue(store, rec, approver, acknowledged=True)
+    release_job.wait(rec.post_id, timeout=600)
+    if rec.release.status != ReleaseStatus.READY:
+        raise RuntimeError(f"final video: {rec.release.error or rec.release.status.value}")
+    store.publisher = adapter
+    refused = publish_now(store, rec)
+    if refused or rec.status != PostStatus.PUBLISHED:
+        raise RuntimeError(refused or f"status after publish: {rec.status.value}")

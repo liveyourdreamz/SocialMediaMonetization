@@ -9,6 +9,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from cap.approval import release_job
 from cap.approval.app import Store, create_app
 from cap.demo.seed import seed_store
 from cap.schema.post_record import Channel, PostStatus
@@ -111,7 +112,8 @@ def test_blind_card_then_reveal_with_server_side_clock(world):
     assert "Seven days, one surprise." in html  # the line now sits in the script
     r = api.form(f"/posts/{post.post_id}/finalise")
     assert r.status_code == 303 and post.status == PostStatus.APPROVED
-    assert post.approval.token  # issued server-side
+    release_job.wait(post.post_id, 30)
+    assert post.approval.token  # issued server-side, once the final render is done
     assert post.approval.token not in api.get(f"/posts/{post.post_id}").text  # never shown
 
 
@@ -298,6 +300,7 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
     )
     r = api.form(f"/posts/{post_id}/finalise")
     assert r.status_code == 303
+    release_job.wait(post_id, 30)
     # approval stops at the token: the post waits in the outbox with a preview
     assert rec.status == PostStatus.APPROVED and rec.approval.token
     assert not (data / "published" / post_id).exists()
@@ -320,9 +323,11 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
         f"/posts/{other}/verdict", decision="approve", opening_line="x", spot_check_supported="yes"
     )
     api.form(f"/posts/{other}/finalise")
+    release_job.wait(other, 30)
     from pathlib import Path
 
-    Path(store.get(other).asset.uri).write_text("tampered", encoding="utf-8")
+    final = next(f.uri for f in store.get(other).release.files if f.role == "long")
+    Path(final).write_text("tampered", encoding="utf-8")
     r = api.form(f"/posts/{other}/publish")
     assert "refused=" in r.headers["location"] and store.get(other).status == PostStatus.APPROVED
     # restart: a new store on the same folder sees everything
@@ -480,18 +485,14 @@ def test_a_post_that_has_not_reached_the_queue_shows_progress_not_a_crash(world)
     assert "refresh" not in html
 
 
-def test_a_tour_post_says_plainly_it_is_not_sent_to_youtube(world):
+def test_a_tour_post_says_plainly_it_is_not_sent_to_youtube(world, tmp_path):
     """22 Oct: the Driftpad tour post was 'published' and Hemant looked for it on
     YouTube. The Outbox must say it is never sent there, and where the file went."""
-    from cap.schema.post_record import PostStatus
+    from tests.releases import sealed
 
     store, api = world
-    rec = next(iter(store.posts.values())).model_copy(deep=True)
-    rec.post_id = "tour-check-0001"
-    rec.flags.tour, rec.flags.canary = True, False
-    rec.status = PostStatus.APPROVED
-    rec.approval.token = "x"
+    rec, _, _ = sealed(tmp_path, tour=True)  # approved and released, in the Outbox
     store.put(rec)
     page = api.get(f"/posts/{rec.post_id}/preview").text
     assert "never sent to YouTube" in page and "Not to YouTube." in page
-    assert "tour-check-0001" in page  # the folder it is saved to
+    assert rec.post_id in page  # the folder it is saved to

@@ -3,6 +3,7 @@
 {% set published = record.status.value == 'published' %}
 {% set approved = record.status.value == 'approved' %}
 {% block body %}
+{% if approved and release.status == 'preparing' %}<meta http-equiv="refresh" content="4">{% endif %}
 <main class="screen no-tabs">
   {% if record.flags.tour %}
   <div class="banner" role="note" style="border-left: 4px solid var(--color-signal, #b45309)"><span class="eyebrow">Guided tour · practice only</span><span class="head">This post is never sent to YouTube or any other platform.</span><span class="facts">The YouTube packages below show what a real post would send. Publishing a tour post saves the video and its manifest to this laptop: <span style="font-family: var(--font-mono); word-break: break-all">{{ local_dir }}</span>. To see a video on YouTube, connect YouTube on <a href="/connections">Connections</a> and publish a real brief.</span></div>
@@ -23,18 +24,29 @@
 
   <div class="stack-sm">
     <h2 style="font-size: 22px; line-height: 28px; font-weight: 600; margin: 0">What goes out</h2>
-    <p class="meta">{% if record.asset.kind == 'video' %}{{ record.asset.duration_s | round | int }} s · voice {{ record.asset.voice }} · the file your approval is bound to · not yet C2PA-signed{% else %}text only: the renderer was off{% endif %}</p>
+    <p class="meta">{% if record.asset.kind == 'video' %}{{ record.asset.duration_s | round | int }} s · edge-tts voice {{ record.asset.voice }} · the final video, with your opening line · provenance signing (C2PA) not yet implemented{% else %}text only: the renderer was off{% endif %}</p>
   </div>
 
-  {% if record.asset.kind == 'video' %}
+  {% if release.status == 'ready' and release.video %}
   <section class="stack-sm">
-    <video controls playsinline preload="metadata" style="width: 100%; border-radius: var(--radius-md); background: #000" poster="/assets/{{ record.post_id }}/thumbnail.png">
-      <source src="/assets/{{ record.post_id }}/long.mp4" type="video/mp4">
+    <video controls playsinline preload="metadata" style="width: 100%; border-radius: var(--radius-md); background: #000"{% if release.thumbnail %} poster="/assets/{{ record.post_id }}/final/{{ release.thumbnail }}"{% endif %}>
+      <source src="/assets/{{ record.post_id }}/final/{{ release.long }}" type="video/mp4">
     </video>
-    {% if record.asset.short_uri %}
+    {% if release.short %}
     <details><summary style="cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center">The Short (9:16)</summary>
-      <video controls playsinline preload="metadata" style="width: 60%; max-width: 240px; border-radius: var(--radius-md); background: #000; margin-top: 8px"><source src="/assets/{{ record.post_id }}/short.mp4" type="video/mp4"></video>
+      <video controls playsinline preload="metadata" style="width: 60%; max-width: 240px; border-radius: var(--radius-md); background: #000; margin-top: 8px"><source src="/assets/{{ record.post_id }}/final/{{ release.short }}" type="video/mp4"></video>
     </details>
+    {% endif %}
+  </section>
+  {% elif approved and release.status != 'ready' %}
+  <section id="release" class="card stack-sm" role="status">
+    <span class="eyebrow" style="font-weight: 600; letter-spacing: .06em">{% if release.status == 'preparing' %}Preparing the final video{% else %}Final video{% endif %}</span>
+    <p style="margin: 0">{{ release.text }}{% if release.status == 'preparing' %} About a minute for a video; this page refreshes itself. Publishing opens when it is done.{% endif %}</p>
+    {% if release.error %}<p class="word-signal" style="margin: 0">Why: {{ release.error }}</p>{% endif %}
+    {% if release.can_make and not paused %}
+    <form method="post" action="/posts/{{ record.post_id }}/release/retry"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn" type="submit">Make the final video{% if release.status == 'failed' %} again{% endif %}</button>
+    </form>
     {% endif %}
   </section>
   {% endif %}
@@ -67,9 +79,16 @@
 
   <section class="card tight kv">
     <span>Rendered file</span><span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all">{{ pkg.asset_name or '—' }}{% if not pkg.asset_exists %} (missing on disk){% endif %}</span>
-    <span>Bound hash</span><span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all">{{ pkg.sha256[:16] }}…</span>
-    <span>Approval token</span><span>{{ 'issued, held by the server' if pkg.token_present else 'none' }}</span>
+    <span>Release manifest</span><span style="font-family: var(--font-mono); font-size: 12px; word-break: break-all">{{ (pkg.sha256[:16] ~ '…') if pkg.sha256 else '—' }}</span>
+    <span>Approval token</span><span>{{ {'valid': 'issued, held by the server', 'expired': 'expired; re-issue it below', 'invalid': 'no longer matches; re-issue it below'}.get(release.token, 'none yet') }}</span>
   </section>
+
+  {% if approved and release.can_reissue and not paused %}
+  <form method="post" action="/posts/{{ record.post_id }}/release/reissue" class="card stack-sm"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <p style="margin: 0">The token for this release is {{ release.token }}. Re-issuing checks your approval and every file and text again, then signs a fresh token.</p>
+    <button class="btn" type="submit">Re-issue the token</button>
+  </form>
+  {% endif %}
 
   {% if published %}
   <section id="where" class="card stack-sm">
@@ -83,7 +102,7 @@
   </section>
   {% endif %}
 
-  {% if approved and not paused %}
+  {% if approved and release.publishable and not paused %}
   <form id="publish" method="post" action="/posts/{{ record.post_id }}/publish" class="card stack"><input type="hidden" name="csrf" value="{{ csrf }}">
     <span class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Where it goes</span>
     {% if record.flags.tour %}
@@ -93,14 +112,14 @@
       {% for key, label, available in destinations %}
       <label style="display: flex; gap: 10px; align-items: flex-start; min-height: 44px; font-size: 15px; line-height: 22px">
         <input type="checkbox" name="destinations" value="{{ key }}" {% if key == 'local' %}checked disabled{% elif available %}checked{% else %}disabled{% endif %} style="width: 20px; height: 20px; margin-top: 1px">
-        <span>{{ label }}{% if key != 'local' and not available %} <span class="muted">· <a href="/connections">connect it first</a></span>{% endif %}{% if key == 'youtube_long' and available %} <span class="muted">· {{ settings.youtube_privacy }}, synthetic-media flag on, not made for kids</span>{% endif %}</span>
+        <span>{{ label }}{% if key != 'local' and not available %} <span class="muted">· <a href="/connections">connect it first</a></span>{% endif %}{% if key == 'youtube_long' and available %} <span class="muted">· {{ settings.youtube_privacy }}, synthetic-media flag {{ 'on' if flags.synthetic_media else 'off' }}, {{ 'made for kids' if flags.made_for_kids else 'not made for kids' }}{% if flags.paid_promotion %}, paid promotion declared{% endif %}</span>{% endif %}</span>
       </label>
       {% endfor %}
     </div>
     {% if not any_connected %}<p class="muted" style="font-size: 13px">No channel is connected yet, so this publish writes the local folder only. <a href="/connections">Connect your channels</a> and the boxes above switch on.</p>{% endif %}
     {% endif %}
     <button class="btn primary" type="submit">Publish now</button>
-    <p class="meta" style="text-align: center">The publisher verifies the token against the rendered file before anything leaves; each destination's result is shown here afterwards. The scheduler presses this button at the posting slot once it exists.</p>
+    <p class="meta" style="text-align: center">Before each upload the publisher checks your approval and rebuilds the release manifest from the files on disk; the token must match it; each destination's result is shown here afterwards. The scheduler presses this button at the posting slot once it exists.</p>
   </form>
   {% endif %}
 </main>

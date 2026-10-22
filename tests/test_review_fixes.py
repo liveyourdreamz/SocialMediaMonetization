@@ -23,35 +23,28 @@ from cap.publisher import (
     publish,
     publish_to,
 )
-from cap.schema.post_record import Channel, PostRecord, PostStatus, Verdict
+from cap.schema.post_record import Channel, PostRecord, PostStatus
 from tests.conftest import SOURCES, make_deps, source_docs
+from tests.releases import sealed
 from tests.test_research import keyed  # noqa: F401 - the fixture
 
 
 def _approved(tmp_path: Path) -> tuple[PostRecord, Path, tok.ApprovalToken]:
-    asset = tmp_path / "ep.txt"
-    asset.write_text("rendered episode")
-    r = PostRecord(channel_id=Channel.A, status=PostStatus.APPROVED)
-    r.asset.uri, r.asset.sha256 = str(asset), tok.sha256_file(asset)
-    r.gates.originality.passed = True
-    r.gates.ethics.verdict = Verdict.PASS
-    r.gates.disclosure.passed, r.gates.disclosure.mfk_band = True, "clear"
-    r.gates.facts.passed = True
-    t = tok.issue(r.post_id, r.asset.sha256, "hemant", "approve", canary=False)
-    return r, asset, t
+    r, t, files = sealed(tmp_path)
+    return r, files["long"], t
 
 
 class _Failing:
     name = "youtube"
 
-    def upload(self, record, asset):
+    def upload(self, release):
         raise RuntimeError("quota exceeded")
 
 
 class _Working:
     name = "youtube"
 
-    def upload(self, record, asset):
+    def upload(self, release):
         return "yt-123"
 
 
@@ -167,19 +160,19 @@ def test_m4_a_number_on_screen_becomes_a_claim(fixtures, record):
 
 
 def test_h3_every_platform_failing_leaves_the_post_approved(tmp_path):
-    r, asset, t = _approved(tmp_path)
-    out = publish_to(r, asset, t, [LocalFolderAdapter(tmp_path / "pub"), _Failing()])
+    r, _, t = _approved(tmp_path)
+    out = publish_to(r, t, [LocalFolderAdapter(tmp_path / "pub"), _Failing()])
     assert out.status == PostStatus.APPROVED
     assert out.publish.published_at is None and "youtube" in out.publish.errors
     assert any("not published" in h for h in out.history)
     # and the retry from the Outbox goes through once the platform works
-    again = publish_to(out, asset, t, [LocalFolderAdapter(tmp_path / "pub"), _Working()])
+    again = publish_to(out, t, [LocalFolderAdapter(tmp_path / "pub"), _Working()])
     assert again.status == PostStatus.PUBLISHED and again.publish.platform_post_ids["youtube"]
 
 
 def test_h3_local_only_is_still_published(tmp_path):
-    r, asset, t = _approved(tmp_path)
-    out = publish_to(r, asset, t, [LocalFolderAdapter(tmp_path / "pub")])
+    r, _, t = _approved(tmp_path)
+    out = publish_to(r, t, [LocalFolderAdapter(tmp_path / "pub")])
     assert out.status == PostStatus.PUBLISHED
 
 
@@ -187,12 +180,12 @@ def test_h3_local_only_is_still_published(tmp_path):
 
 
 def test_l2_publish_refuses_a_tour_post_on_a_real_platform(tmp_path):
-    r, asset, t = _approved(tmp_path)
+    r, _, t = _approved(tmp_path)
     r.flags.tour = True
     with pytest.raises(PublishRefusedError, match="guided-tour"):
-        publish(r, asset, t, _Working())
+        publish(r, t, _Working())
     # the local folder and the dry run are still fine
-    assert publish(r, asset, t, DryRunAdapter()).status == PostStatus.PUBLISHED
+    assert publish(r, t, DryRunAdapter()).status == PostStatus.PUBLISHED
 
 
 # ---- H4: a restart does not leave posts stuck in "drafting" ------------------------

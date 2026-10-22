@@ -21,7 +21,7 @@
     <span class="eyebrow">Your verdict, recorded</span>
     <span class="head">{{ verdict_text }}{% if reason_text %}: {{ reason_text | lower }}{% endif %}</span>
     <span class="facts">{{ record.approval.time_on_card_s | minutes }} on the card{% if record.approval.too_fast %} · faster than the card's reading time, flagged{% endif %}{% if record.human_contribution.text %} · opening line saved{% endif %}{% if record.approval.spot_check and record.approval.spot_check.reviewer_said_supported is not none %} · spot check: you said {{ 'supported' if record.approval.spot_check.reviewer_said_supported else 'not supported' }}{% endif %}</span>
-    {% if closed %}<span class="facts">Final: {{ record.status.value | replace('_', ' ') }}{% if record.approval.revised_after_reveal %} · changed after the reveal{% endif %}{% if record.status.value == 'published' %} · token verified against the rendered file by the publisher{% elif record.status.value == 'approved' %} · token issued · <a href="/posts/{{ card.post_id }}/preview" style="color: inherit">in the outbox: see what goes out and publish</a>{% endif %}</span>{% endif %}
+    {% if closed %}<span class="facts">Final: {{ record.status.value | replace('_', ' ') }}{% if record.approval.revised_after_reveal %} · changed after the reveal{% endif %}{% if record.status.value == 'published' %} · token verified against the release manifest by the publisher{% elif record.status.value == 'approved' %} · {{ 'token issued' if record.approval.token else ('preparing the final video' if record.release.status.value == 'preparing' else 'final video not made yet') }} · <a href="/posts/{{ card.post_id }}/preview" style="color: inherit">in the outbox: see what goes out and publish</a>{% endif %}</span>{% endif %}
   </div>
   {% endif %}
 
@@ -70,7 +70,7 @@
       <form method="post" action="/posts/{{ card.post_id }}/finalise" style="flex: 1; display: flex; flex-direction: column; gap: 8px"><input type="hidden" name="csrf" value="{{ csrf }}">{% if record.flags.needs_decision %}<label style="display: flex; gap: 10px; align-items: flex-start; min-height: 44px; font-size: 15px; line-height: 22px"><input type="checkbox" name="acknowledged" value="yes" required style="width: 20px; height: 20px; margin-top: 1px"><span>I reviewed the question{{ 's' if record.flags.needs_decision | length != 1 }} above and approve</span></label>{% endif %}<button class="btn primary grow" type="submit">Keep approve</button></form>
       <button class="btn secondary grow" type="button" data-open-sheet="reject">Change to reject</button>
     </div>
-    <p class="meta" style="text-align: center">Keep approve signs the token bound to this exact render and puts the post in the outbox. Nothing leaves until Publish is pressed there.</p>
+    <p class="meta" style="text-align: center">Keep approve renders the final video with your opening line, signs the token bound to that release and puts the post in the outbox. Nothing leaves until Publish is pressed there.</p>
     {% else %}
     <div style="display: flex; gap: 10px">
       <form method="post" action="/posts/{{ card.post_id }}/finalise" style="flex: 1; display: flex"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary grow" type="submit">Keep {{ record.approval.pre_reveal_decision.value }}</button></form>

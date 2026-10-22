@@ -92,7 +92,8 @@ STOP = {
 @dataclass
 class Scene:
     kind: (
-        str  # intro, app_fail, timer, flow, calendar, verdict, figure, orbit, media, talk, sources
+        str  # intro, app_fail, timer, flow, calendar, verdict, figure, orbit, media, talk,
+        # sources, opening_slot (the review render's silent stand-in for the opening line)
     )
     text: str  # the spoken paragraph
     sentences: list[str]

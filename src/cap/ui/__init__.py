@@ -17,8 +17,10 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Reque
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
-from cap.approval import google
+from cap import release
+from cap.approval import google, release_job
 from cap.approval.app import Store, finalise_and_issue, publish_now, visible_to
 from cap.approval.card import CardError, record_stage_one, record_verdict
 from cap.approval.identity import (
@@ -35,6 +37,7 @@ from cap.approval.identity import (
     sign_cookie,
 )
 from cap.config import get_settings
+from cap.publisher import PublishRefusedError
 from cap.schema.post_record import Decision, PostStatus, ReasonCode
 from cap.ui import tour, views
 
@@ -371,6 +374,8 @@ def ui_router(store: Store) -> APIRouter:
             ],
             any_connected=len(available) > 1,
             results=views.publish_results(record),
+            release=views.release_view(record),
+            flags=release.flags_for(record),
             local_dir=str((store.local_published_dir() / record.post_id).resolve()),
             content_rtl=views.is_rtl(record.channel_id.value),
             channel_label=views.channel_label(record.channel_id.value),
@@ -393,7 +398,11 @@ def ui_router(store: Store) -> APIRouter:
             for d in form.getlist("destinations")
             if isinstance(d, str) and d in DESTINATION_LABELS and d != "local"
         ]
-        refused = publish_now(store, record, chosen)
+        # uploads take minutes: off the event loop, so the app keeps answering (H5)
+        refused = await run_in_threadpool(publish_now, store, record, chosen)
+        return _back_to_outbox(post_id, refused)
+
+    def _back_to_outbox(post_id: str, refused: str | None) -> Response:
         if refused:
             from urllib.parse import quote
 
@@ -401,6 +410,38 @@ def ui_router(store: Store) -> APIRouter:
                 f"/posts/{post_id}/preview?refused={quote(refused)}", status_code=303
             )
         return RedirectResponse(f"/posts/{post_id}/preview", status_code=303)
+
+    @r.post("/posts/{post_id}/release/retry", dependencies=[Depends(check_csrf)])
+    def release_retry(post_id: str, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
+        """Make the final video again after a failure (or for the first time for a post
+        approved before final renders existed)."""
+        _approver(reviewer)
+        if store.paused:
+            return RedirectResponse("/paused", status_code=303)
+        record = store.get(post_id)
+        if not release_job.can_start(record):
+            return _back_to_outbox(post_id, "the final video is ready or already being made")
+        try:
+            release_job.start(store, record)
+        except PublishRefusedError as e:
+            return _back_to_outbox(post_id, str(e))
+        return _back_to_outbox(post_id, None)
+
+    @r.post("/posts/{post_id}/release/reissue", dependencies=[Depends(check_csrf)])
+    def release_reissue(post_id: str, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
+        """M4: a fresh token for an unchanged release (tokens expire after a week)."""
+        _approver(reviewer)
+        if store.paused:
+            return RedirectResponse("/paused", status_code=303)
+        record = store.get(post_id)
+        try:
+            release.reissue(record, reviewer.name)
+        except (PublishRefusedError, PermissionError) as e:
+            record.log(f"token re-issue refused: {e}")
+            store.put(record)
+            return _back_to_outbox(post_id, str(e))
+        store.put(record)
+        return _back_to_outbox(post_id, None)
 
     # ---- channel C, stage one (D19)
     @r.post("/posts/{post_id}/stage-one", dependencies=[Depends(check_csrf)])
@@ -728,23 +769,32 @@ def ui_router(store: Store) -> APIRouter:
             **tour.context(record, n, pkg),
         )
 
-    @r.get("/assets/{post_id}/{name}")
-    def asset(post_id: str, name: str, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
-        """The rendered files of one post, to the people who may see the post."""
+    def _send(record_files: list[str], name: str) -> Response:
         from fastapi.responses import FileResponse
 
-        record = store.get(post_id)
-        if not visible_to(record, reviewer):
-            raise HTTPException(403, "channel C only")
-        candidates = {
-            Path(p).name: Path(p)
-            for p in (record.asset.uri, record.asset.short_uri, record.asset.thumbnail_uri)
-            if p
-        }
-        path = candidates.get(name)
+        path = {Path(p).name: Path(p) for p in record_files if p}.get(name)
         if path is None or not path.exists():
             raise HTTPException(404, "no such rendered file")
         return FileResponse(path)
+
+    @r.get("/assets/{post_id}/final/{name}")
+    def final_asset(
+        post_id: str, name: str, reviewer: Reviewer = Depends(current_reviewer)
+    ) -> Response:
+        """The final release's files (the opening line spoken): what is published."""
+        record = store.get(post_id)
+        if not visible_to(record, reviewer):
+            raise HTTPException(403, "channel C only")
+        return _send([f.uri for f in record.release.files], name)
+
+    @r.get("/assets/{post_id}/{name}")
+    def asset(post_id: str, name: str, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
+        """The review render of one post, to the people who may see the post."""
+        record = store.get(post_id)
+        if not visible_to(record, reviewer):
+            raise HTTPException(403, "channel C only")
+        a = record.asset
+        return _send([a.uri, a.short_uri, a.thumbnail_uri], name)
 
     @r.get("/operator", response_class=HTMLResponse)
     def operator(request: Request, reviewer: Reviewer = Depends(current_reviewer)) -> Response:

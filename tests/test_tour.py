@@ -3,6 +3,7 @@ content, and the last stops are done for real on the tour post."""
 
 import time
 
+from cap.approval import release_job
 from cap.approval.app import FileStore
 from cap.publisher import LocalFolderAdapter
 from cap.schema.post_record import PostStatus
@@ -78,6 +79,7 @@ def test_the_tour_runs_idea_to_published_on_a_real_post(tmp_path, monkeypatch):
         spot_check_supported="yes",
     )
     assert api.form(f"/posts/{post_id}/finalise").status_code == 303
+    release_job.wait(post_id, 300)
     html = api.get(f"/tour/{post_id}/12").text
     assert "approve" in html and "Seven days with Driftpad." in html
     assert "Open the Outbox preview" in api.get(f"/tour/{post_id}/13").text

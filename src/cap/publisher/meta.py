@@ -1,6 +1,9 @@
 """Meta adapter: a Reel on the Facebook Page (resumable upload of the file) and, when
 the video is reachable at a public URL, a Reel on the linked Instagram account.
 
+Both upload the release's Short (the long form when there is none) with the
+description from the verified manifest (cap.release), never from the record.
+
 Instagram's publishing API only accepts a URL it can fetch, never an upload, so on a
 laptop (no public address) the Instagram step is skipped and says so; set
 CAP_PUBLIC_BASE_URL when the rendered files are served from a public host.
@@ -18,8 +21,8 @@ from pathlib import Path
 import httpx
 
 from cap import connections
-from cap.publisher.youtube import description_for
-from cap.schema.post_record import PostRecord
+from cap.publisher import Upload
+from cap.release import Manifest
 
 GRAPH = "https://graph.facebook.com/v21.0"
 
@@ -36,7 +39,7 @@ class MetaAdapter:
         if not self.page_id or not self.page_token:
             raise RuntimeError("Facebook is not connected; open Connections in the app")
 
-    def _facebook_reel(self, record: PostRecord, video: Path) -> str:
+    def _facebook_reel(self, description: str, video: Path) -> str:
         with httpx.Client(timeout=120) as c:
             r = c.post(
                 f"{GRAPH}/{self.page_id}/video_reels",
@@ -63,21 +66,21 @@ class MetaAdapter:
                     "upload_phase": "finish",
                     "video_id": vid,
                     "video_state": "PUBLISHED",
-                    "description": description_for(record)[:2000],
+                    "description": description[:2000],
                     "access_token": self.page_token,
                 },
             )
             r.raise_for_status()
         return str(vid)
 
-    def _instagram_reel(self, record: PostRecord, public_url: str) -> str:
+    def _instagram_reel(self, caption: str, public_url: str) -> str:
         with httpx.Client(timeout=120) as c:
             r = c.post(
                 f"{GRAPH}/{self.ig_id}/media",
                 data={
                     "media_type": "REELS",
                     "video_url": public_url,
-                    "caption": description_for(record)[:2200],
+                    "caption": caption[:2200],
                     "access_token": self.page_token,
                 },
             )
@@ -98,20 +101,23 @@ class MetaAdapter:
             r.raise_for_status()
             return str(r.json()["id"])
 
-    def upload(self, record: PostRecord, asset: Path) -> str:
-        short = Path(record.asset.short_uri) if record.asset.short_uri else asset
-        fb = self._facebook_reel(record, short)
-        record.publish.platform_post_ids["facebook"] = fb
-        record.publish.urls["facebook"] = f"https://www.facebook.com/reel/{fb}"
+    def upload(self, release: Manifest) -> Upload:
+        video = release.video("short")
+        fb = self._facebook_reel(release.text_for("facebook").description, video.path)
+        out = Upload(fb, f"https://www.facebook.com/reel/{fb}")
+        out.also["facebook"] = (fb, out.url)
         base = os.environ.get("CAP_PUBLIC_BASE_URL", "").rstrip("/")
         if self.ig_id and base:
             try:
-                ig = self._instagram_reel(record, f"{base}/assets/{record.post_id}/short.mp4")
-                record.publish.platform_post_ids["instagram"] = ig
+                ig = self._instagram_reel(
+                    release.text_for("instagram").description,
+                    f"{base}/assets/{release.post_id}/final/{video.path.name}",
+                )
+                out.also["instagram"] = (ig, "")
             except Exception as e:  # noqa: BLE001 - one platform failing does not undo the other
-                record.publish.errors["instagram"] = f"{type(e).__name__}: {str(e)[:160]}"
+                out.errors["instagram"] = f"{type(e).__name__}: {str(e)[:160]}"
         elif self.ig_id:
-            record.publish.errors["instagram"] = (
+            out.errors["instagram"] = (
                 "Instagram needs the video at a public URL; not possible from the laptop"
             )
-        return fb
+        return out

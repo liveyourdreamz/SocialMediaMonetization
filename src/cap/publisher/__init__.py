@@ -1,141 +1,192 @@
 """Publisher: plain code, no model anywhere near it (PRD 4.6, D4, D11, D23).
 
-It receives a post record, its rendered file and an approval token. It verifies the
-token against the file's SHA-256, refuses canaries and anything not approved, and
-only then calls a platform adapter. Platform adapters are stubs in Foundation; the
-YouTube adapter arrives with the week-3 milestone.
+It receives a post record, its approval token and the chosen adapters. Before every
+upload it asks `cap.release.authorise` whether this release may go to this adapter
+(the human approval re-verified, the gates, canary and tour rules, the final render,
+the manifest rebuilt from the files on disk, the token). The adapter receives the
+verified manifest, never the record, so it can only send what was approved.
+
+Duplicate uploads (review H5): one publish per post at a time (a second is refused
+while the first runs); each destination's id and link are recorded and saved the
+moment its upload returns; a retry skips destinations that already have an id.
 """
 
 from __future__ import annotations
 
+import json
+import shutil
+import threading
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from cap.approval.token import ApprovalToken, sha256_file, verify
+from cap.approval.token import ApprovalToken
+from cap.release import Manifest, PublishRefusedError, authorise, canonical_bytes, leaves_machine
 from cap.schema.post_record import PostRecord, PostStatus
 
+__all__ = [
+    "DryRunAdapter",
+    "LocalFolderAdapter",
+    "PlatformAdapter",
+    "PublishRefusedError",
+    "Upload",
+    "adapters_for",
+    "publish",
+    "publish_to",
+]
 
-class PublishRefusedError(RuntimeError):
-    pass
+
+@dataclass
+class Upload:
+    """What one adapter's upload produced. `also` holds other destinations the same
+    upload created (Meta: the Instagram Reel next to the Facebook one); `errors` the
+    ones it could not."""
+
+    post_id: str
+    url: str = ""
+    also: dict[str, tuple[str, str]] = field(default_factory=dict)  # name -> (id, url)
+    errors: dict[str, str] = field(default_factory=dict)
 
 
 class PlatformAdapter(Protocol):
     name: str
 
-    def upload(self, record: PostRecord, asset: Path) -> str:
-        """Upload and return the platform post id."""
+    def upload(self, release: Manifest) -> str | Upload:
+        """Upload what the verified manifest names; return the platform post id."""
 
 
 class DryRunAdapter:
     """Writes nothing anywhere. Used until the platform accounts exist."""
 
     name = "dry_run"
+    leaves_machine = False
 
     def __init__(self) -> None:
         self.uploads: list[tuple[str, str]] = []
 
-    def upload(self, record: PostRecord, asset: Path) -> str:
-        pid = f"dry-{record.post_id[:8]}"
-        self.uploads.append((record.post_id, pid))
+    def upload(self, release: Manifest) -> str:
+        pid = f"dry-{release.post_id[:8]}"
+        self.uploads.append((release.post_id, pid))
         return pid
 
 
 class LocalFolderAdapter:
-    """The laptop build's platform: copies the rendered file into <dir>/<post_id>/
-    with a manifest of what was approved and by whom. The YouTube and Meta adapters
-    replace it with the same one method."""
+    """The laptop build's platform: copies every file of the release into
+    <dir>/<post_id>/ with the manifest that was approved (manifest.json). The
+    platform adapters replace it with the same one method."""
 
     name = "local"
+    leaves_machine = False
 
     def __init__(self, directory: Path) -> None:
         self.directory = directory
 
-    def upload(self, record: PostRecord, asset: Path) -> str:
-        import json
-        import shutil
-
-        out = self.directory / record.post_id
+    def upload(self, release: Manifest) -> str:
+        out = self.directory / release.post_id
         out.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(asset, out / asset.name)
-        for extra in (record.asset.short_uri, record.asset.thumbnail_uri):
-            if extra and Path(extra).exists():
-                shutil.copy2(extra, out / Path(extra).name)
-        manifest = {
-            "post_id": record.post_id,
-            "channel": record.channel_id.value,
-            "title": record.draft.title,
-            "approved_by": record.approval.reviewer,
-            "opening_line": record.human_contribution.text,
-            "asset": asset.name,
-            "sha256": record.asset.sha256,
+        for f in release.files:
+            shutil.copy2(f.path, out / f.path.name)
+        record = {
+            "manifest": json.loads(canonical_bytes(release.document())),
+            "manifest_sha256": release.sha256,
             "published_at": datetime.now(UTC).isoformat(),
         }
-        (out / "manifest.json").write_text(json.dumps(manifest, indent=1), encoding="utf-8")
+        (out / "manifest.json").write_text(
+            json.dumps(record, indent=1, ensure_ascii=False), encoding="utf-8"
+        )
         return f"local:{out}"
 
 
-def publish(
-    record: PostRecord, asset: Path, token: ApprovalToken, adapter: PlatformAdapter
-) -> PostRecord:
-    if record.flags.canary:
-        raise PublishRefusedError("flagged record: canary")
-    if record.flags.tour and not isinstance(adapter, LocalFolderAdapter | DryRunAdapter):
-        raise PublishRefusedError("a guided-tour post never leaves this computer")
-    if record.status != PostStatus.APPROVED:
-        raise PublishRefusedError(f"record status is {record.status.value}")
-    if not record.gates_cleared:
-        raise PublishRefusedError(
-            "a gate did not pass and was not a question settled on the card; R-20 forbids "
-            "any other override"
-        )
-    if record.sponsor is not None and record.sponsor.permit_status != "granted":
-        raise PublishRefusedError("sponsored post without the UAE permit (PRD 4.6)")
-    if not record.asset.sha256:
-        raise PublishRefusedError("record carries no asset hash")
-    digest = sha256_file(asset)
-    if record.asset.sha256 != digest:
-        raise PublishRefusedError("rendered file changed since the record was approved")
-    ok, reason = verify(token, record.post_id, digest)
-    if not ok:
-        raise PublishRefusedError(f"token rejected: {reason}")
-    post_id = adapter.upload(record, asset)
-    record.publish.platform_post_ids[adapter.name] = post_id
-    record.publish.published_at = datetime.now(UTC)
-    record.status = PostStatus.PUBLISHED
-    record.log(f"published to {adapter.name} as {post_id}")
-    return record
+# ---------------------------------------------------------------- one publish per post
+
+_POST_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+@contextmanager
+def _one_at_a_time(post_id: str) -> Iterator[None]:
+    with _LOCKS_GUARD:
+        lock = _POST_LOCKS.setdefault(post_id, threading.Lock())
+    if not lock.acquire(blocking=False):
+        raise PublishRefusedError("a publish of this post is already running")
+    try:
+        yield
+    finally:
+        lock.release()
+
+
+def _record(record: PostRecord, name: str, result: str | Upload) -> None:
+    up = result if isinstance(result, Upload) else Upload(post_id=str(result))
+    pub = record.publish
+    pub.platform_post_ids[name] = up.post_id
+    pub.errors.pop(name, None)
+    if up.url:
+        pub.urls[name] = up.url
+    for other, (oid, ourl) in up.also.items():
+        pub.platform_post_ids[other] = oid
+        pub.errors.pop(other, None)
+        if ourl:
+            pub.urls[other] = ourl
+    pub.errors.update(up.errors)
+    record.log(f"published to {name} as {up.post_id}")
 
 
 def publish_to(
     record: PostRecord,
-    asset: Path,
-    token: ApprovalToken,
+    token: ApprovalToken | None,
     adapters: list[PlatformAdapter],
+    save: Callable[[PostRecord], None] | None = None,
 ) -> PostRecord:
-    """The same checks once, then every chosen destination in turn. One platform
-    failing never undoes another: each result or error is recorded against its
-    name, and the post is published if at least one destination took it."""
+    """Every chosen destination in turn, each one authorised just before its upload.
+    Every destination is authorised once up front too, so a refusal (a tour post on
+    a platform, an expired token) sends nothing anywhere. One platform failing never
+    undoes another; `save` persists the record after each result. The post is
+    published once a platform took it (or, with no platform chosen, the local copy)."""
     if not adapters:
         raise PublishRefusedError("no destination chosen")
-    first, rest = adapters[0], adapters[1:]
-    publish(record, asset, token, first)  # the checks, then the first destination
-    for adapter in rest:
-        try:
-            pid = adapter.upload(record, asset)
-            record.publish.platform_post_ids[adapter.name] = pid
-            record.log(f"published to {adapter.name} as {pid}")
-        except Exception as e:  # noqa: BLE001 - recorded per destination, shown on the Outbox
-            record.publish.errors[adapter.name] = f"{type(e).__name__}: {str(e)[:200]}"
-            record.log(f"{adapter.name} refused or failed: {type(e).__name__}")
-    if rest and not any(a.name in record.publish.platform_post_ids for a in rest):
-        # a platform was chosen and none took it: the local copy is a record, not a
-        # publication (review H3). Back to approved so a retry from the Outbox works.
-        record.publish.platform_post_ids.pop(first.name, None)
-        record.publish.published_at = None
-        record.status = PostStatus.APPROVED
-        record.log("not published: every chosen platform failed; fix it and retry")
+    persist = save or (lambda _r: None)
+    with _one_at_a_time(record.post_id):
+        for adapter in adapters:
+            authorise(record, token, adapter)
+        for adapter in adapters:
+            if adapter.name in record.publish.platform_post_ids:
+                record.log(f"{adapter.name}: already sent, not sent again")
+                continue
+            manifest = authorise(record, token, adapter)
+            try:
+                result = adapter.upload(manifest)
+            except Exception as e:  # noqa: BLE001 - recorded per destination, shown on the Outbox
+                record.publish.errors[adapter.name] = f"{type(e).__name__}: {str(e)[:200]}"
+                record.log(f"{adapter.name} refused or failed: {type(e).__name__}")
+            else:
+                _record(record, adapter.name, result)
+            persist(record)
+        _settle(record, adapters)
+        persist(record)
     return record
+
+
+def _settle(record: PostRecord, adapters: list[PlatformAdapter]) -> None:
+    ids = record.publish.platform_post_ids
+    platforms = [a.name for a in adapters if leaves_machine(a)]
+    took = any(n in ids for n in platforms) if platforms else any(a.name in ids for a in adapters)
+    if took:
+        record.publish.published_at = record.publish.published_at or datetime.now(UTC)
+        record.status = PostStatus.PUBLISHED
+    else:
+        # a platform was chosen and none took it: the local copy is a record, not a
+        # publication (review H3). Approved still, so a retry from the Outbox works.
+        record.log("not published: every chosen platform failed; fix it and retry")
+
+
+def publish(
+    record: PostRecord, token: ApprovalToken | None, adapter: PlatformAdapter
+) -> PostRecord:
+    """One destination: the same rule as `publish_to`."""
+    return publish_to(record, token, [adapter])
 
 
 def adapters_for(destinations: list[str], local_dir: Path) -> list[PlatformAdapter]:
@@ -146,7 +197,10 @@ def adapters_for(destinations: list[str], local_dir: Path) -> list[PlatformAdapt
     if wanted & {"youtube_long", "youtube_short"}:
         from cap.publisher.youtube import YouTubeAdapter
 
-        out.append(YouTubeAdapter())
+        if "youtube_long" in wanted:
+            out.append(YouTubeAdapter("long"))
+        if "youtube_short" in wanted:
+            out.append(YouTubeAdapter("short"))
     if wanted & {"facebook", "instagram"}:
         from cap.publisher.meta import MetaAdapter
 
