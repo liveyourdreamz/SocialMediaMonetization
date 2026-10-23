@@ -142,14 +142,37 @@ class LocalPostgres:
         """Start the server; False when it was already running (then leave it running)."""
         if self.running():
             return False
-        done = self._run(
-            "pg_ctl", "start", "-D", str(self.cluster), "-l", str(self.log_file), "-w", "-t", "60"
-        )
-        if done.returncode != 0:
+        # No pipes: the server pg_ctl starts inherits them on Windows and would hold
+        # them open, so waiting for pg_ctl's output would never end. The log file has it.
+        code = subprocess.run(  # noqa: S603 - fixed argv from our own paths, no shell
+            [
+                str(self.bin_dir / f"pg_ctl{EXE}"),
+                "start",
+                "-D",
+                str(self.cluster),
+                "-l",
+                str(self.log_file),
+                "-w",
+                "-t",
+                "60",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=120,
+            check=False,
+        ).returncode
+        if code != 0:
             raise LocalPostgresError(
-                f"the database did not start; see {self.log_file}: {_tail(done)}"
+                f"the database did not start; see {self.log_file}: {self._log_tail()}"
             )
         return True
+
+    def _log_tail(self) -> str:
+        try:
+            return self.log_file.read_text(encoding="utf-8", errors="replace").strip()[-400:]
+        except OSError:
+            return "(no log)"
 
     def stop(self) -> None:
         if self.running():

@@ -8,6 +8,7 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:  # D45: every test that touches the store runs on Postgres
         image: postgres:16
@@ -55,6 +56,7 @@ jobs:
     # The laptop path Hemant actually uses: install.bat (the downloaded bootstrap) fetches
     # the commit under test, hands over to tools\start.bat, which runs the whole loop.
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
