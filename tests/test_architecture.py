@@ -48,7 +48,7 @@ def test_the_domain_imports_nothing_above_it():
 # only become fewer. M1 step 4 splits these; lower each number as it does.
 MAX_LINES = 400
 LONG_FILES: dict[str, int] = {}  # empty: every file is within the limit; keep it so
-MAX_COMPLEX = 11  # functions marked "noqa: C901"; never raise it
+MAX_COMPLEX = 9  # functions marked "noqa: C901"; never raise it
 
 
 def test_no_file_grows_past_the_limit():

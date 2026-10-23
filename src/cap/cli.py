@@ -33,8 +33,7 @@ if TYPE_CHECKING:
 ALREADY_RUNNING = 3  # cap serve: another window serves this data folder; it was opened
 
 
-def main(argv: list[str] | None = None) -> int:  # noqa: C901 - M1 step 4 splits it
-    utf8_console()
+def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cap")
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("schema")
@@ -81,96 +80,145 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - M1 step 4 splits
     t.add_argument("action", choices=["build", "check"])
     db = sub.add_parser("db", help="the laptop's own Postgres")
     db.add_argument("action", choices=["install", "status"])
-    args = p.parse_args(argv)
+    return p
 
-    if args.cmd == "db":
-        return _db(args.action)
 
-    if args.cmd == "schema":
-        from cap.schema import export_json_schema
+def _cmd_schema(args: argparse.Namespace) -> int:
+    from cap.schema import export_json_schema
 
-        print(f"wrote {export_json_schema()}")
-    elif args.cmd == "rulebook":
-        from cap.rulebook import load_rulebook
-
-        print(load_rulebook().as_prompt_text())
-    elif args.cmd == "prompts":
-        from cap.prompts import SPECS, new_nonce, pack_version, system_prompt
-
-        n = new_nonce()
-        for key, sp in SPECS.items():
-            text = system_prompt(sp, n)
-            assert "{nonce}" not in text, key
-            assert "<role>" in text, key
-        print(f"{len(SPECS)} prompt calls load from pack v{pack_version()}")
-    elif args.cmd == "key":
-        from cap.setup import check_key, ensure_env, read_key
-
-        ensure_env(Path(".env"), force=True)
-        saved = read_key(Path(".env"))
-        if saved and not args.no_check:
-            print("checking the key with Anthropic...")
-            err = check_key(saved)
-            print(
-                f"key rejected ({err}). Run `uv run cap key` to re-enter it."
-                if err
-                else "key works."
-            )
-        print("restart the app for the change to take effect.")
-    elif args.cmd == "youtube":
-        from cap.publisher.youtube import authorise, test_upload
-
-        if args.action == "test":
-            return test_upload()
-        print("A browser window opens: sign in to the channel's Google account and allow uploads.")
-        print(f"saved: {authorise()}  (git-ignored; set CAP_PUBLISHER=youtube in .env)")
-    elif args.cmd == "tokens":
-        from cap.ui.tokens import TOKENS_CSS, build, is_current
-
-        if args.action == "build":
-            build()
-            print(f"wrote {TOKENS_CSS}")
-        else:
-            print(
-                "tokens.css is current"
-                if is_current()
-                else "tokens.css is STALE: run `cap tokens build`"
-            )
-            return 0 if is_current() else 1
-    elif args.cmd == "harness":
-        from cap.harness import run_all
-        from cap.models import get_client
-
-        for rep in run_all(get_client(), runs=args.runs):
-            print(rep.summary())
-    elif args.cmd == "demo":
-        from cap.demo.seed import demo_post
-
-        out = demo_post()
-        print(f"{out.post_id} -> {out.status.value}")
-        for line in out.history:
-            print("  ", line)
-    elif args.cmd == "check":
-        from cap import check
-
-        code = check.run(offline=args.offline)
-        if args.full:
-            if code:
-                print("full run skipped: fix the failed checks first")
-                return code
-            return check.full_run(channels=args.channels.upper())
-        return code
-    elif args.cmd == "update":
-        from cap import updater
-
-        return updater.main(["--dir", args.dir, "--branch", args.branch])
-    elif args.cmd == "smoke":
-        from cap import smoke
-
-        return smoke.run(Path(args.dir).resolve())
-    elif args.cmd == "serve":
-        return _serve(args)
+    print(f"wrote {export_json_schema()}")
     return 0
+
+
+def _cmd_rulebook(args: argparse.Namespace) -> int:
+    from cap.rulebook import load_rulebook
+
+    print(load_rulebook().as_prompt_text())
+    return 0
+
+
+def _cmd_prompts(args: argparse.Namespace) -> int:
+    from cap.prompts import SPECS, new_nonce, pack_version, system_prompt
+
+    n = new_nonce()
+    for key, sp in SPECS.items():
+        text = system_prompt(sp, n)
+        assert "{nonce}" not in text, key
+        assert "<role>" in text, key
+    print(f"{len(SPECS)} prompt calls load from pack v{pack_version()}")
+    return 0
+
+
+def _cmd_key(args: argparse.Namespace) -> int:
+    from cap.setup import check_key, ensure_env, read_key
+
+    ensure_env(Path(".env"), force=True)
+    saved = read_key(Path(".env"))
+    if saved and not args.no_check:
+        print("checking the key with Anthropic...")
+        err = check_key(saved)
+        print(
+            f"key rejected ({err}). Run `uv run cap key` to re-enter it." if err else "key works."
+        )
+    print("restart the app for the change to take effect.")
+    return 0
+
+
+def _cmd_youtube(args: argparse.Namespace) -> int:
+    from cap.publisher.youtube import authorise, test_upload
+
+    if args.action == "test":
+        return test_upload()
+    print("A browser window opens: sign in to the channel's Google account and allow uploads.")
+    print(f"saved: {authorise()}  (git-ignored; set CAP_PUBLISHER=youtube in .env)")
+    return 0
+
+
+def _cmd_tokens(args: argparse.Namespace) -> int:
+    from cap.ui.tokens import TOKENS_CSS, build, is_current
+
+    if args.action == "build":
+        build()
+        print(f"wrote {TOKENS_CSS}")
+        return 0
+    print(
+        "tokens.css is current" if is_current() else "tokens.css is STALE: run `cap tokens build`"
+    )
+    return 0 if is_current() else 1
+
+
+def _cmd_harness(args: argparse.Namespace) -> int:
+    from cap.harness import run_all
+    from cap.models import get_client
+
+    for rep in run_all(get_client(), runs=args.runs):
+        print(rep.summary())
+    return 0
+
+
+def _cmd_demo(args: argparse.Namespace) -> int:
+    from cap.demo.seed import demo_post
+
+    out = demo_post()
+    print(f"{out.post_id} -> {out.status.value}")
+    for line in out.history:
+        print("  ", line)
+    return 0
+
+
+def _cmd_check(args: argparse.Namespace) -> int:
+    from cap import check
+
+    code = check.run(offline=args.offline)
+    if args.full:
+        if code:
+            print("full run skipped: fix the failed checks first")
+            return code
+        return check.full_run(channels=args.channels.upper())
+    return code
+
+
+def _cmd_update(args: argparse.Namespace) -> int:
+    from cap import updater
+
+    return updater.main(["--dir", args.dir, "--branch", args.branch])
+
+
+def _cmd_smoke(args: argparse.Namespace) -> int:
+    from cap import smoke
+
+    return smoke.run(Path(args.dir).resolve())
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    return _serve(args)
+
+
+def _cmd_db(args: argparse.Namespace) -> int:
+    return _db(args.action)
+
+
+_COMMANDS = {
+    "schema": _cmd_schema,
+    "rulebook": _cmd_rulebook,
+    "prompts": _cmd_prompts,
+    "key": _cmd_key,
+    "youtube": _cmd_youtube,
+    "tokens": _cmd_tokens,
+    "harness": _cmd_harness,
+    "demo": _cmd_demo,
+    "check": _cmd_check,
+    "update": _cmd_update,
+    "smoke": _cmd_smoke,
+    "serve": _cmd_serve,
+    "db": _cmd_db,
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    utf8_console()
+    args = _parser().parse_args(argv)
+    return _COMMANDS[args.cmd](args)
 
 
 def signin_secrets(env: Path) -> dict[str, str]:
@@ -313,22 +361,12 @@ def _run_app(
         return 1
 
 
-def _serve_store(  # noqa: C901 - M1 step 4 splits it
-    args: argparse.Namespace,
-    settings: Settings,
-    data: Path,
-    model: str,
-    env_file: Path,
-    store: PostStore,
-) -> int:
-    import uvicorn
-
-    from cap import lan
+def _prepare_records(
+    args: argparse.Namespace, settings: Settings, data: Path, store: PostStore
+) -> None:
+    """Old record files come into the database once; a fresh laptop gets the demo posts."""
     from cap.demo.seed import seed_store
-    from cap.server import create_app
     from cap.store import importer
-    from cap.ui import templates
-    from cap.version import build_id
 
     if importer.needed(data, store):
         n = importer.import_files(data, store)
@@ -340,6 +378,11 @@ def _serve_store(  # noqa: C901 - M1 step 4 splits it
             print("first run: rendering the demo posts (voice + video), about a minute...")
         seed_store(store, demo=args.demo, canary=args.canary or args.demo)
     print(f"database: {store.count()} posts, {len(store.queue())} waiting")
+
+
+def _print_build(settings: Settings, model: str) -> None:
+    from cap.version import build_id
+
     if settings.model_backend.value != model:
         print(f"note: CAP_MODEL_BACKEND in the environment overrides .env ({model})")
     print(f"build: {build_id()}")
@@ -347,24 +390,49 @@ def _serve_store(  # noqa: C901 - M1 step 4 splits it
         print("model backend: anthropic (real drafts and judges)")
     else:
         print("model backend: mock (sample drafts). `uv run cap key` adds your key.")
+
+
+def _print_sign_in(args: argparse.Namespace, settings: Settings, env_file: Path) -> str:
+    """Where to open the app and each person's sign-in code (with the phone addresses
+    when it is open on the Wi-Fi). Returns the sign-in address."""
+    from cap import lan
+    from cap.ui import templates
+
     local_url = f"http://127.0.0.1:{args.port}/login"
-    if settings.google_enabled:
-        how = "Google sign-in is on"
-    else:
-        how = "sign in with your own code (below); the laptop needs it too"
+    how = (
+        "Google sign-in is on"
+        if settings.google_enabled
+        else "sign in with your own code (below); the laptop needs it too"
+    )
     print(f"open {local_url} and {how}")
     codes = signin_secrets(env_file)
-    if args.host != "0.0.0.0":  # noqa: S104 - the phone block below already shows them
-        for person, code in codes.items():
-            print(f"  {person}: {code}")
     if args.host == "0.0.0.0":  # noqa: S104 - the phone path is the point of this host
         addresses = lan.lan_ipv4()
         templates.env.globals["phone_urls"] = lan.phone_urls(args.port, addresses)  # Operator
         print(lan.phone_block(args.port, codes, addresses))
+    else:
+        for person, code in codes.items():
+            print(f"  {person}: {code}")
+    return local_url
+
+
+def _serve_store(
+    args: argparse.Namespace,
+    settings: Settings,
+    data: Path,
+    model: str,
+    env_file: Path,
+    store: PostStore,
+) -> int:
+    import uvicorn
+
+    from cap.server import create_app, stop_workers
+
+    _prepare_records(args, settings, data, store)
+    _print_build(settings, model)
+    local_url = _print_sign_in(args, settings, env_file)
     if args.open:
         _open_later(local_url)
-    from cap.server import stop_workers
-
     try:
         uvicorn.run(create_app(store), host=args.host, port=args.port)
     finally:
