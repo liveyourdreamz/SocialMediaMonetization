@@ -82,8 +82,8 @@ def test_connect_round_trip_stores_the_token_and_shows_the_account(world, monkey
     def fake_account(platform, token):
         return {"name": "Patch Tests Tools", "id": "UC123"}
 
-    monkeypatch.setattr(conn, "exchange", fake_exchange)
-    monkeypatch.setattr(conn, "fetch_account", fake_account)
+    monkeypatch.setattr(conn.oauth, "exchange", fake_exchange)  # where complete() looks
+    monkeypatch.setattr(conn.oauth, "fetch_account", fake_account)
     # a callback that did not start here is refused
     r = api.get("/connections/youtube/callback?code=abc&state=wrong")
     assert r.status_code == 303 and "did%20not%20start" in r.headers["location"]

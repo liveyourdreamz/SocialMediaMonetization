@@ -19,103 +19,90 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC, datetime
-from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-
-class Strict(BaseModel):
-    """Base with additionalProperties=false, as the structured-output rules require.
-    It is shared with the model-output envelopes (cap.agents.outputs), so it stays
-    strict: records stored on disk are read through cap.schema.migrate.load_record,
-    which tolerates fields an older or newer build wrote."""
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True, validate_assignment=True)
-
-
-class Channel(StrEnum):
-    A = "A"  # Patch, English, AI tools
-    B = "B"  # Falak, English, science
-    C = "C"  # Falak, Arabic, science
-
-
-class PostStatus(StrEnum):
-    BRIEFED = "briefed"
-    DRAFTING = "drafting"
-    GATED = "gated"
-    RENDERING = "rendering"
-    AWAITING_APPROVAL = "awaiting_approval"
-    APPROVED = "approved"
-    PUBLISHED = "published"
-    REJECTED = "rejected"
-    DISCARDED = "discarded"
-    PARKED = "parked"  # an injection flag or a gate escalation parks; a human decides
-
-
-class Platform(StrEnum):
-    YOUTUBE_LONG = "youtube_long"
-    YOUTUBE_SHORT = "youtube_short"
-    FACEBOOK = "facebook"
-    INSTAGRAM = "instagram"
-
-
-class Lane(StrEnum):
-    LOW = "low"
-    HIGH = "high"
-
-
-class Verdict(StrEnum):
-    PASS = "pass"
-    FAIL = "fail"
-    ESCALATE = "escalate"
-
-
-class RuleOutcome(StrEnum):
-    NOT_TRIGGERED = "not_triggered"
-    REVISE = "revise"
-    ESCALATE = "escalate"
-    BLOCK = "block"
-
-
-class Decision(StrEnum):
-    APPROVE = "approve"
-    REJECT = "reject"
-    ESCALATE = "escalate"
-
-
-class FaultType(StrEnum):
-    """The seven canary fault types (Prompt Pack P14). A catch counts only when the
-    reviewer's reason chip matches the planted type, so the chips use the same values."""
-
-    UNSOURCED_NUMBER = "unsourced_number"
-    MISSING_AD_PREFIX = "missing_ad_prefix"
-    OUT_GROUP_TITLE = "out_group_title"
-    FIRST_PERSON_HUMAN_CLAIM = "first_person_human_claim"
-    SPONSOR_VERDICT = "sponsor_verdict"
-    KIDS_STYLED_VISUAL = "kids_styled_visual"
-    REUSED_COLD_OPEN = "reused_cold_open"
-
-
-# D34 reason chips: the seven fault types, language, other. Fixed list; "other" above
-# 20% of a week's rejects triggers a review of this list, not a free-text field.
-class ReasonCode(StrEnum):
-    UNSOURCED_NUMBER = "unsourced_number"
-    MISSING_AD_PREFIX = "missing_ad_prefix"
-    OUT_GROUP_TITLE = "out_group_title"
-    FIRST_PERSON_HUMAN_CLAIM = "first_person_human_claim"
-    SPONSOR_VERDICT = "sponsor_verdict"
-    KIDS_STYLED_VISUAL = "kids_styled_visual"
-    REUSED_COLD_OPEN = "reused_cold_open"
-    LANGUAGE = "language"
-    OTHER = "other"
+from cap.schema.base import Strict
+from cap.schema.enums import (
+    Channel,
+    ClaimStatus,
+    Decision,
+    FaultType,
+    Lane,
+    Platform,
+    PostStatus,
+    ReasonCode,
+    ReleaseStatus,
+    RuleOutcome,
+    Verdict,
+)
+from cap.schema.gates import (
+    ClaimCheckResult,
+    DisclosureGate,
+    EthicsGate,
+    FactsGate,
+    Gates,
+    JudgeResult,
+    OriginalityGate,
+    RuleFinding,
+)
 
 
 def _pack_version() -> str:
     from cap.version import pack_version
 
     return pack_version()
+
+
+# The public names: the parts defined here and the vocabularies and gate results
+# kept in cap.schema.enums and cap.schema.gates (callers import them all from here).
+__all__ = [
+    "Approval",
+    "Asset",
+    "Brief",
+    "Channel",
+    "Claim",
+    "ClaimCheckResult",
+    "ClaimStatus",
+    "CriticIssue",
+    "Decision",
+    "DisclosureGate",
+    "Draft",
+    "EthicsGate",
+    "FactsGate",
+    "FaultType",
+    "Flags",
+    "Gates",
+    "HumanContribution",
+    "JudgeResult",
+    "Lane",
+    "MediaManifest",
+    "Metrics",
+    "OriginalityGate",
+    "PlantedFault",
+    "Platform",
+    "PostRecord",
+    "PostStatus",
+    "Publish",
+    "ReasonCode",
+    "Release",
+    "ReleaseFile",
+    "ReleaseStatus",
+    "RuleFinding",
+    "RuleOutcome",
+    "SCHEMA_PATH",
+    "SCHEMA_VERSION",
+    "Sponsor",
+    "SpotCheck",
+    "StageOneReview",
+    "Strict",
+    "Variant",
+    "Verdict",
+    "Versions",
+    "export_json_schema",
+]
 
 
 class Versions(Strict):
@@ -133,9 +120,6 @@ class Brief(Strict):
     length_s: int = 600
     lane: Lane = Lane.LOW
     sponsor_id: str | None = None
-
-
-ClaimStatus = Literal["pending", "supported", "unsupported", "outdated", "missing_source"]
 
 
 class Claim(Strict):
@@ -204,81 +188,6 @@ class Variant(Strict):
     thumbnail_text: str = ""
 
 
-class OriginalityGate(Strict):
-    max_similarity: float = 0.0
-    nearest_post_id: str | None = None
-    anchor_present: bool = False
-    skeleton_share: float = 0.0
-    passed: bool = Field(default=False, alias="pass")
-
-
-class RuleFinding(Strict):
-    rule_id: str
-    outcome: RuleOutcome
-    evidence_span: str = ""
-
-
-class JudgeResult(Strict):
-    """One judge's view of one variant. A and B are the Phase 1 Claude judges; C is the
-    Phase 2 cross-family judge (D32) and the majority-of-three fallback."""
-
-    judge: Literal["A", "B", "C"]
-    model: str  # the model id the API reported
-    platform: Platform = Platform.YOUTUBE_LONG
-    verdict: Verdict = Verdict.ESCALATE
-    rule_findings: list[RuleFinding] = Field(default_factory=list)
-    explanation: str = ""
-    status: Literal["ok", "blocked", "refused", "timeout"] = "ok"
-
-
-class EthicsGate(Strict):
-    verdict: Verdict = Verdict.ESCALATE  # safe default: never a pass by omission
-    rule_ids: list[str] = Field(default_factory=list)
-    evidence_spans: list[str] = Field(default_factory=list)
-    hard_rule_findings: list[RuleFinding] = Field(default_factory=list)
-    judges: list[JudgeResult] = Field(default_factory=list)
-    disagreement: bool = False
-
-
-class DisclosureGate(Strict):
-    ai_label: bool = True
-    paid_promo: bool = False
-    ad_prefix_ok: bool = True  # when paid: title and caption start with "Ad", per variant
-    made_for_kids: bool = False
-    mfk_score: float = 0.0
-    mfk_band: Literal["clear", "doubtful", "likely", "unscored"] = "unscored"
-    mfk_factors: list[str] = Field(default_factory=list)
-    passed: bool = Field(default=False, alias="pass")
-
-
-class ClaimCheckResult(Strict):
-    """P10 per claim: both verifiers' statuses, the quote check and the final status."""
-
-    claim_text: str
-    source_url: str | None = None
-    status_b: ClaimStatus = "pending"
-    status_c: ClaimStatus = "pending"
-    quote_in_source: bool = False
-    disagreement: bool = False
-    final: ClaimStatus = "pending"
-    note: str = ""
-
-
-class FactsGate(Strict):
-    unsupported_claims: list[str] = Field(default_factory=list)
-    checked: int = 0
-    claim_checks: list[ClaimCheckResult] = Field(default_factory=list)
-    endorsement_wording: list[str] = Field(default_factory=list)
-    passed: bool = Field(default=False, alias="pass")
-
-
-class Gates(Strict):
-    originality: OriginalityGate = Field(default_factory=OriginalityGate)
-    ethics: EthicsGate = Field(default_factory=EthicsGate)
-    disclosure: DisclosureGate = Field(default_factory=DisclosureGate)
-    facts: FactsGate = Field(default_factory=FactsGate)
-
-
 class Asset(Strict):
     """The REVIEW render: what the card plays, with the opening line as a visible
     placeholder. What is published is the final render in `Release`."""
@@ -291,13 +200,6 @@ class Asset(Strict):
     duration_s: float = 0.0
     voice: str = ""  # the voice id used (edge-tts now, ElevenLabs later)
     kind: Literal["text", "video"] = "text"
-
-
-class ReleaseStatus(StrEnum):
-    NONE = "none"  # not approved yet, or approved before releases existed
-    PREPARING = "preparing"  # the final render is running
-    READY = "ready"  # final files, manifest and token in place
-    FAILED = "failed"  # the final render or the token issue failed; `error` says why
 
 
 class ReleaseFile(Strict):

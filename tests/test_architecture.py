@@ -47,11 +47,7 @@ def test_the_domain_imports_nothing_above_it():
 # length; a function over complexity 10 must carry the C901 marker, and the markers may
 # only become fewer. M1 step 4 splits these; lower each number as it does.
 MAX_LINES = 400
-LONG_FILES = {
-    "src/cap/connections.py": 462,
-    "src/cap/schema/post_record.py": 451,
-    "src/cap/models/__init__.py": 419,
-}
+LONG_FILES: dict[str, int] = {}  # empty: every file is within the limit; keep it so
 MAX_COMPLEX = 11  # functions marked "noqa: C901"; never raise it
 
 
