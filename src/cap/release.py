@@ -30,14 +30,12 @@ from typing import Any, Literal, Protocol
 
 from cap.config import get_settings
 from cap.domain import token as tok
-from cap.domain.verdict import gates_cleared
+from cap.domain.approval import approval_refusal
 from cap.policy import AI_ROLE_DISCLOSURE
 from cap.schema.post_record import (
-    Channel,
     Decision,
     Platform,
     PostRecord,
-    PostStatus,
     ReleaseFile,
     ReleaseStatus,
 )
@@ -257,38 +255,12 @@ def release_files(paths: dict[Role, Path]) -> list[ReleaseFile]:
 # ---------------------------------------------------------------- may it be released
 
 
-def check_approval(record: PostRecord) -> None:  # noqa: C901 - M1 step 4 splits it
+def check_approval(record: PostRecord) -> None:
     """The human approval, re-verified from what the card recorded (never from the
     status alone) plus the gates. Raises PublishRefusedError with the reason."""
-    a = record.approval
-    s = get_settings()
-    if record.flags.canary:
-        raise PublishRefusedError("flagged record: canary posts are never published")
-    # published counts too: a retry sends only the destinations that have no id yet
-    # (the publisher skips the rest), so a platform that failed can be tried again
-    if record.status not in (PostStatus.APPROVED, PostStatus.PUBLISHED):
-        raise PublishRefusedError(f"record status is {record.status.value}")
-    if a.decision != Decision.APPROVE:
-        raise PublishRefusedError("the card holds no approve decision")
-    if a.decided_at is None:
-        raise PublishRefusedError("the card was never finalised")
-    if not record.human_contribution.text.strip():
-        raise PublishRefusedError("no opening line from the approver")
-    if a.reviewer not in s.approvers:
-        raise PublishRefusedError(f"{a.reviewer} is not an authorised approver (D5)")
-    if record.channel_id == Channel.C:
-        so = a.stage_one
-        if so is None or so.decision != Decision.APPROVE or so.reviewer not in s.arabic_reviewers:
-            raise PublishRefusedError(
-                "channel C needs a stage-one approval by an authorised Arabic reviewer (D19)"
-            )
-    if not gates_cleared(record):
-        raise PublishRefusedError(
-            "a gate did not pass and was not a question settled on the card; R-20 forbids "
-            "any other override"
-        )
-    if record.sponsor is not None and record.sponsor.permit_status != "granted":
-        raise PublishRefusedError("sponsored post without the UAE permit (PRD 4.6)")
+    why = approval_refusal(record, get_settings())
+    if why:
+        raise PublishRefusedError(why)
 
 
 def authorise(

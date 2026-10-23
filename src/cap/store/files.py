@@ -25,6 +25,7 @@ class FileStore(MemoryStore):
 
     def __init__(self, root: Path) -> None:
         super().__init__()
+        self._save_lock = threading.Lock()
         self.root = root
         posts = self.root / "posts"
         posts.mkdir(parents=True, exist_ok=True)
@@ -65,10 +66,13 @@ class FileStore(MemoryStore):
         return FileHistory(self.root / HISTORY_FILE)
 
     def put(self, record: PostRecord) -> None:
-        super().put(record)
-        _atomic_write(
-            self.root / "posts" / f"{record.post_id}.json", record.model_dump_json(indent=1)
-        )
+        # one lock round the check, the memory copy and the file: otherwise two saves can
+        # pass the revision check in order and reach the disk out of order
+        with self._save_lock:
+            super().put(record)
+            _atomic_write(
+                self.root / "posts" / f"{record.post_id}.json", record.model_dump_json(indent=1)
+            )
 
     def save_state(self) -> None:
         _atomic_write(

@@ -96,19 +96,8 @@ def _domain_ok(url: str, channel: str) -> bool:
     return any(host == d or host.endswith("." + d) for d in SCIENCE_DOMAINS)
 
 
-def _search_with_model(  # noqa: C901 - M1 step 4 splits it
-    topic: str, channel: str, claims: list[str] | None = None
-) -> tuple[list[str], str]:
-    """The scout: the model with the web-search tool, domain-restricted. Returns the
-    URLs it chose (only ones its searches returned) and its one-line note."""
-    import anthropic
-
-    s = get_settings()
-    assert s.anthropic_api_key is not None
-    client = anthropic.Anthropic(
-        api_key=s.anthropic_api_key.get_secret_value(),
-        timeout=anthropic.Timeout(300.0, connect=10.0),
-    )
+def _search_tool(channel: str) -> tuple[dict[str, Any], str]:
+    """The web-search tool restricted for the channel, and what to look for."""
     tool: dict[str, Any] = {"type": "web_search_20260209", "name": "web_search", "max_uses": 4}
     if channel == "A":
         tool["blocked_domains"] = BLOCKED_DOMAINS
@@ -122,6 +111,73 @@ def _search_with_model(  # noqa: C901 - M1 step 4 splits it
             "pages that explain the mechanism with figures and dates: science and "
             "earth-observation agencies, encyclopaedic references, peer-reviewed journals"
         )
+    return tool, what
+
+
+def _ask_scout(client: Any, system: str, request: str, tool: dict[str, Any]) -> Any:
+    """One search call; a domain the API refuses is dropped and the call made again."""
+    import anthropic
+
+    for _ in range(3):
+        try:
+            return client.messages.create(
+                model=SONNET,
+                max_tokens=2000,
+                system=system,
+                messages=[{"role": "user", "content": request}],
+                tools=[tool],
+            )
+        except anthropic.BadRequestError as e:
+            bad = refused_domains(str(e))
+            if not bad or "allowed_domains" not in tool:
+                raise
+            _REFUSED.update(bad)
+            tool["allowed_domains"] = [d for d in tool["allowed_domains"] if d not in _REFUSED]
+    raise RuntimeError("the search API kept refusing domains")
+
+
+def _read_reply(content: list[Any]) -> tuple[set[str], str]:
+    """The URLs the searches returned, and the scout's text."""
+    searched: set[str] = set()
+    text = ""
+    for block in content:
+        t = getattr(block, "type", "")
+        if t == "web_search_tool_result":
+            searched |= {
+                u
+                for item in getattr(block, "content", []) or []
+                if (u := getattr(item, "url", None))
+            }
+        elif t == "text":
+            text += getattr(block, "text", "")
+    return searched, text
+
+
+def _chosen(searched: set[str], text: str) -> list[str]:
+    """The pages the scout named, kept only when a search returned them (as returned)."""
+    by_key = {url_key(u): u for u in searched}
+    chosen: list[str] = []
+    for m in re.finditer(r"https?://[^\s<>\"']+", text):
+        u = by_key.get(url_key(m.group(0)))
+        if u and u not in chosen:
+            chosen.append(u)
+    return chosen[:MAX_SOURCES]
+
+
+def _search_with_model(
+    topic: str, channel: str, claims: list[str] | None = None
+) -> tuple[list[str], str]:
+    """The scout: the model with the web-search tool, domain-restricted. Returns the
+    URLs it chose (only ones its searches returned) and its one-line note."""
+    import anthropic
+
+    s = get_settings()
+    assert s.anthropic_api_key is not None
+    client = anthropic.Anthropic(
+        api_key=s.anthropic_api_key.get_secret_value(),
+        timeout=anthropic.Timeout(300.0, connect=10.0),
+    )
+    tool, what = _search_tool(channel)
     system = (
         "You are a research scout for a disclosed-AI explainer channel. Find the best "
         f"{MAX_SOURCES} pages for the topic: {what}. Search at most four times. Prefer "
@@ -129,44 +185,9 @@ def _search_with_model(  # noqa: C901 - M1 step 4 splits it
         "found in them. Finish with one line per chosen page, in this exact form and "
         "nothing else:\nURL | why this page\n"
     )
-    resp = None
-    for _ in range(3):  # drop any domain the API refuses, then try again
-        try:
-            resp = client.messages.create(
-                model=SONNET,
-                max_tokens=2000,
-                system=system,
-                messages=[{"role": "user", "content": _scout_request(topic, channel, claims)}],
-                tools=[tool],  # type: ignore[list-item]
-            )
-            break
-        except anthropic.BadRequestError as e:
-            bad = refused_domains(str(e))
-            if not bad or "allowed_domains" not in tool:
-                raise
-            _REFUSED.update(bad)
-            tool["allowed_domains"] = [d for d in tool["allowed_domains"] if d not in _REFUSED]
-    if resp is None:
-        raise RuntimeError("the search API kept refusing domains")
-    searched: set[str] = set()
-    text = ""
-    for block in resp.content:
-        t = getattr(block, "type", "")
-        if t == "web_search_tool_result":
-            for item in getattr(block, "content", []) or []:
-                u = getattr(item, "url", None)
-                if u:
-                    searched.add(u)
-        elif t == "text":
-            text += getattr(block, "text", "")
-    by_key = {url_key(u): u for u in searched}
-    chosen: list[str] = []
-    for line in text.splitlines():
-        for m in re.finditer(r"https?://[^\s<>\"']+", line):
-            u = by_key.get(url_key(m.group(0)))  # the URL as the search returned it
-            if u and u not in chosen:
-                chosen.append(u)
-    return chosen[:MAX_SOURCES], text.strip()[:300]
+    resp = _ask_scout(client, system, _scout_request(topic, channel, claims), tool)
+    searched, text = _read_reply(resp.content)
+    return _chosen(searched, text), text.strip()[:300]
 
 
 def url_key(url: str) -> str:

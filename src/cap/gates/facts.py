@@ -168,32 +168,50 @@ def _verify(
     return status, quote, in_source, res.output.injection_suspected
 
 
-def check_claim(  # noqa: C901 - M1 step 4 splits it
+def _candidates(claim: Claim, sources: list[SourceDoc]) -> tuple[list[SourceDoc], str]:
+    """The sources a claim may be checked against, or none with the reason."""
+    if claim.source_url and claim.source_url.startswith(TESTLOG_SCHEME):
+        # the drafter cites test-log entries as testlog://<anything>; the post has one
+        found = [s for s in sources if s.url.startswith(TESTLOG_SCHEME)]
+        if found:
+            claim.source_url = found[0].url
+    elif claim.source_url:
+        found = [s for s in sources if s.url == claim.source_url]
+    else:
+        found = list(sources)
+    if claim.source_url and not found:
+        return [], "cited source is not among the post's sources"
+    if not found:
+        return [], "no sources on the post"
+    return found, ""
+
+
+def _final_without_support(claim: Claim, seen: list[ClaimStatus]) -> ClaimStatus:
+    """No source confirmed the claim twice: what the verifiers saw decides the status."""
+    if "outdated" in seen:
+        return "outdated"
+    if claim.source_url is None and all(s == "missing_source" for s in seen):
+        return "missing_source"
+    return "unsupported"
+
+
+def check_claim(
     client: ModelClient,
     claim: Claim,
     sources: list[SourceDoc],
     test_log: str = "",
     fast_moving: bool = False,
 ) -> tuple[ClaimCheckResult, bool]:
+    """Two independent verifiers per source (B, then C only when B confirms): the first
+    source both confirm makes the claim supported, with B's quote. Returns the result
+    and whether either verifier suspected an injection."""
     cc = ClaimCheckResult(claim_text=claim.text, source_url=claim.source_url)
-    injection = False
-    if claim.source_url and claim.source_url.startswith(TESTLOG_SCHEME):
-        # the drafter cites test-log entries as testlog://<anything>; the post has one
-        candidates = [s for s in sources if s.url.startswith(TESTLOG_SCHEME)]
-        if candidates:
-            claim.source_url = cc.source_url = candidates[0].url
-    elif claim.source_url:
-        candidates = [s for s in sources if s.url == claim.source_url]
-    else:
-        candidates = list(sources)
-    if claim.source_url and not candidates:
-        cc.final = "missing_source"
-        cc.note = "cited source is not among the post's sources"
-        return cc, injection
+    candidates, why = _candidates(claim, sources)
+    cc.source_url = claim.source_url
     if not candidates:
-        cc.final = "missing_source"
-        cc.note = "no sources on the post"
-        return cc, injection
+        cc.final, cc.note = "missing_source", why
+        return cc, False
+    injection = False
     seen: list[ClaimStatus] = []
     for src in candidates:
         cc.status_b, quote_b, cc.quote_in_source, inj_b = _verify(
@@ -214,12 +232,7 @@ def check_claim(  # noqa: C901 - M1 step 4 splits it
             return cc, injection
         cc.disagreement = True
         cc.note = f"second verifier disagreed on {src.url}: {cc.status_c}"
-    if "outdated" in seen:
-        cc.final = "outdated"
-    elif claim.source_url is None and all(s == "missing_source" for s in seen):
-        cc.final = "missing_source"
-    else:
-        cc.final = "unsupported"
+    cc.final = _final_without_support(claim, seen)
     return cc, injection
 
 

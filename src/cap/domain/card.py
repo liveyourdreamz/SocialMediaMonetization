@@ -231,7 +231,90 @@ def record_verdict(
     return record
 
 
-def finalise(  # noqa: C901 - M1 step 4 splits it
+_STATUS_FOR = {
+    Decision.APPROVE: PostStatus.APPROVED,
+    Decision.REJECT: PostStatus.REJECTED,
+    Decision.ESCALATE: PostStatus.PARKED,
+}
+
+
+def _check_can_finalise(record: PostRecord, reviewer: str) -> None:
+    if record.status != PostStatus.AWAITING_APPROVAL:
+        raise CardError(f"post is {record.status.value}; finalise applies once, while awaiting")
+    if record.approval.pre_reveal_decision is None or record.flags.gate_blind:
+        raise CardError("no pre-reveal verdict recorded")
+    if reviewer != record.approval.reviewer:
+        raise CardError("finalise must come from the reviewer who recorded the verdict")
+
+
+def _check_inputs(
+    record: PostRecord,
+    decision: Decision,
+    revising: bool,
+    reason_code: ReasonCode | None,
+    opening_line: str | None,
+    spot_check_supported: bool | None,
+    acknowledged: bool,
+) -> None:
+    """Everything is validated before the record is touched, so a refused revision
+    leaves it intact."""
+    if revising and decision in (Decision.REJECT, Decision.ESCALATE) and reason_code is None:
+        raise CardError("a revised reject or escalate needs a reason chip")
+    if revising and decision == Decision.APPROVE:
+        _check_approve_inputs(record, opening_line, spot_check_supported)
+    if decision == Decision.APPROVE:
+        _check_stage_one(record)
+        if record.flags.needs_decision and not acknowledged:
+            raise CardError(
+                "this post has questions only you can settle (shown above); tick that you "
+                "reviewed them to approve"
+            )
+
+
+def _apply_revision(
+    record: PostRecord,
+    decision: Decision,
+    reviewer: str,
+    reason_code: ReasonCode | None,
+    opening_line: str | None,
+    spot_check_supported: bool | None,
+) -> None:
+    a = record.approval
+    if decision == Decision.APPROVE:
+        record.human_contribution.text = (opening_line or "").strip()
+        record.human_contribution.author = reviewer
+        if a.spot_check is not None:
+            a.spot_check.reviewer_said_supported = spot_check_supported
+    a.decision = decision
+    a.reason_code = reason_code or a.reason_code
+    a.revised_after_reveal = True
+    record.log(f"verdict revised after reveal to {decision.value}")
+
+
+def _close(record: PostRecord, decision: Decision, reviewer: str) -> None:
+    """The status the decision means, the time, the questions accepted on an approve,
+    and why it stopped otherwise."""
+    a = record.approval
+    record.status = _STATUS_FOR[decision]
+    a.decided_at = datetime.now(UTC)
+    if decision == Decision.APPROVE:
+        if record.flags.needs_decision:
+            a.decisions_acknowledged = list(record.flags.needs_decision)
+            record.log(
+                f"{reviewer} reviewed and accepted: "
+                + "; ".join(n.split(":")[0] for n in record.flags.needs_decision)
+            )
+        return
+    chip = a.reason_code.value.replace("_", " ") if a.reason_code else "no reason chip"
+    what = "rejected" if decision == Decision.REJECT else "escalated"
+    record.stop("review", f"{what} by {reviewer}: {chip}")
+    if decision == Decision.ESCALATE:
+        record.log(
+            f"parked: escalated by {reviewer}: {a.reason_code.value if a.reason_code else 'no chip'}"
+        )
+
+
+def finalise(
     record: PostRecord,
     *,
     reviewer: str,
@@ -244,72 +327,24 @@ def finalise(  # noqa: C901 - M1 step 4 splits it
     """Second step: the reviewer has seen the gates; may revise once (D33). Applies
     the status change and the canary outcome. Token issue is the caller's job (needs
     the asset hash). Exactly once per post."""
-    if record.status != PostStatus.AWAITING_APPROVAL:
-        raise CardError(f"post is {record.status.value}; finalise applies once, while awaiting")
+    _check_can_finalise(record, reviewer)
     a = record.approval
-    if a.pre_reveal_decision is None or record.flags.gate_blind:
-        raise CardError("no pre-reveal verdict recorded")
-    if reviewer != a.reviewer:
-        raise CardError("finalise must come from the reviewer who recorded the verdict")
-
     if record.flags.canary:
         # P14: a canary is scored on the blind verdict only. The reveal names the fault,
         # so a revision after it would be a catch with the answer in hand.
         if revised_decision is not None and revised_decision != a.pre_reveal_decision:
             record.log("revision after reveal ignored: canaries are scored blind")
         return _finalise_canary(record)
-
     revising = revised_decision is not None and revised_decision != a.pre_reveal_decision
-    decision: Decision = (
-        revised_decision
-        if revising and revised_decision is not None
-        else (a.decision or Decision.ESCALATE)
+    decision = (
+        revised_decision if revising and revised_decision else (a.decision or Decision.ESCALATE)
     )
-    # validate everything before touching the record (a refused revision leaves it intact)
+    _check_inputs(
+        record, decision, revising, reason_code, opening_line, spot_check_supported, acknowledged
+    )
     if revising:
-        if decision in (Decision.REJECT, Decision.ESCALATE) and reason_code is None:
-            raise CardError("a revised reject or escalate needs a reason chip")
-        if decision == Decision.APPROVE:
-            _check_approve_inputs(record, opening_line, spot_check_supported)
-    if decision == Decision.APPROVE:
-        _check_stage_one(record)
-        if record.flags.needs_decision and not acknowledged:
-            raise CardError(
-                "this post has questions only you can settle (shown above); tick that you "
-                "reviewed them to approve"
-            )
-    if revising:
-        if decision == Decision.APPROVE:
-            record.human_contribution.text = (opening_line or "").strip()
-            record.human_contribution.author = reviewer
-            if a.spot_check is not None:
-                a.spot_check.reviewer_said_supported = spot_check_supported
-        a.decision = decision
-        a.reason_code = reason_code or a.reason_code
-        a.revised_after_reveal = True
-        record.log(f"verdict revised after reveal to {decision.value}")
-    record.status = {
-        Decision.APPROVE: PostStatus.APPROVED,
-        Decision.REJECT: PostStatus.REJECTED,
-        Decision.ESCALATE: PostStatus.PARKED,
-    }[decision]
-    a.decided_at = datetime.now(UTC)
-    if decision == Decision.APPROVE and record.flags.needs_decision:
-        a.decisions_acknowledged = list(record.flags.needs_decision)
-        record.log(
-            f"{reviewer} reviewed and accepted: "
-            + "; ".join(n.split(":")[0] for n in record.flags.needs_decision)
-        )
-    if decision != Decision.APPROVE:
-        chip = a.reason_code.value.replace("_", " ") if a.reason_code else "no reason chip"
-        record.stop(
-            "review",
-            f"{'rejected' if decision == Decision.REJECT else 'escalated'} by {reviewer}: {chip}",
-        )
-    if decision == Decision.ESCALATE:
-        record.log(
-            f"parked: escalated by {reviewer}: {a.reason_code.value if a.reason_code else 'no chip'}"
-        )
+        _apply_revision(record, decision, reviewer, reason_code, opening_line, spot_check_supported)
+    _close(record, decision, reviewer)
     return record
 
 

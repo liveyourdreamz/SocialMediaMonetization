@@ -177,38 +177,51 @@ def test_the_manifest_is_canonical_and_does_not_depend_on_where_the_files_are(tm
     assert release.build_manifest(r).sha256 == a.sha256
 
 
-def _tamper(r, files, what: str) -> None:  # noqa: C901 - M1 step 4 splits it
-    v_long = next(v for v in r.variants if v.platform.value == "youtube_long")
-    v_short = next(v for v in r.variants if v.platform.value == "youtube_short")
-    if what == "short_file":
-        files["short"].write_bytes(b"NOT THE APPROVED SHORT")
-    elif what == "thumbnail_file":
-        files["thumbnail"].write_bytes(b"another picture")
-    elif what == "long_file":
-        files["long"].write_bytes(b"re-rendered")
-    elif what == "swap_short_path":
-        evil = files["short"].with_name("evil.mp4")
-        evil.write_bytes(b"evil")
-        next(f for f in r.release.files if f.role == "short").uri = str(evil)
-    elif what == "title":
-        v_long.title = "TAMPERED TITLE http://evil.example"
-    elif what == "short_title":
-        v_short.title = "Different Short title"
-    elif what == "caption":
-        r.draft.caption = v_long.caption = "TAMPERED caption"
-    elif what == "short_caption":
-        v_short.caption = "TAMPERED short caption"
-    elif what == "tags":
-        r.brief.topic = "completely different topic words"
-    elif what == "made_for_kids":
-        r.gates.disclosure.made_for_kids = True
-    elif what == "synthetic_media":
-        r.gates.disclosure.ai_label = False
-        r.media_manifest.synthetic_elements_present = False
-    elif what == "paid_promotion":
-        r.gates.disclosure.paid_promo = True
-    elif what == "opening_line":
-        r.human_contribution.text = "a different line"
+def _variant(r, platform: str):
+    return next(v for v in r.variants if v.platform.value == platform)
+
+
+def _swap_short_path(r, files) -> None:
+    evil = files["short"].with_name("evil.mp4")
+    evil.write_bytes(b"evil")
+    next(f for f in r.release.files if f.role == "short").uri = str(evil)
+
+
+def _caption(r, files) -> None:
+    r.draft.caption = _variant(r, "youtube_long").caption = "TAMPERED caption"
+
+
+def _synthetic_media(r, files) -> None:
+    r.gates.disclosure.ai_label = False
+    r.media_manifest.synthetic_elements_present = False
+
+
+# every change a release must not survive, by name
+_TAMPER = {
+    "short_file": lambda r, f: f["short"].write_bytes(b"NOT THE APPROVED SHORT"),
+    "thumbnail_file": lambda r, f: f["thumbnail"].write_bytes(b"another picture"),
+    "long_file": lambda r, f: f["long"].write_bytes(b"re-rendered"),
+    "swap_short_path": _swap_short_path,
+    "title": lambda r, f: setattr(
+        _variant(r, "youtube_long"), "title", "TAMPERED TITLE http://evil.example"
+    ),
+    "short_title": lambda r, f: setattr(
+        _variant(r, "youtube_short"), "title", "Different Short title"
+    ),
+    "caption": _caption,
+    "short_caption": lambda r, f: setattr(
+        _variant(r, "youtube_short"), "caption", "TAMPERED short caption"
+    ),
+    "tags": lambda r, f: setattr(r.brief, "topic", "completely different topic words"),
+    "made_for_kids": lambda r, f: setattr(r.gates.disclosure, "made_for_kids", True),
+    "synthetic_media": _synthetic_media,
+    "paid_promotion": lambda r, f: setattr(r.gates.disclosure, "paid_promo", True),
+    "opening_line": lambda r, f: setattr(r.human_contribution, "text", "a different line"),
+}
+
+
+def _tamper(r, files, what: str) -> None:
+    _TAMPER[what](r, files)
 
 
 @pytest.mark.parametrize(
@@ -249,28 +262,25 @@ def test_a_missing_final_file_is_refused(tmp_path):
 # ---- C3: the publisher re-verifies the approval itself ------------------------
 
 
-def _break(r, what: str) -> None:  # noqa: C901 - M1 step 4 splits it
-    a = r.approval
-    if what == "no_decision":
-        a.decision = None
-    elif what == "rejected_on_card":
-        a.decision = Decision.REJECT
-    elif what == "never_finalised":
-        a.decided_at = None
-    elif what == "no_opening_line":
-        r.human_contribution.text = "  "
-    elif what == "reviewer_not_approver":
-        a.reviewer = "intruder"
-    elif what == "canary":
-        r.flags.canary = True
-    elif what == "gate_failed":
-        r.gates.facts.passed = False
-    elif what == "not_approved":
-        r.status = PostStatus.AWAITING_APPROVAL
-    elif what == "no_permit":
-        r.sponsor = Sponsor(sponsor_id="s", name="NoteCo", permit_status="applied")
-    elif what == "release_not_ready":
-        r.release.status = release.ReleaseStatus.PREPARING
+# every way an approval can fail to hold, by name
+_BREAK = {
+    "no_decision": lambda r: setattr(r.approval, "decision", None),
+    "rejected_on_card": lambda r: setattr(r.approval, "decision", Decision.REJECT),
+    "never_finalised": lambda r: setattr(r.approval, "decided_at", None),
+    "no_opening_line": lambda r: setattr(r.human_contribution, "text", "  "),
+    "reviewer_not_approver": lambda r: setattr(r.approval, "reviewer", "intruder"),
+    "canary": lambda r: setattr(r.flags, "canary", True),
+    "gate_failed": lambda r: setattr(r.gates.facts, "passed", False),
+    "not_approved": lambda r: setattr(r, "status", PostStatus.AWAITING_APPROVAL),
+    "no_permit": lambda r: setattr(
+        r, "sponsor", Sponsor(sponsor_id="s", name="NoteCo", permit_status="applied")
+    ),
+    "release_not_ready": lambda r: setattr(r.release, "status", release.ReleaseStatus.PREPARING),
+}
+
+
+def _break(r, what: str) -> None:
+    _BREAK[what](r)
 
 
 @pytest.mark.parametrize(

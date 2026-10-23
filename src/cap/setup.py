@@ -203,18 +203,9 @@ def ensure_local_secrets(path: Path) -> None:
     restrict_to_owner(path)
 
 
-def ensure_env(  # noqa: C901 - M1 step 4 splits it
-    path: Path = Path(".env"),
-    *,
-    force: bool = False,
-    ask: Callable[[str], str] | None = None,
-    out: Callable[[str], None] = print,
-) -> str:
-    """Make sure .env exists and (when interactive) holds a key. Returns the backend.
-
-    Asks at most once: a blank answer is remembered (DECLINED) until `cap key`.
-    `ask` is the prompt function; None means getpass when stdin is a terminal and no
-    prompt at all otherwise (a service or a test never blocks on input)."""
+def _prepare_file(path: Path, out: Callable[[str], None]) -> None:
+    """.env exists (from .env.example on a first run), is UTF-8, and has the local
+    signing key and sign-in codes."""
     if not path.exists():
         example = path.with_name(".env.example")
         text = example.read_text(encoding="utf-8") if example.exists() else ""
@@ -222,19 +213,10 @@ def ensure_env(  # noqa: C901 - M1 step 4 splits it
     if normalise_encoding(path):
         out(f"{path.name} was saved in the Windows code page; rewrote it as UTF-8.")
     ensure_local_secrets(path)
-    have, problem = _saved_key(path)
-    if have and not force:
-        out(f"API key: saved in {path.resolve()} (run `uv run cap key` to change it)")
-        return "anthropic"
-    if problem:
-        out(problem)
-    elif declined(path) and not force:
-        out("API key: none (mock mode, sample drafts). Run set-key.bat to add one.")
-        return "mock"
-    if ask is None:
-        if not force and not sys.stdin.isatty():
-            return backend(path)  # a service or a test never blocks on input
-        ask = getpass.getpass
+
+
+def _ask_for_key(path: Path, ask: Callable[[str], str], out: Callable[[str], None]) -> str:
+    """Up to three tries; blank means mock mode. The key is saved however it reads."""
     out("")
     out(f"Anthropic API key. Typed hidden; saved only to {path.resolve()}.")
     out("Leave blank for mock mode (sample drafts, no network).")
@@ -251,7 +233,36 @@ def ensure_env(  # noqa: C901 - M1 step 4 splits it
     out(
         "Saved: real drafts and judges." if key else "No key: mock mode. `uv run cap key` adds one."
     )
-    return "anthropic" if key else "mock"
+    return key
+
+
+def ensure_env(
+    path: Path = Path(".env"),
+    *,
+    force: bool = False,
+    ask: Callable[[str], str] | None = None,
+    out: Callable[[str], None] = print,
+) -> str:
+    """Make sure .env exists and (when interactive) holds a key. Returns the backend.
+
+    Asks at most once: a blank answer is remembered (DECLINED) until `cap key`.
+    `ask` is the prompt function; None means getpass when stdin is a terminal and no
+    prompt at all otherwise (a service or a test never blocks on input)."""
+    _prepare_file(path, out)
+    have, problem = _saved_key(path)
+    if have and not force:
+        out(f"API key: saved in {path.resolve()} (run `uv run cap key` to change it)")
+        return "anthropic"
+    if problem:
+        out(problem)
+    elif declined(path) and not force:
+        out("API key: none (mock mode, sample drafts). Run set-key.bat to add one.")
+        return "mock"
+    if ask is None:
+        if not force and not sys.stdin.isatty():
+            return backend(path)  # a service or a test never blocks on input
+        ask = getpass.getpass
+    return "anthropic" if _ask_for_key(path, ask, out) else "mock"
 
 
 def check_key(key: str) -> str | None:
