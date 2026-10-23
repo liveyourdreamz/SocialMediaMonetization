@@ -23,6 +23,7 @@ import time
 from collections.abc import Callable
 
 from cap.approval import release_job
+from cap.audit import acting_as
 from cap.demo.seed import run_brief_job, run_tour
 from cap.jobs import Job, JobKind
 from cap.schema.post_record import PostRecord, PostStatus, ReleaseStatus
@@ -112,7 +113,8 @@ class Worker:
         try:
             if handler is None:
                 raise LookupError(f"no handler for {job.kind.value} jobs")
-            handler(self.store, job)
+            with acting_as("worker"):
+                handler(self.store, job)
         except Exception as e:  # noqa: BLE001 - recorded on the job and the post (D43)
             why = f"{type(e).__name__}: {str(e)[:300]}"
             _log.exception("job %s (%s) failed", job.id, job.kind.value)

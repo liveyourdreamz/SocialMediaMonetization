@@ -93,7 +93,7 @@ layers = [
     "cap.publisher",
     "cap.release",
     "cap.store",
-    "cap.jobs",
+    "cap.jobs | cap.audit",
     "cap.render",
     "cap.harness | cap.research",
     "cap.gates",

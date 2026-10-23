@@ -6,6 +6,7 @@ put together (PRD 4.5). Entry points (cap serve, the smoke run, the offline chec
 from __future__ import annotations
 
 import html
+import logging
 import threading
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -16,6 +17,7 @@ from cap.approval.hosts import HostGuard, static_hosts
 from cap.approval.identity import Reviewer, reviewer_identity, signed_in_name
 from cap.approval.sessions import SessionStore
 from cap.approval.throttle import SignInThrottle
+from cap.audit import ChainCheck, acting_as
 from cap.config import get_settings
 from cap.store import MemoryStore, PostNotFoundError, PostStore
 from cap.ui import STATIC, ui_router
@@ -23,6 +25,7 @@ from cap.worker import Worker
 
 _WORKERS: dict[int, Worker] = {}  # one worker per store, keyed by the store's id
 _WORKERS_GUARD = threading.Lock()
+_AUDIT_CHECKS: dict[int, tuple[PostStore, ChainCheck]] = {}
 
 
 def worker_for(store: PostStore) -> Worker:
@@ -34,11 +37,34 @@ def worker_for(store: PostStore) -> Worker:
         return w
 
 
+def audit_at_start(store: PostStore) -> ChainCheck:
+    """Once per store: apply the retention period, then walk the chain. A broken chain
+    is shown on the Operator screen and written into the log itself; nothing stops."""
+    with _WORKERS_GUARD:
+        done = _AUDIT_CHECKS.get(id(store))
+        if done is not None and done[0] is store:
+            return done[1]
+    with acting_as("system"):
+        removed = store.audit.purge(get_settings().audit_retention_days)
+        check = store.audit.verify()
+        if not check.ok:
+            logging.getLogger("cap.audit").error("audit chain broken: %s", check.why)
+            store.audit.append(
+                "audit chain broken", detail={"at": check.broken_at, "why": check.why}
+            )
+        elif removed:
+            store.audit.append("audit entries past retention removed", detail={"count": removed})
+    with _WORKERS_GUARD:
+        _AUDIT_CHECKS[id(store)] = (store, check)
+    return check
+
+
 def stop_workers() -> None:
     """Stop every worker this process started (the end of `cap serve`, and tests)."""
     with _WORKERS_GUARD:
         workers = list(_WORKERS.values())
         _WORKERS.clear()
+        _AUDIT_CHECKS.clear()
     for w in workers:
         w.stop()
 
@@ -51,10 +77,18 @@ def create_app(store: PostStore | None = None, *, run_jobs: bool = True) -> Fast
     local = settings.env in ("local", "test")
     app = FastAPI(title="Content Agent Portfolio", docs_url=None, openapi_url=None, redoc_url=None)
     app.state.store = store
+    app.state.audit_check = audit_at_start(store)
     app.state.worker = worker_for(store) if run_jobs else None
     app.state.sessions = SessionStore()
     app.state.throttle = SignInThrottle()
     app.add_middleware(HostGuard, allowed=static_hosts(settings))
+
+    @app.middleware("http")
+    async def _actor(request: Request, call_next):  # type: ignore[no-untyped-def]
+        """Audit entries a request writes name the person signed in (cap.audit)."""
+        with acting_as(signed_in_name(request) or "anonymous"):
+            return await call_next(request)
+
     app.include_router(api_router(store))
     app.include_router(ui_router(store))
     app.mount("/static", STATIC, name="static")

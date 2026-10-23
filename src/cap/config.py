@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     database_url: str = ""
     pg_bin: str = ""  # where initdb and pg_ctl live; empty: found as cap.localpg describes
     pg_port: int = Field(default=54329, ge=1024, le=65535)
+    # ADR-011: how long audit entries are kept (CAP_AUDIT_RETENTION_DAYS); 90 until
+    # counsel confirms the period. Older entries are removed at start-up.
+    audit_retention_days: int = Field(default=90, ge=1, le=3650)
 
     # Google sign-in (OIDC). When both are set, /login offers "Sign in with Google" and
     # the e-mail must map to a reviewer below. Values come from .env locally and Secret

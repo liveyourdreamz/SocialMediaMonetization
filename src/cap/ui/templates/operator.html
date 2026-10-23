@@ -9,6 +9,7 @@
   </header>
 
   {% if error %}<div class="error" role="alert"><strong>Not run.</strong> {{ error }}</div>{% endif %}
+  {% if audit_check and not audit_check.ok %}<div class="error" role="alert"><strong>The audit log has been altered.</strong> {{ audit_check.why }}. Someone or something changed the database outside the app; the app carries on, and this is recorded.</div>{% endif %}
   <form id="brief" method="post" action="/operator/brief" class="card stack" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
     <fieldset class="field" style="border: 0; padding: 0; margin: 0">
       <legend class="eyebrow" style="margin-bottom: 8px">Channel</legend>

@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from cap.audit import AuditLog, MemoryAuditLog
 from cap.jobs import JobQueue, MemoryJobQueue
 from cap.schema.post_record import PostRecord, PostStatus
 
@@ -51,6 +52,16 @@ def park_if_interrupted(record: PostRecord) -> bool:
     return True
 
 
+def saved_detail(record: PostRecord, history_before: int) -> dict[str, object]:
+    """What the audit log keeps for one save of a post: the revision, the status and
+    the history lines this save added (every card decision lands in those lines)."""
+    return {
+        "revision": record.revision,
+        "status": record.status.value,
+        "added": record.history[history_before:],
+    }
+
+
 class PostNotFoundError(LookupError):
     """No post has this id. The web layer turns it into a 404."""
 
@@ -78,8 +89,9 @@ class PostStore(ABC):
     card by a reviewer starts it.
     """
 
-    def __init__(self, jobs: JobQueue) -> None:
+    def __init__(self, jobs: JobQueue, audit: AuditLog) -> None:
         self.jobs = jobs
+        self.audit = audit
         self.state = AppState()
         self.unreadable: list[str] = []  # stored posts this build could not read, by id
 
@@ -154,10 +166,12 @@ class PostStore(ABC):
     def pause(self, reason: str) -> None:
         self.state.paused, self.state.paused_reason = True, reason
         self.save_state()
+        self.audit.append("queue paused", detail={"reason": reason})
 
     def reopen(self) -> None:
         self.state.paused, self.state.paused_reason = False, ""
         self.save_state()
+        self.audit.append("queue reopened")
 
     def set_analytics(self, figures: dict[str, Any], note: str = "") -> None:
         self.state.analytics, self.state.analytics_note = figures, note
@@ -184,7 +198,7 @@ class MemoryStore(PostStore):
     """Everything in memory; nothing survives the process. Tests and the offline check."""
 
     def __init__(self) -> None:
-        super().__init__(MemoryJobQueue())
+        super().__init__(MemoryJobQueue(), MemoryAuditLog())
         self._posts: dict[str, PostRecord] = {}
         self._lock = threading.Lock()
         self._opened: dict[tuple[str, str], datetime] = {}
@@ -204,6 +218,11 @@ class MemoryStore(PostStore):
                 raise PostConflictError(record.post_id)
             record.revision += 1
             self._posts[record.post_id] = record.model_copy(deep=True)
+            self.audit.append(
+                "post saved",
+                record.post_id,
+                saved_detail(record, len(stored.history) if stored else 0),
+            )
 
     def all(self) -> list[PostRecord]:
         return [p.model_copy(deep=True) for p in self._posts.values()]

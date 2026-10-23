@@ -27,7 +27,10 @@ from cap.store import (
     PostNotFoundError,
     PostStore,
     migrations,
+    saved_detail,
 )
+from cap.store.pgaudit import PostgresAuditLog
+from cap.store.pgaudit import append as audit_append
 from cap.store.pgjobs import PostgresJobQueue
 
 _log = logging.getLogger("cap.store")
@@ -48,7 +51,7 @@ def connect(url: str, *, max_size: int = 8) -> ConnectionPool:
 
 class PostgresStore(PostStore):
     def __init__(self, pool: ConnectionPool) -> None:
-        super().__init__(PostgresJobQueue(pool))
+        super().__init__(PostgresJobQueue(pool), PostgresAuditLog(pool))
         self._pool = pool
         with self._pool.connection() as conn:
             applied = migrations.apply(conn)
@@ -84,8 +87,17 @@ class PostgresStore(PostStore):
         return rec
 
     def put(self, record: PostRecord) -> None:
-        with self._pool.connection() as conn:
+        with self._pool.connection() as conn, conn.transaction():
+            # the save and its audit entry commit together, or neither does
+            row = conn.execute(
+                "SELECT jsonb_array_length(record->'history') FROM posts"
+                " WHERE post_id = %s FOR UPDATE",
+                (record.post_id,),
+            ).fetchone()
             _save(conn, record)
+            audit_append(
+                conn, "post saved", record.post_id, saved_detail(record, row[0] if row else 0)
+            )
 
     def all(self) -> list[PostRecord]:
         return self._select("SELECT post_id, record FROM posts")

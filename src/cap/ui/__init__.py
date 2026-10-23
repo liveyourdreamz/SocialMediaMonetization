@@ -99,6 +99,7 @@ def ui_router(store: PostStore) -> APIRouter:
         """A fresh session (and CSRF token) for `name`; any session the browser
         already had is ended, so a planted id never becomes a signed-in one."""
         sessions(request).end(request.cookies.get(COOKIE))
+        store.audit.append("signed in", detail={"who": name})
         resp = RedirectResponse("/", status_code=303)
         secure = secure_cookies()
         sid = sessions(request).start(name)
@@ -180,6 +181,7 @@ def ui_router(store: PostStore) -> APIRouter:
         name = person_for_secret(secret)
         if name is None:
             throttle.failed(client)
+            store.audit.append("sign-in refused", detail={"from": client})
             why = throttle.refusal(client) or (
                 "That code is not right. Each person's code is shown in the app's "
                 "console window on the laptop when it starts."
@@ -192,6 +194,7 @@ def ui_router(store: PostStore) -> APIRouter:
 
     @r.post("/logout", dependencies=[Depends(check_csrf)])
     def logout(request: Request) -> Response:
+        store.audit.append("signed out")
         sessions(request).end(request.cookies.get(COOKIE))
         resp = RedirectResponse("/login", status_code=303)
         resp.delete_cookie(COOKIE)
@@ -618,6 +621,10 @@ def ui_router(store: PostStore) -> APIRouter:
         form = await request.form()
         values = {k: str(v) for k, v in form.items() if k != "csrf" and isinstance(v, str)}
         conn.set_credentials(platform, values)
+        # which fields were set, never their values
+        store.audit.append(
+            "platform credentials saved", detail={"platform": platform, "fields": sorted(values)}
+        )
         return RedirectResponse(f"/connections?saved={platform}", status_code=303)
 
     @r.get("/connections/{platform}/connect")
@@ -683,6 +690,7 @@ def ui_router(store: PostStore) -> APIRouter:
             )
             resp.delete_cookie(conn_state_cookie)
             return resp
+        store.audit.append("platform connected", detail={"platform": platform})
         resp = RedirectResponse(f"/connections?connected={platform}", status_code=303)
         resp.delete_cookie(conn_state_cookie)
         return resp
@@ -699,6 +707,10 @@ def ui_router(store: PostStore) -> APIRouter:
         if platform not in conn.PLATFORMS:
             raise HTTPException(404, "no such platform")
         (conn.forget if forget else conn.disconnect)(platform)
+        store.audit.append(
+            "platform forgotten" if forget else "platform disconnected",
+            detail={"platform": platform},
+        )
         return RedirectResponse("/connections", status_code=303)
 
     # ---- guided tour: one worked Patch episode, idea to published ----------------
@@ -789,6 +801,7 @@ def ui_router(store: PostStore) -> APIRouter:
             connections_summary=_connections_summary(),
             build=__import__("cap.version", fromlist=["build_id"]).build_id(),
             running=any(p.status.value in ("drafting", "gated", "rendering") for p in store.all()),
+            audit_check=getattr(request.app.state, "audit_check", None),
         )
 
     return r
