@@ -12,7 +12,7 @@ import threading
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from cap.approval.app import api_router
+from cap.approval import api
 from cap.approval.hosts import HostGuard, static_hosts
 from cap.approval.identity import Reviewer, reviewer_identity, signed_in_name
 from cap.approval.sessions import SessionStore
@@ -89,7 +89,7 @@ def create_app(store: PostStore | None = None, *, run_jobs: bool = True) -> Fast
         with acting_as(signed_in_name(request) or "anonymous"):
             return await call_next(request)
 
-    app.include_router(api_router(store))
+    app.include_router(api.router)
     app.include_router(ui_router())
     app.mount("/static", STATIC, name="static")
     if local:

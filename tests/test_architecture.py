@@ -55,7 +55,7 @@ LONG_FILES = {
     "src/cap/schema/post_record.py": 451,
     "src/cap/models/__init__.py": 419,
 }
-MAX_COMPLEX = 16  # functions marked "noqa: C901"; never raise it
+MAX_COMPLEX = 15  # functions marked "noqa: C901"; never raise it
 
 
 def test_no_file_grows_past_the_limit():

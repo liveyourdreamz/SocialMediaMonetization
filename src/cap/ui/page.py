@@ -11,9 +11,9 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from cap.approval.deps import app_store
 from cap.approval.identity import Reviewer, csrf_token
 from cap.config import get_settings
-from cap.store import PostStore
 from cap.ui import views
 
 HERE = Path(__file__).resolve().parent
@@ -22,12 +22,6 @@ templates = Jinja2Templates(directory=str(HERE / "templates"))
 templates.env.filters["minutes"] = views.minutes
 templates.env.filters["day"] = views.day
 templates.env.globals["workflow"] = views.workflow
-
-
-def app_store(request: Request) -> PostStore:
-    """The store the app was built on (cap.server.create_app); a route dependency."""
-    store: PostStore = request.app.state.store
-    return store
 
 
 def render(
