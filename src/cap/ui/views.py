@@ -804,7 +804,7 @@ def _stopped_at(record: PostRecord) -> str:
     return "checks"
 
 
-def workflow(record: PostRecord) -> dict[str, Any]:
+def workflow(record: PostRecord) -> dict[str, Any]:  # noqa: C901 - M1 step 4 splits it
     """The seven steps of one post with a state each (done, current, stopped, todo), the
     step number, a one-line status and the next action: the same everywhere a post is
     shown, so 'where am I and what is left' always has one answer."""

@@ -257,7 +257,7 @@ def release_files(paths: dict[Role, Path]) -> list[ReleaseFile]:
 # ---------------------------------------------------------------- may it be released
 
 
-def check_approval(record: PostRecord) -> None:
+def check_approval(record: PostRecord) -> None:  # noqa: C901 - M1 step 4 splits it
     """The human approval, re-verified from what the card recorded (never from the
     status alone) plus the gates. Raises PublishRefusedError with the reason."""
     a = record.approval

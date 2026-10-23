@@ -151,7 +151,7 @@ def card_for(record: PostRecord, reviewer: Reviewer) -> CardView:
     return view
 
 
-def api_router(store: PostStore) -> APIRouter:
+def api_router(store: PostStore) -> APIRouter:  # noqa: C901 - M1 step 4 splits it
     r = APIRouter(prefix="/api")
 
     def _guard_paused() -> None:

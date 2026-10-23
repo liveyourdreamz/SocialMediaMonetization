@@ -96,7 +96,7 @@ def _domain_ok(url: str, channel: str) -> bool:
     return any(host == d or host.endswith("." + d) for d in SCIENCE_DOMAINS)
 
 
-def _search_with_model(
+def _search_with_model(  # noqa: C901 - M1 step 4 splits it
     topic: str, channel: str, claims: list[str] | None = None
 ) -> tuple[list[str], str]:
     """The scout: the model with the web-search tool, domain-restricted. Returns the

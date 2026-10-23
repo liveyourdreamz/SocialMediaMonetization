@@ -473,7 +473,7 @@ def _media_files(record: PostRecord) -> list[Path]:
     return sorted(p for p in d.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"))
 
 
-def render(  # type: ignore[no-untyped-def]
+def render(  # type: ignore[no-untyped-def]  # noqa: C901 - M1 step 4 splits it
     record: PostRecord, out_dir: Path, *, voice_fn=speak, stage: Stage = "review"
 ) -> RenderResult:
     """Render one stage of the package into <out_dir>/<post_id>/ (review) or

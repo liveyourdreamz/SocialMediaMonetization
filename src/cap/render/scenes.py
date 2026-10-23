@@ -166,7 +166,7 @@ def units(paragraphs: list[str]) -> list[str]:
     return out
 
 
-def plan(
+def plan(  # noqa: C901 - M1 step 4 splits it
     sentences: list[str],
     *,
     character: str,
@@ -502,7 +502,7 @@ def _subtitle(d: ImageDraw.ImageDraw, lay: Layout, sentence: str, arabic: bool) 
 # ------------------------------------------------------------------ the panel per scene
 
 
-def _draw_panel(
+def _draw_panel(  # noqa: C901 - M1 step 4 splits it
     d: ImageDraw.ImageDraw,
     im: Image.Image,
     sc: Scene,

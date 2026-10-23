@@ -177,7 +177,7 @@ def test_the_manifest_is_canonical_and_does_not_depend_on_where_the_files_are(tm
     assert release.build_manifest(r).sha256 == a.sha256
 
 
-def _tamper(r, files, what: str) -> None:
+def _tamper(r, files, what: str) -> None:  # noqa: C901 - M1 step 4 splits it
     v_long = next(v for v in r.variants if v.platform.value == "youtube_long")
     v_short = next(v for v in r.variants if v.platform.value == "youtube_short")
     if what == "short_file":
@@ -249,7 +249,7 @@ def test_a_missing_final_file_is_refused(tmp_path):
 # ---- C3: the publisher re-verifies the approval itself ------------------------
 
 
-def _break(r, what: str) -> None:
+def _break(r, what: str) -> None:  # noqa: C901 - M1 step 4 splits it
     a = r.approval
     if what == "no_decision":
         a.decision = None

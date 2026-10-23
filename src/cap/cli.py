@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 ALREADY_RUNNING = 3  # cap serve: another window serves this data folder; it was opened
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901 - M1 step 4 splits it
     utf8_console()
     p = argparse.ArgumentParser(prog="cap")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -313,7 +313,7 @@ def _run_app(
         return 1
 
 
-def _serve_store(
+def _serve_store(  # noqa: C901 - M1 step 4 splits it
     args: argparse.Namespace,
     settings: Settings,
     data: Path,

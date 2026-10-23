@@ -203,7 +203,7 @@ def ensure_local_secrets(path: Path) -> None:
     restrict_to_owner(path)
 
 
-def ensure_env(
+def ensure_env(  # noqa: C901 - M1 step 4 splits it
     path: Path = Path(".env"),
     *,
     force: bool = False,

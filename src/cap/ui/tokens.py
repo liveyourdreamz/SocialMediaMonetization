@@ -22,7 +22,7 @@ def _value(tok: dict, theme: str, first: str) -> str | None:
     return v.get(theme) or (v.get(first) if theme == first else None)
 
 
-def compile_css(tokens: dict) -> str:
+def compile_css(tokens: dict) -> str:  # noqa: C901 - M1 step 4 splits it
     out: list[str] = [f"/* {tokens['name']} — generated from tokens.json; do not edit */"]
     themes = [t["id"] for t in tokens["color"]["themes"]]
     first = themes[0]

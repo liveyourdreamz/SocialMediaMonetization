@@ -40,3 +40,50 @@ def test_the_domain_imports_nothing_above_it():
             if s.startswith(("from cap", "import cap")):
                 mod = s.split()[1]
                 assert mod.startswith(allowed), f"{f.name}: {s}"
+
+
+# ---- size and complexity (Build Plan engineering standards) ---------------------------
+# A file over MAX_LINES may only be one listed here, and may not grow past its listed
+# length; a function over complexity 10 must carry the C901 marker, and the markers may
+# only become fewer. M1 step 4 splits these; lower each number as it does.
+MAX_LINES = 400
+LONG_FILES = {
+    "src/cap/render/scenes.py": 1053,
+    "src/cap/ui/views.py": 906,
+    "src/cap/ui/__init__.py": 807,
+    "src/cap/render/__init__.py": 585,
+    "src/cap/connections.py": 462,
+    "src/cap/schema/post_record.py": 451,
+    "src/cap/models/__init__.py": 419,
+}
+MAX_COMPLEX = 17  # functions marked "noqa: C901"; never raise it
+
+
+def test_no_file_grows_past_the_limit():
+    over = {}
+    for f in sorted((ROOT / "src").rglob("*.py")):
+        n = len(f.read_text(encoding="utf-8").splitlines())
+        rel = f.relative_to(ROOT).as_posix()
+        if n > LONG_FILES.get(rel, MAX_LINES):
+            over[rel] = n
+    assert not over, f"over the size limit (split, do not add to the list): {over}"
+
+
+def test_the_list_of_long_files_only_shrinks():
+    for rel, limit in LONG_FILES.items():
+        f = ROOT / rel
+        if f.exists():
+            n = len(f.read_text(encoding="utf-8").splitlines())
+            assert n > MAX_LINES, f"{rel} is now {n} lines: remove it from LONG_FILES"
+
+
+def test_complex_functions_only_become_fewer():
+    marked = sum(
+        f.read_text(encoding="utf-8").count("noqa: C901")
+        for d in ("src", "tests")
+        for f in (ROOT / d).rglob("*.py")
+        if f.name != "test_architecture.py"
+    )
+    assert marked <= MAX_COMPLEX, (
+        f"{marked} functions over complexity 10; the limit is {MAX_COMPLEX}"
+    )

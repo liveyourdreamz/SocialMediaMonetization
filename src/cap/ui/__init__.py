@@ -81,7 +81,7 @@ def _spot(value: str | None) -> bool | None:
     return None if value in (None, "") else value == "yes"
 
 
-def ui_router(store: PostStore) -> APIRouter:
+def ui_router(store: PostStore) -> APIRouter:  # noqa: C901 - M1 step 4 splits it
     r = APIRouter(include_in_schema=False)
 
     def render(

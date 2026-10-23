@@ -231,7 +231,7 @@ def record_verdict(
     return record
 
 
-def finalise(
+def finalise(  # noqa: C901 - M1 step 4 splits it
     record: PostRecord,
     *,
     reviewer: str,

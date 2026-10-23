@@ -43,7 +43,7 @@ def _blocked(name: str, result: ModelResult) -> AgentBlockedError:
     return AgentBlockedError(f"{name}: {result.reason}")
 
 
-def draft(
+def draft(  # noqa: C901 - M1 step 4 splits it
     record: PostRecord,
     client: ModelClient,
     sources: list[SourceDoc],

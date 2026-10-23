@@ -54,8 +54,14 @@ target-version = "py312"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "N", "W"]
+select = ["E", "F", "I", "B", "UP", "N", "W", "C90"]
 ignore = ["E501", "B008"]  # B008: FastAPI's Depends()/Form() in defaults is the framework's idiom
+
+[tool.ruff.lint.mccabe]
+# Engineering standard (Build Plan): no function over complexity 10. Functions above it
+# today carry "noqa: C901 - M1 step 4" until split; tests/test_architecture.py stops
+# that list growing.
+max-complexity = 10
 
 [tool.mypy]
 python_version = "3.12"

@@ -168,7 +168,7 @@ def _verify(
     return status, quote, in_source, res.output.injection_suspected
 
 
-def check_claim(
+def check_claim(  # noqa: C901 - M1 step 4 splits it
     client: ModelClient,
     claim: Claim,
     sources: list[SourceDoc],
