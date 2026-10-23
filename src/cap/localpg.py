@@ -95,7 +95,9 @@ class LocalPostgres:
         """Create the cluster with a fresh password. Never touches an existing cluster."""
         if self.initialised():
             return
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        # initdb on Windows drops admin rights first and then cannot always create the
+        # folders above the cluster; an empty folder made here is one it accepts
+        self.cluster.mkdir(parents=True, exist_ok=True)
         password = secrets.token_urlsafe(24)
         self.password_file.write_text(password, encoding="utf-8")
         restrict_to_owner(self.password_file)
