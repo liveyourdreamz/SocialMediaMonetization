@@ -1,0 +1,21 @@
+name: pghash
+on:
+  push:
+    branches: [tools/pg-hash]
+jobs:
+  hash:
+    runs-on: windows-latest
+    steps:
+      - name: Download the official portable PostgreSQL 16.15 for Windows and print its SHA-256
+        shell: pwsh
+        run: |
+          $u = "https://sbp.enterprisedb.com/getfile.jsp?fileid=1260623"
+          Invoke-WebRequest -Uri $u -OutFile pg.zip -MaximumRedirection 10
+          $h = (Get-FileHash pg.zip -Algorithm SHA256).Hash.ToLower()
+          $s = (Get-Item pg.zip).Length
+          Write-Output "SHA256=$h SIZE=$s"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $z = [IO.Compression.ZipFile]::OpenRead("$PWD\pg.zip")
+          $z.Entries | Select-Object -First 5 | ForEach-Object { Write-Output $_.FullName }
+          $z.Entries | Where-Object { $_.FullName -like "pgsql/bin/pg_ctl.exe" } | ForEach-Object { Write-Output "found $($_.FullName)" }
+          $z.Dispose()
