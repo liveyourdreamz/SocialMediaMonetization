@@ -1,98 +1,83 @@
-"""The final render, after approval and off the request thread (review C1).
+"""The final render, after approval, as a queued job (review C1; M1 step 3).
 
 Why: the review render is made before anyone has written the opening line, so it can
-only show a placeholder. When the approver approves, this job renders the package
-again with the line spoken and shown (about a minute with video, instant with the
-text renderer), then seals the release: records the final files, builds the
-manifest and issues the token bound to it (cap.release.seal). Until then the post is
-approved with release status "preparing" and the publisher refuses it. A failure
-leaves it approved without a token, with the reason on the record and a retry on
-the Outbox.
+only show a placeholder. When the approver approves, `begin` marks the release
+"preparing" and queues a RELEASE job; the worker runs `run`, which renders the package
+again with the line spoken and shown, then seals the release: records the final
+files, builds the manifest and issues the token bound to it (cap.release.seal). Until
+then the post is approved without a token and the publisher refuses it. A failure
+leaves it approved without a token, with the reason on the record and a retry on the
+Outbox. A restart mid-render runs the job again (cap.jobs.recover).
 
-One job per post at a time; a second start while one runs returns the running one.
+The queue allows one release job per post at a time.
 """
 
 from __future__ import annotations
 
-import threading
-from typing import Protocol
-
 from cap import release
+from cap.jobs import Job, JobKind
 from cap.render.package import render_root, render_stage
 from cap.schema.post_record import Decision, PostRecord, PostStatus, Release, ReleaseStatus
+from cap.store import PostStore
 
 
-class _Store(Protocol):
-    def put(self, record: PostRecord) -> None: ...
-
-
-_RUNNING: dict[str, threading.Thread] = {}
-_GUARD = threading.Lock()
-
-
-def is_running(post_id: str) -> bool:
-    with _GUARD:
-        t = _RUNNING.get(post_id)
-        return bool(t and t.is_alive())
+def is_running(store: PostStore, post_id: str) -> bool:
+    return store.jobs.active(post_id, JobKind.RELEASE)
 
 
 def can_start(record: PostRecord) -> bool:
-    """Approved, not sealed, nothing running: the Outbox offers "make the final
-    video" (first time for a post approved before releases existed, or a retry)."""
+    """Approved, and the release neither sealed nor being made: the Outbox offers "make
+    the final video" (first time for a post approved before releases existed, or a
+    retry). `begin` is safe to call twice: the queue holds one release job per post."""
     return (
-        record.release.status != ReleaseStatus.READY
-        and not is_running(record.post_id)
+        record.release.status in (ReleaseStatus.NONE, ReleaseStatus.FAILED)
         and record.approval.decision == Decision.APPROVE
         and record.status == PostStatus.APPROVED
     )
 
 
-def start(store: _Store, record: PostRecord) -> threading.Thread:
-    """Begin the final render for an approved post. Raises PublishRefusedError when
-    the approval does not hold or the release is already sealed."""
-    with _GUARD:
-        running = _RUNNING.get(record.post_id)
-        if running is not None and running.is_alive():
-            return running
-        if record.release.status == ReleaseStatus.READY:
-            raise release.PublishRefusedError(
-                "the final video is ready; re-issue the token instead"
-            )
-        release.check_approval(record)
-        record.release = Release(
-            status=ReleaseStatus.PREPARING, attempts=record.release.attempts + 1
-        )
-        record.approval.token = ""  # nothing publishable until the new release is sealed
-        record.log("preparing the final video with your opening line")
-        store.put(record)
-        t = threading.Thread(
-            target=_run, args=(store, record), name=f"final-{record.post_id[:8]}", daemon=True
-        )
-        _RUNNING[record.post_id] = t
-        t.start()
-        return t
+def begin(store: PostStore, record: PostRecord) -> None:
+    """Queue the final render for an approved post. Raises PublishRefusedError when the
+    approval does not hold or the release is already sealed; does nothing more when
+    the job is already queued or running."""
+    if is_running(store, record.post_id):
+        return
+    if record.release.status == ReleaseStatus.READY:
+        raise release.PublishRefusedError("the final video is ready; re-issue the token instead")
+    release.check_approval(record)
+    record.release = Release(status=ReleaseStatus.PREPARING, attempts=record.release.attempts + 1)
+    record.approval.token = ""  # nothing publishable until the new release is sealed
+    record.log("preparing the final video with your opening line")
+    store.put(record)
+    store.jobs.enqueue(JobKind.RELEASE, record.post_id)
 
 
-def wait(post_id: str, timeout: float | None = None) -> None:
-    """Block until the post's final render (if any) finishes: the CLI and tests."""
-    with _GUARD:
-        t = _RUNNING.get(post_id)
-    if t is not None:
-        t.join(timeout)
-
-
-def _run(store: _Store, record: PostRecord) -> None:
+def run(store: PostStore, job: Job) -> None:
+    """The worker's handler. Rendering takes a while, so the result is applied to the
+    post as it stands when it finishes, not to the copy read at the start."""
+    record = store.get(job.post_id)
     try:
         rendered = render_stage(record, render_root(record), "final", record.asset.kind)
-        release.seal(record, rendered.files)
-        record.log("approved: the final video is ready; waiting in the Outbox")
     except Exception as e:  # noqa: BLE001 - every failure is shown with a retry
-        why = str(e) if isinstance(e, release.PublishRefusedError) else f"{type(e).__name__}: {e}"
-        record.release.status = ReleaseStatus.FAILED
-        record.release.error = why[:300]
-        record.approval.token = ""
-        record.log(f"final video failed: {why[:200]}; retry from the Outbox")
-    finally:
-        store.put(record)
-        with _GUARD:
-            _RUNNING.pop(record.post_id, None)
+        failed(store, job.post_id, f"{type(e).__name__}: {e}")
+        return
+
+    def sealed(r: PostRecord) -> None:
+        try:
+            release.seal(r, rendered.files)
+            r.log("approved: the final video is ready; waiting in the Outbox")
+        except release.PublishRefusedError as e:
+            _mark_failed(r, str(e))
+
+    store.update(job.post_id, sealed)
+
+
+def failed(store: PostStore, post_id: str, why: str) -> None:
+    store.update(post_id, lambda r: _mark_failed(r, why))
+
+
+def _mark_failed(record: PostRecord, why: str) -> None:
+    record.release.status = ReleaseStatus.FAILED
+    record.release.error = why[:300]
+    record.approval.token = ""
+    record.log(f"final video failed: {why[:200]}; retry from the Outbox")

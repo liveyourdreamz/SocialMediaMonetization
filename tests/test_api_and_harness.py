@@ -1,6 +1,5 @@
 from fastapi.testclient import TestClient
 
-from cap.approval import release_job
 from cap.config import get_settings
 from cap.domain.token import ApprovalToken, verify
 from cap.gates.disclosure import MFK_FACTOR_WEIGHTS
@@ -10,7 +9,7 @@ from cap.pipeline import run_post
 from cap.schema.post_record import PostStatus
 from cap.server import create_app
 from cap.store import MemoryStore
-from tests.conftest import SOURCES, make_deps, ok
+from tests.conftest import SOURCES, drain, make_deps, ok
 
 H = {"X-Reviewer": "hemant"}
 
@@ -65,7 +64,8 @@ def test_api_full_approval_flow(client, record, tmp_path):
         "status": "approved",
         "final_render_started": True,
     }
-    release_job.wait(post.post_id, 30)
+    drain(store, post.post_id)
+    post = store.get(post.post_id)
     assert api.get(f"/api/posts/{post.post_id}/release", headers=H).json() == {
         "post_id": post.post_id,
         "status": "approved",

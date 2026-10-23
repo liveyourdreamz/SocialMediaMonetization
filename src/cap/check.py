@@ -362,11 +362,11 @@ def _approve_and_publish(store, rec, adapter) -> None:  # type: ignore[no-untype
     """The real card path, in memory: stage one (channel C), the verdict with the
     opening line and the spot check, finalise, the final render, then the publisher.
     Every rule the card and the publisher enforce applies, none is set by hand."""
-    from cap.approval import release_job
     from cap.approval.app import finalise_and_issue, publish_now
     from cap.config import get_settings
     from cap.domain.card import record_stage_one, record_verdict
     from cap.schema.post_record import Channel, Decision, PostStatus, ReleaseStatus
+    from cap.worker import drain
 
     s = get_settings()
     approver = s.approvers[0]
@@ -389,9 +389,11 @@ def _approve_and_publish(store, rec, adapter) -> None:  # type: ignore[no-untype
         spot_check_supported=True if rec.approval.spot_check else None,
     )
     finalise_and_issue(store, rec, approver, acknowledged=True)
-    release_job.wait(rec.post_id, timeout=600)
+    drain(store, rec.post_id, timeout=600)  # the final render, run here
+    rec = store.get(rec.post_id)
     if rec.release.status != ReleaseStatus.READY:
         raise RuntimeError(f"final video: {rec.release.error or rec.release.status.value}")
     refused = publish_now(store, rec, publisher=adapter)
+    rec = store.get(rec.post_id)
     if refused or rec.status != PostStatus.PUBLISHED:
         raise RuntimeError(refused or f"status after publish: {rec.status.value}")

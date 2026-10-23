@@ -88,7 +88,7 @@ def test_finalising_an_approval_writes_the_history(tmp_path: Path, backend, monk
     from cap.schema.post_record import Decision
 
     backend("anthropic")
-    monkeypatch.setattr(release_job, "start", lambda store, record: None)  # no render here
+    monkeypatch.setattr(release_job, "begin", lambda store, record: None)  # no render here
     store = FileStore(tmp_path / "data")
     rec = _approved_post()
     rec.status = PostStatus.AWAITING_APPROVAL

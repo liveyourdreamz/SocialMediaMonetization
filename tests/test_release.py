@@ -21,7 +21,7 @@ from cap.publisher import LocalFolderAdapter, youtube
 from cap.schema.post_record import Decision, PostStatus, ReleaseStatus
 from cap.server import create_app
 from cap.store import MemoryStore
-from tests.conftest import SOURCES, make_deps
+from tests.conftest import SOURCES, drain, make_deps
 from tests.releases import sealed
 from tests.test_ui import Browser
 
@@ -58,7 +58,8 @@ def test_the_review_render_shows_a_placeholder_and_the_published_file_speaks_the
     assert "[Your opening line goes here]" in review and "[[HEMANT" not in review
     store.put(rec)
     _approve(store, rec)
-    release_job.wait(rec.post_id, 30)
+    drain(store, rec.post_id)
+    rec = store.get(rec.post_id)
     assert rec.release.status == ReleaseStatus.READY and rec.approval.token
     final = Path(next(f.uri for f in rec.release.files if f.role == "long"))
     assert final != Path(rec.asset.uri) and LINE in final.read_text(encoding="utf-8")
@@ -94,7 +95,8 @@ def test_the_video_final_render_speaks_the_line_the_review_render_does_not(
     spoken.clear()
     store.put(rec)
     _approve(store, rec)
-    release_job.wait(rec.post_id, 300)
+    drain(store, rec.post_id)
+    rec = store.get(rec.post_id)
     assert rec.release.status == ReleaseStatus.READY, rec.release.error
     assert any(LINE in s for s in spoken)
     roles = {f.role: Path(f.uri) for f in rec.release.files}
@@ -137,7 +139,8 @@ def test_publishing_is_refused_while_the_final_video_is_being_made(
         assert "Preparing the final video" in html and "Publish now" not in html
     finally:
         gate.set()
-        release_job.wait(rec.post_id, 30)
+        drain(store, rec.post_id)
+        rec = store.get(rec.post_id)
     assert rec.release.status == ReleaseStatus.READY
     assert publish_now(store, rec) is None and rec.status == PostStatus.PUBLISHED
 
@@ -161,7 +164,8 @@ def test_a_failed_final_render_stays_approved_without_a_token_and_can_be_retried
     rec = _queued(client, record, tmp_path)
     store.put(rec)
     _approve(store, rec)
-    release_job.wait(rec.post_id, 30)
+    drain(store, rec.post_id)
+    rec = store.get(rec.post_id)
     assert rec.status == PostStatus.APPROVED and rec.release.status == ReleaseStatus.FAILED
     assert rec.approval.token == "" and "edge-tts timed out" in rec.release.error
     api = Browser(create_app(store), follow_redirects=False)
@@ -171,7 +175,7 @@ def test_a_failed_final_render_stays_approved_without_a_token_and_can_be_retried
     assert "Publish now" not in html
     r = api.form(f"/posts/{rec.post_id}/release/retry")
     assert r.status_code == 303 and "refused" not in r.headers["location"]
-    release_job.wait(rec.post_id, 30)
+    drain(store, rec.post_id)
     rec = store.get(rec.post_id)
     assert rec.release.status == ReleaseStatus.READY and rec.approval.token
     assert rec.release.attempts == 2

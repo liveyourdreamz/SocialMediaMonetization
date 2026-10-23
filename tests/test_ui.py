@@ -9,13 +9,12 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from cap.approval import release_job
 from cap.demo.seed import seed_store
 from cap.schema.post_record import Channel, PostStatus
 from cap.server import create_app
 from cap.store import MemoryStore
 from cap.ui.tokens import is_current
-from tests.conftest import SIGNIN
+from tests.conftest import SIGNIN, drain
 
 
 class Browser(TestClient):
@@ -119,7 +118,7 @@ def test_blind_card_then_reveal_with_server_side_clock(world):
     assert "Seven days, one surprise." in html  # the line now sits in the script
     r = api.form(f"/posts/{post.post_id}/finalise")
     assert r.status_code == 303 and store.get(post.post_id).status == PostStatus.APPROVED
-    release_job.wait(post.post_id, 30)
+    drain(store, post.post_id)
     post = store.get(post.post_id)
     assert post.approval.token  # issued server-side, once the final render is done
     assert post.approval.token not in api.get(f"/posts/{post.post_id}").text  # never shown
@@ -309,7 +308,7 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
     )
     r = api.form(f"/posts/{post_id}/finalise")
     assert r.status_code == 303
-    release_job.wait(post_id, 30)
+    drain(store, post_id)
     rec = store.get(post_id)
     # approval stops at the token: the post waits in the outbox with a preview
     assert rec.status == PostStatus.APPROVED and rec.approval.token
@@ -334,7 +333,7 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
         f"/posts/{other}/verdict", decision="approve", opening_line="x", spot_check_supported="yes"
     )
     api.form(f"/posts/{other}/finalise")
-    release_job.wait(other, 30)
+    drain(store, other)
     from pathlib import Path
 
     final = next(f.uri for f in store.get(other).release.files if f.role == "long")

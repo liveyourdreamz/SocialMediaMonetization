@@ -40,6 +40,7 @@ from cap.approval.sessions import LIFETIME_S
 from cap.approval.throttle import SignInThrottle
 from cap.config import get_settings
 from cap.domain.card import CardError, record_stage_one, record_verdict
+from cap.jobs import JobKind
 from cap.publisher import PublishRefusedError
 from cap.schema.post_record import Decision, PostStatus, ReasonCode
 from cap.store import PostStore
@@ -417,7 +418,7 @@ def ui_router(store: PostStore) -> APIRouter:
         if not release_job.can_start(record):
             return _back_to_outbox(post_id, "the final video is ready or already being made")
         try:
-            release_job.start(store, record)
+            release_job.begin(store, record)
         except PublishRefusedError as e:
             return _back_to_outbox(post_id, str(e))
         return _back_to_outbox(post_id, None)
@@ -517,9 +518,7 @@ def ui_router(store: PostStore) -> APIRouter:
         appears on the Operator screen as 'drafting' at once; a fault parks it with the
         reason on the record, never a blank 500."""
         _approver(reviewer)
-        import threading
-
-        from cap.demo.seed import new_brief, run_brief
+        from cap.demo.seed import new_brief
 
         topic = topic.strip()[:140]
         test_log = test_log[:20_000]
@@ -564,24 +563,7 @@ def ui_router(store: PostStore) -> APIRouter:
             record.media_manifest.real_place_or_event_depicted = False
         store.put(record)
         url_list = [u.strip() for u in urls.replace(",", "\n").splitlines() if u.strip()]
-
-        def work() -> None:
-            try:
-                run_brief(
-                    store, channel, topic.strip(), urls=url_list, test_log=test_log, record=record
-                )
-            except Exception as e:  # noqa: BLE001
-                record.stop(
-                    "draft",
-                    f"the pipeline could not run: {type(e).__name__}: {str(e)[:300]}",
-                    PostStatus.PARKED,
-                )
-                record.log(
-                    f"parked: the pipeline could not run: {type(e).__name__}: {str(e)[:300]}"
-                )
-                store.put(record)
-
-        threading.Thread(target=work, name=f"brief-{record.post_id[:8]}", daemon=True).start()
+        store.jobs.enqueue(JobKind.BRIEF, record.post_id, {"urls": url_list, "test_log": test_log})
         return RedirectResponse("/operator", status_code=303)
 
     def _connections_summary() -> str:
@@ -736,9 +718,9 @@ def ui_router(store: PostStore) -> APIRouter:
     @r.post("/tour/start", dependencies=[Depends(check_csrf)])
     def tour_start(reviewer: Reviewer = Depends(current_reviewer)) -> Response:
         _approver(reviewer)
-        from cap.demo.seed import start_tour
+        from cap.demo.seed import begin_tour
 
-        rec = start_tour(store)
+        rec = begin_tour(store)
         return RedirectResponse(f"/tour/{rec.post_id}/1", status_code=303)
 
     @r.get("/tour/{post_id}/{n}", response_class=HTMLResponse)

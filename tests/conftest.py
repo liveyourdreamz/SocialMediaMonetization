@@ -22,6 +22,18 @@ __all__ = ["SIGNIN", "laptop_wifi", "SOURCES", "TEST_LOG", "ok", "source_docs"]
 SIGNIN = {"hemant": "hemant-test-code", "layla": "layla-test-code"}
 
 
+from cap.worker import drain  # noqa: E402,F401 - re-exported for the tests
+
+
+@pytest.fixture(autouse=True)
+def _stop_workers():
+    """Every worker a test's app started stops with the test."""
+    yield
+    from cap.server import stop_workers
+
+    stop_workers()
+
+
 @pytest.fixture(autouse=True)
 def _local_settings(monkeypatch):
     monkeypatch.setenv("CAP_ENV", "test")

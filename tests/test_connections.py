@@ -8,10 +8,10 @@ import httpx
 import pytest
 
 from cap import connections as conn
-from cap.approval import release_job
 from cap.publisher import LocalFolderAdapter, Upload
 from cap.schema.post_record import PostStatus
 from cap.store.files import FileStore
+from tests.conftest import drain
 from tests.test_ui import Browser, create_app
 
 
@@ -115,7 +115,8 @@ def test_outbox_offers_connected_destinations_and_records_each_result(world, mon
         spot_check_supported="yes",
     )
     api.form(f"/posts/{post.post_id}/finalise")
-    release_job.wait(post.post_id, 30)
+    drain(store, post.post_id)
+    post = store.get(post.post_id)
     html = api.get(f"/posts/{post.post_id}/preview").text
     assert (
         "Where it goes" in html
@@ -212,7 +213,8 @@ def test_a_tour_post_never_leaves_the_laptop(world, monkeypatch):
         spot_check_supported="yes",
     )
     api.form(f"/posts/{rec.post_id}/finalise")
-    release_job.wait(rec.post_id, 30)
+    drain(store, rec.post_id)
+    rec = store.get(rec.post_id)
     html = api.get(f"/posts/{rec.post_id}/preview").text
     assert (
         "A tour post goes to the folder on this laptop only" in html

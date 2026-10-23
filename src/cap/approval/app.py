@@ -86,7 +86,7 @@ def finalise_and_issue(store: PostStore, record: PostRecord, reviewer: str, **kw
     # the originality gate compares new posts with approved ones (review C7)
     record_approved(record, store.history())
     try:
-        release_job.start(store, record)
+        release_job.begin(store, record)
     except PublishRefusedError as e:  # the approval does not hold for release: say so
         record.release.status = ReleaseStatus.FAILED
         record.release.error = str(e)

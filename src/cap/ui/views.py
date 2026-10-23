@@ -713,10 +713,7 @@ def release_view(record: PostRecord) -> dict[str, Any]:
     from cap.release import token_state
 
     rel = record.release
-    status, error = rel.status.value, rel.error
-    if status == "preparing" and not release_job.is_running(record.post_id):
-        # the job died with the app (a restart): say so and offer the retry
-        status, error = "failed", "interrupted: the app restarted while it ran"
+    status, error = rel.status.value, rel.error  # "preparing": a job is queued or running
     names = {f.role: Path(f.uri).name for f in rel.files}
     tstate = token_state(record) if status == "ready" else "none"
     return {

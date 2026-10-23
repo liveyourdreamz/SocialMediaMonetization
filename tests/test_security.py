@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from cap.demo.seed import seed_store
 from cap.server import create_app
 from cap.store import MemoryStore
-from tests.conftest import SIGNIN, laptop_wifi
+from tests.conftest import SIGNIN, drain, laptop_wifi
 
 
 @pytest.fixture
@@ -93,7 +93,6 @@ def test_finding_2_a_platform_error_never_shows_the_app_secret(tmp_path, monkeyp
 
 
 def test_finding_3_a_tour_post_never_reaches_the_configured_platform(tmp_path, monkeypatch):
-    from cap.approval import release_job
     from cap.approval.app import finalise_and_issue, publish_now
     from cap.config import get_settings
     from cap.demo.seed import demo_post
@@ -122,7 +121,8 @@ def test_finding_3_a_tour_post_never_reaches_the_configured_platform(tmp_path, m
         opening_line="x", spot_check_supported=True,
     )  # fmt: skip
     finalise_and_issue(store, rec, "hemant", acknowledged=True)
-    release_job.wait(rec.post_id, 30)
+    drain(store, rec.post_id)
+    rec = store.get(rec.post_id)
     try:
         for chosen in ([], ["youtube_long"]):  # nothing ticked, or YouTube ticked
             rec.status = PostStatus.APPROVED

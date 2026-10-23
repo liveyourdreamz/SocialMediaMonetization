@@ -22,14 +22,13 @@ from cap.gates.history import HistoryStore, eligible
 from cap.schema.migrate import load_record
 from cap.schema.post_record import PostRecord, PostStatus
 from cap.store import (
-    IN_FLIGHT,
     AppState,
     PostConflictError,
     PostNotFoundError,
     PostStore,
     migrations,
-    park_if_interrupted,
 )
+from cap.store.pgjobs import PostgresJobQueue
 
 _log = logging.getLogger("cap.store")
 
@@ -49,7 +48,7 @@ def connect(url: str, *, max_size: int = 8) -> ConnectionPool:
 
 class PostgresStore(PostStore):
     def __init__(self, pool: ConnectionPool) -> None:
-        super().__init__()
+        super().__init__(PostgresJobQueue(pool))
         self._pool = pool
         with self._pool.connection() as conn:
             applied = migrations.apply(conn)
@@ -58,7 +57,6 @@ class PostgresStore(PostStore):
             row = conn.execute("SELECT state FROM app_state WHERE id = 1").fetchone()
         if row:
             self.state = AppState(**{k: v for k, v in row[0].items() if k in _STATE_KEYS})
-        self._park_interrupted()
 
     @classmethod
     def open(cls, url: str) -> PostgresStore:
@@ -120,14 +118,6 @@ class PostgresStore(PostStore):
         if loaded.dropped:
             _log.info("%s: set aside fields this build does not know: %s", post_id, loaded.dropped)
         return loaded.record
-
-    def _park_interrupted(self) -> None:
-        in_flight = [s.value for s in IN_FLIGHT]
-        for rec in self._select(
-            "SELECT post_id, record FROM posts WHERE status = ANY(%s)", (in_flight,)
-        ):
-            if park_if_interrupted(rec):
-                self.put(rec)
 
     # ---- card timers ------------------------------------------------------------------
 

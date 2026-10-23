@@ -6,6 +6,7 @@ put together (PRD 4.5). Entry points (cap serve, the smoke run, the offline chec
 from __future__ import annotations
 
 import html
+import threading
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -18,14 +19,39 @@ from cap.approval.throttle import SignInThrottle
 from cap.config import get_settings
 from cap.store import MemoryStore, PostNotFoundError, PostStore
 from cap.ui import STATIC, ui_router
+from cap.worker import Worker
+
+_WORKERS: dict[int, Worker] = {}  # one worker per store, keyed by the store's id
+_WORKERS_GUARD = threading.Lock()
 
 
-def create_app(store: PostStore | None = None) -> FastAPI:
+def worker_for(store: PostStore) -> Worker:
+    """The store's worker, started on first use (recovery first, then the loop)."""
+    with _WORKERS_GUARD:
+        w = _WORKERS.get(id(store))
+        if w is None or w.store is not store:
+            w = _WORKERS[id(store)] = Worker(store).start()
+        return w
+
+
+def stop_workers() -> None:
+    """Stop every worker this process started (the end of `cap serve`, and tests)."""
+    with _WORKERS_GUARD:
+        workers = list(_WORKERS.values())
+        _WORKERS.clear()
+    for w in workers:
+        w.stop()
+
+
+def create_app(store: PostStore | None = None, *, run_jobs: bool = True) -> FastAPI:
+    """The app on `store`. With `run_jobs` (the default) the store's worker runs the
+    queued jobs (briefs, final videos, the tour) in this process."""
     store = store or MemoryStore()
     settings = get_settings()
     local = settings.env in ("local", "test")
     app = FastAPI(title="Content Agent Portfolio", docs_url=None, openapi_url=None, redoc_url=None)
     app.state.store = store
+    app.state.worker = worker_for(store) if run_jobs else None
     app.state.sessions = SessionStore()
     app.state.throttle = SignInThrottle()
     app.add_middleware(HostGuard, allowed=static_hosts(settings))

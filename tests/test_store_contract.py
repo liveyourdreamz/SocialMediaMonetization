@@ -96,9 +96,9 @@ def test_records_survive_a_restart(make_store):
 
 
 @pytest.mark.parametrize("status", [PostStatus.DRAFTING, PostStatus.GATED, PostStatus.RENDERING])
-def test_a_post_interrupted_by_a_restart_is_parked_once(make_store, status, request):
-    if "memory" in request.node.callspec.id:
-        pytest.skip("nothing survives a restart in memory")
+def test_the_file_store_parks_a_post_interrupted_by_a_restart_once(make_store, status, request):
+    if "files" not in request.node.callspec.id:
+        pytest.skip("the worker's start-up recovery decides for Postgres (test_worker.py)")
     rec = _post(status=status)
     make_store().put(rec)
     got = make_store().get(rec.post_id)

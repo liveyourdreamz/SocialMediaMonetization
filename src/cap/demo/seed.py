@@ -11,6 +11,7 @@ from typing import Any
 
 from cap.demo import CHARACTER_BLOCK, SOURCES, TEST_LOG, happy_fixtures
 from cap.domain.card import prepare_card
+from cap.jobs import Job, JobKind
 from cap.models import MockClient
 from cap.pipeline import PipelineDeps, run_post
 from cap.schema.post_record import (
@@ -262,15 +263,11 @@ def run_brief(
     return out
 
 
-def start_tour(store: PostStore) -> PostRecord:
+def begin_tour(store: PostStore) -> PostRecord:
     """The record the guided tour follows: the worked Patch example (Notely, 7 days),
     drafted from the fixtures whatever the model backend, rendered by the real renderer.
-    Returns at once with the record in the store as 'drafting'; the pipeline runs in a
-    thread and the tour pages refresh until each stage is there."""
-    import threading
-
-    from cap.characters import ANCHOR_ELEMENTS, CHARACTER_BLOCKS
-    from cap.config import get_settings
+    Returns at once with the record in the store as 'drafting' and a TOUR job queued;
+    the tour pages refresh until each stage is there."""
     from cap.demo import tour_example as ex
 
     rec = PostRecord(
@@ -281,30 +278,42 @@ def start_tour(store: PostStore) -> PostRecord:
     rec.flags.tour = True
     rec.log(f"guided tour started: the worked example, Patch tests {ex.TOOL} for 7 days")
     store.put(rec)
-
-    def work() -> None:
-        try:
-            deps = PipelineDeps(
-                client=MockClient(ex.fixtures()),
-                anchor_elements={"A": ANCHOR_ELEMENTS["A"]},
-                character_blocks={"A": CHARACTER_BLOCKS["A"]},
-                test_logs={rec.post_id: ex.TEST_LOG},
-                render_dir=Path(get_settings().data_dir) / "renders",
-            )
-            out = run_post(rec, ex.SOURCES, deps)
-            out.log("drafted from the worked example (fixtures), not the live model")
-            store.put(out)
-        except Exception as e:  # noqa: BLE001 - the tour page shows the reason
-            rec.stop(
-                "draft",
-                f"the tour pipeline could not run: {type(e).__name__}: {e}",
-                PostStatus.PARKED,
-            )
-            rec.log(f"parked: the tour pipeline could not run: {type(e).__name__}: {e}")
-            store.put(rec)
-
-    threading.Thread(target=work, name=f"tour-{rec.post_id[:8]}", daemon=True).start()
+    store.jobs.enqueue(JobKind.TOUR, rec.post_id)
     return rec
+
+
+def run_tour(store: PostStore, job: Job) -> None:
+    """The worker's handler for a TOUR job."""
+    from cap.characters import ANCHOR_ELEMENTS, CHARACTER_BLOCKS
+    from cap.config import get_settings
+    from cap.demo import tour_example as ex
+
+    rec = store.get(job.post_id)
+    deps = PipelineDeps(
+        client=MockClient(ex.fixtures()),
+        anchor_elements={"A": ANCHOR_ELEMENTS["A"]},
+        character_blocks={"A": CHARACTER_BLOCKS["A"]},
+        test_logs={rec.post_id: ex.TEST_LOG},
+        render_dir=Path(get_settings().data_dir) / "renders",
+        on_progress=store.put,
+    )
+    out = run_post(rec, ex.SOURCES, deps)
+    out.log("drafted from the worked example (fixtures), not the live model")
+    store.put(out)
+
+
+def run_brief_job(store: PostStore, job: Job) -> None:
+    """The worker's handler for a BRIEF job: the brief as filed, with the pinned pages
+    and test log it was filed with."""
+    rec = store.get(job.post_id)
+    run_brief(
+        store,
+        rec.channel_id.value,
+        rec.brief.topic,
+        urls=list(job.payload.get("urls", [])),
+        test_log=str(job.payload.get("test_log", "")),
+        record=rec,
+    )
 
 
 def seed_store(store: PostStore, demo: bool = False, canary: bool = False) -> None:

@@ -52,11 +52,10 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
     from fastapi.testclient import TestClient
 
     from cap import localpg
-    from cap.approval import release_job
     from cap.config import get_settings
     from cap.demo.seed import seed_store
     from cap.schema.post_record import PostStatus
-    from cap.server import create_app
+    from cap.server import create_app, stop_workers
     from cap.store.postgres import PostgresStore
 
     get_settings.cache_clear()
@@ -146,7 +145,7 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
                 step("verdict recorded", r.status_code == 303, f"status {r.status_code}")
                 r = form(f"/posts/{post_id}/finalise")
                 step("approval finalised, final video started", r.status_code == 303)
-                release_job.wait(post_id, timeout=120)
+                store.jobs.wait(post_id, timeout=120)
                 rec = store.get(post_id)
                 final = next((Path(f.uri) for f in rec.release.files if f.role == "long"), None)
                 step(
@@ -242,6 +241,7 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
                 out(f"smoke: FAILED at: {e}")
                 return 1
             finally:
+                stop_workers()  # before the database closes
                 store.close()
     except localpg.LocalPostgresError as e:
         out(f"  FAIL  0. the database starts - {e}")

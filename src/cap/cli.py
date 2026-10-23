@@ -363,7 +363,12 @@ def _serve_store(
         print(lan.phone_block(args.port, codes, addresses))
     if args.open:
         _open_later(local_url)
-    uvicorn.run(create_app(store), host=args.host, port=args.port)
+    from cap.server import stop_workers
+
+    try:
+        uvicorn.run(create_app(store), host=args.host, port=args.port)
+    finally:
+        stop_workers()  # before the database closes
     return 0
 
 
