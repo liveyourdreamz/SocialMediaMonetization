@@ -95,9 +95,11 @@ class LocalPostgres:
         """Create the cluster with a fresh password. Never touches an existing cluster."""
         if self.initialised():
             return
-        # initdb on Windows drops admin rights first and then cannot always create the
-        # folders above the cluster; an empty folder made here is one it accepts
+        # initdb on Windows drops admin rights before it touches the folder. A folder an
+        # elevated prompt made belongs to Administrators, which it can then no longer
+        # read; an empty folder granted to this user alone is one it always accepts.
         self.cluster.mkdir(parents=True, exist_ok=True)
+        restrict_to_owner(self.cluster)
         password = secrets.token_urlsafe(24)
         self.password_file.write_text(password, encoding="utf-8")
         restrict_to_owner(self.password_file)
@@ -120,7 +122,6 @@ class LocalPostgres:
             pwfile.unlink(missing_ok=True)
         if done.returncode != 0:
             raise LocalPostgresError(f"could not create the database: {_tail(done)}")
-        restrict_to_owner(self.cluster)
         with (self.cluster / "postgresql.conf").open("a", encoding="utf-8") as f:
             f.write(
                 "\n# cap: the laptop's database, reachable from this laptop only\n"
