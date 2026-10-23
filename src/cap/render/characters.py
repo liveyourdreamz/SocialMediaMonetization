@@ -22,6 +22,8 @@ import math
 
 from PIL import Image, ImageDraw
 
+from cap.render.text import text_font
+
 INK = (0x1B, 0x1A, 0x17)
 STEEL = (0xB9, 0xBC, 0xC1)
 STEEL_DARK = (0x7E, 0x82, 0x88)
@@ -292,6 +294,4 @@ def draw_falak(
 def _text(
     d: ImageDraw.ImageDraw, xy: tuple[float, float], s: str, size: int, fill, bold: bool = False
 ) -> None:  # type: ignore[no-untyped-def]
-    from cap.render import _font
-
-    d.text(xy, s, font=_font(max(8, size), bold=bold), fill=fill)
+    d.text(xy, s, font=text_font(max(8, size), bold=bold), fill=fill)

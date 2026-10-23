@@ -31,13 +31,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from cap.config import get_settings
 from cap.policy import AI_ROLE_DISCLOSURE
+from cap.render.text import shape_text, text_font, text_kw, wrap_lines
 from cap.schema.post_record import Platform, PostRecord
 
-FONTS = Path(__file__).resolve().parent / "fonts"
 OPENING_SLOT = "[[HEMANT_OPENING_LINE]]"
 OPENING_PLACEHOLDER = "Your opening line goes here"
 PLACEHOLDER_UNIT = f"[{OPENING_PLACEHOLDER}]"  # the review render's stand-in paragraph
@@ -120,55 +120,6 @@ def paragraphs(text: str) -> list[str]:
     return out
 
 
-def _font(size: int, bold: bool = False, arabic: bool = False) -> ImageFont.FreeTypeFont:
-    name = ("IBMPlexSansArabic" if arabic else "IBMPlexSans") + (
-        "-SemiBold" if bold else "-Regular"
-    )
-    return ImageFont.truetype(str(FONTS / f"{name}.ttf"), size)
-
-
-def _raqm() -> bool:
-    from PIL import features
-
-    return bool(features.check("raqm"))
-
-
-def _shape(text: str, arabic: bool) -> str:
-    """Pillow with libraqm shapes Arabic itself (direction='rtl' below); without it,
-    pre-shape with arabic_reshaper and reorder with python-bidi. Never both."""
-    if not arabic or _raqm():
-        return text
-    import arabic_reshaper
-    from bidi.algorithm import get_display
-
-    return str(get_display(arabic_reshaper.reshape(text)))
-
-
-def _kw(arabic: bool) -> dict:
-    return {"direction": "rtl", "language": "ar"} if arabic and _raqm() else {}
-
-
-def _wrap(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.FreeTypeFont,
-    width: int,
-    arabic: bool = False,
-) -> list[str]:
-    words, lines, cur = text.split(), [], ""
-    for w in words:
-        trial = (cur + " " + w).strip()
-        if draw.textlength(_shape(trial, arabic), font=font, **_kw(arabic)) <= width:
-            cur = trial
-        else:
-            if cur:
-                lines.append(cur)
-            cur = w
-    if cur:
-        lines.append(cur)
-    return lines
-
-
 # ---------------------------------------------------------------- frames
 
 
@@ -184,9 +135,9 @@ def _chrome(
     w, h = size
     m = int(w * 0.05)
     tag = f"{channel} · {character}".upper()
-    draw.text((m, m), tag, font=_font(int(h * 0.026), bold=True), fill=ACCENT)
+    draw.text((m, m), tag, font=text_font(int(h * 0.026), bold=True), fill=ACCENT)
     label = AI_ROLE_DISCLOSURE.rstrip(".")
-    f = _font(int(h * 0.024))
+    f = text_font(int(h * 0.024))
     tw = draw.textlength(label, font=f)
     draw.text((w - m - tw, m), label, font=f, fill=MUTED)
     draw.line([(m, h - m), (w - m, h - m)], fill=LINE, width=2)
@@ -199,13 +150,13 @@ def _title_card(
     w, h = size
     m = int(w * 0.08)
     _chrome(d, size, character, channel, arabic)
-    f = _font(int(h * (0.075 if w > h else 0.055)), bold=True, arabic=arabic)
-    lines = _wrap(d, title, f, w - 2 * m, arabic)
+    f = text_font(int(h * (0.075 if w > h else 0.055)), bold=True, arabic=arabic)
+    lines = wrap_lines(d, title, f, w - 2 * m, arabic)
     y = h // 2 - len(lines) * int(f.size * 1.15) // 2
     for ln in lines:
-        txt = _shape(ln, arabic)
-        x = w - m - d.textlength(txt, font=f, **_kw(arabic)) if arabic else m
-        d.text((x, y), txt, font=f, fill=INK, **_kw(arabic))
+        txt = shape_text(ln, arabic)
+        x = w - m - d.textlength(txt, font=f, **text_kw(arabic)) if arabic else m
+        d.text((x, y), txt, font=f, fill=INK, **text_kw(arabic))
         y += int(f.size * 1.15)
     return im
 
@@ -217,8 +168,8 @@ def _slide(
     w, h = size
     m = int(w * 0.08)
     _chrome(d, size, character, channel, arabic)
-    f = _font(int(h * (0.042 if w > h else 0.034)), arabic=arabic)
-    lines = _wrap(d, text, f, w - 2 * m, arabic)
+    f = text_font(int(h * (0.042 if w > h else 0.034)), arabic=arabic)
+    lines = wrap_lines(d, text, f, w - 2 * m, arabic)
     lh = int(f.size * 1.5)
     y = max(int(h * 0.18), h // 2 - len(lines) * lh // 2)
     # the speaking card: a surface block behind the text, Proof's hairline around it
@@ -231,14 +182,14 @@ def _slide(
         width=2,
     )
     for ln in lines:
-        txt = _shape(ln, arabic)
-        x = w - m - d.textlength(txt, font=f, **_kw(arabic)) if arabic else m
-        d.text((x, y), txt, font=f, fill=INK, **_kw(arabic))
+        txt = shape_text(ln, arabic)
+        x = w - m - d.textlength(txt, font=f, **text_kw(arabic)) if arabic else m
+        d.text((x, y), txt, font=f, fill=INK, **text_kw(arabic))
         y += lh
     d.text(
         (m, h - int(w * 0.05) - int(h * 0.04)),
         f"{n} / {total}",
-        font=_font(int(h * 0.022)),
+        font=text_font(int(h * 0.022)),
         fill=MUTED,
     )
     return im
@@ -251,15 +202,15 @@ def _end_card(
     w, h = size
     m = int(w * 0.08)
     _chrome(d, size, character, channel, arabic)
-    d.text((m, int(h * 0.2)), "Sources", font=_font(int(h * 0.05), bold=True), fill=INK)
-    f = _font(int(h * 0.028))
+    d.text((m, int(h * 0.2)), "Sources", font=text_font(int(h * 0.05), bold=True), fill=INK)
+    f = text_font(int(h * 0.028))
     y = int(h * 0.32)
     for s in sources[:8]:
-        for ln in _wrap(d, s, f, w - 2 * m)[:2]:
+        for ln in wrap_lines(d, s, f, w - 2 * m)[:2]:
             d.text((m, y), ln, font=f, fill=MUTED)
             y += int(f.size * 1.4)
         y += int(f.size * 0.4)
-    d.text((m, h - int(h * 0.2)), AI_ROLE_DISCLOSURE, font=_font(int(h * 0.03)), fill=INK)
+    d.text((m, h - int(h * 0.2)), AI_ROLE_DISCLOSURE, font=text_font(int(h * 0.03)), fill=INK)
     return im
 
 

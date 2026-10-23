@@ -86,8 +86,8 @@ def _ffmpeg() -> str:
 
 
 def _frames() -> str:
-    from cap.render import _raqm
     from cap.render import scenes as sc
+    from cap.render.text import raqm_available
 
     lay = sc.layout((1920, 1080))
     patch_plan = sc.plan(
@@ -107,7 +107,7 @@ def _frames() -> str:
     if en.size != (1920, 1080) or ar.size != (1920, 1080):
         raise RuntimeError("frame size wrong")
     kinds = [p.kind for p in patch_plan] + [p.kind for p in falak_plan]
-    return f"Patch and Falak scenes drawn ({', '.join(kinds)}); Arabic shaping via {'raqm' if _raqm() else 'reshaper+bidi'}"
+    return f"Patch and Falak scenes drawn ({', '.join(kinds)}); Arabic shaping via {'raqm' if raqm_available() else 'reshaper+bidi'}"
 
 
 def _video() -> str:
