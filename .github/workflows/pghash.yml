@@ -13,9 +13,9 @@ jobs:
           Invoke-WebRequest -Uri $u -OutFile pg.zip -MaximumRedirection 10
           $h = (Get-FileHash pg.zip -Algorithm SHA256).Hash.ToLower()
           $s = (Get-Item pg.zip).Length
-          Write-Output "SHA256=$h SIZE=$s"
+          Write-Output "::notice title=pg::SHA256=$h SIZE=$s"
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $z = [IO.Compression.ZipFile]::OpenRead("$PWD\pg.zip")
-          $z.Entries | Select-Object -First 5 | ForEach-Object { Write-Output $_.FullName }
-          $z.Entries | Where-Object { $_.FullName -like "pgsql/bin/pg_ctl.exe" } | ForEach-Object { Write-Output "found $($_.FullName)" }
+          $z.Entries | Select-Object -First 3 | ForEach-Object { Write-Output "::notice title=entry::$($_.FullName)" }
+          $z.Entries | Where-Object { $_.FullName -like "pgsql/bin/pg_ctl.exe" } | ForEach-Object { Write-Output "::notice title=pgctl::found $($_.FullName)" }
           $z.Dispose()
