@@ -47,6 +47,7 @@ def preview(
         any_connected=len(available) > 1,
         results=views.publish_results(record),
         release=views.release_view(record),
+        cost=views.cost_view(record),
         flags=release.flags_for(record),
         local_dir=str((store.local_published_dir() / record.post_id).resolve()),
         content_rtl=views.is_rtl(record.channel_id.value),

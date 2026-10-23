@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from cap.config import get_settings
+from cap.domain.cost import usage_of
 
 if TYPE_CHECKING:
     from anthropic.types import MessageParam, OutputConfigParam, TextBlockParam
@@ -117,10 +118,7 @@ class AnthropicClient(ModelClient):
         return Completion(
             raw=text,
             stop_reason=resp.stop_reason or "end_turn",
-            usage={
-                "input_tokens": resp.usage.input_tokens,
-                "output_tokens": resp.usage.output_tokens,
-            },
+            usage=usage_of(resp),
             model=resp.model,
             thinking=[t for t in thinking if t],
             stop_category=getattr(details, "category", None),

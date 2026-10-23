@@ -13,13 +13,18 @@ with its job. A step that fails closed parks the post (or the verdict rejects it
 the next step is not queued; a human decides. `run_post` runs the three in a row (the
 full check and the tests).
 
+Every model call made inside a step is charged to the post when the step ends
+(cap.domain.cost, D44); a post over its budget carries on and the card says so.
+
 The four gates run in sequence here; they are independent and can be fanned out once
 gate latency matters.
 """
 
 from __future__ import annotations
 
+import functools
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -27,6 +32,7 @@ from typing import Any
 from cap.agents import AgentBlockedError, adapt, critique, critique_text, draft
 from cap.config import get_settings
 from cap.domain.card import prepare_card
+from cap.domain.cost import charge, metering
 from cap.gates import (
     HistoryIndex,
     Outcome,
@@ -73,6 +79,20 @@ def _progress(deps: PipelineDeps, record: PostRecord) -> None:
     record.revision = saved.revision  # the next save builds on this one
 
 
+def _metered[**P](step: Callable[P, PostRecord]) -> Callable[P, PostRecord]:
+    """Charge the model calls a step made to the record it returns."""
+
+    @functools.wraps(step)
+    def run(*args: P.args, **kwargs: P.kwargs) -> PostRecord:
+        with metering() as spent:
+            out = step(*args, **kwargs)
+        charge(out, spent, get_settings().post_budget_usd)
+        return out
+
+    return run
+
+
+@_metered
 def write(record: PostRecord, sources: list[SourceDoc], deps: PipelineDeps) -> PostRecord:
     """Draft, one critique (and one revision if the critic asks), then the platform
     variants. Parks the post when an agent fails closed."""
@@ -120,6 +140,7 @@ def research(record: PostRecord, sources: list[SourceDoc], deps: PipelineDeps) -
     ]
 
 
+@_metered
 def checks(record: PostRecord, sources: list[SourceDoc], deps: PipelineDeps) -> PostRecord:
     """Research, then the four gates, then the one verdict (cap.domain.verdict): pass,
     questions for the card (D43), or reject."""
@@ -173,6 +194,7 @@ def checks(record: PostRecord, sources: list[SourceDoc], deps: PipelineDeps) -> 
     return record
 
 
+@_metered
 def render(record: PostRecord, deps: PipelineDeps) -> PostRecord:
     """The REVIEW render (review C1): what the card plays, the opening line a visible
     placeholder. The final render runs after approval (cap.approval.release_job) and

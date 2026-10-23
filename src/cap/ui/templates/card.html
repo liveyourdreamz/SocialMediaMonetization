@@ -41,6 +41,12 @@
       <span class="disc {{ 'pass' if 'first time' in critic else 'near' }}" aria-hidden="true">{% if 'first time' in critic %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% else %}!{% endif %}</span>
       <div><span class="name">Critic</span><span class="line">{{ critic }}</span></div>
     </div>
+    {% if cost %}
+    <div class="card tight gate">
+      <span class="disc {{ 'near' if cost.over else 'pass' }}" aria-hidden="true">$</span>
+      <div><span class="name">Model cost (estimate)</span><span class="line">{{ cost.line }}</span></div>
+    </div>
+    {% endif %}
     {% if planted and closed %}
     <div class="card tight stack-sm" style="border-color: var(--signal)">
       <span class="eyebrow" style="color: var(--signal)">This was a canary</span>

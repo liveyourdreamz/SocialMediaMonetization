@@ -33,6 +33,7 @@ def route(topic: str) -> tuple[str, str]:
         try:
             import anthropic
 
+            from cap.domain.cost import note, usage_of
             from cap.prompts import HAIKU
 
             client = anthropic.Anthropic(
@@ -51,6 +52,7 @@ def route(topic: str) -> tuple[str, str]:
                 ),
                 messages=[{"role": "user", "content": topic[:300]}],
             )
+            note("routing", HAIKU, usage_of(r))
             text = "".join(getattr(b, "text", "") for b in r.content).strip().upper()
             if text[:1] in ("A", "B"):
                 return text[:1], "chosen by the model"

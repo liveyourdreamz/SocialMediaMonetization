@@ -8,6 +8,7 @@ from typing import Any
 from cap.approval.app import card_for
 from cap.approval.identity import Reviewer
 from cap.config import get_settings
+from cap.domain.cost import over_budget
 from cap.schema.post_record import PostRecord, PostStatus
 from cap.store import PostStore
 from cap.ui.views.text import (
@@ -127,6 +128,7 @@ def card_context(
         "chips": REASON_CHIPS,
         "gates": gates,
         "critic": _critic_line(card.critic_issues, record) if card.gates_revealed else None,
+        "cost": cost_view(record) if card.gates_revealed else None,  # shown with the gates
         "planted": card.planted_fault,
         "verdict_text": record.approval.pre_reveal_decision.value.capitalize()
         if record.approval.pre_reveal_decision
@@ -185,3 +187,16 @@ def _critic_line(issues: list[dict] | None, record: PostRecord) -> str:
     return f"{len(issues)} issue(s) raised, then accepted after one revision: " + "; ".join(
         f"{i.get('severity', '')} {i.get('rubric_item', 'issue')}".strip() for i in issues[:3]
     )
+
+
+def cost_view(record: PostRecord) -> dict[str, Any]:
+    """What the post's model calls cost, and whether that is over the per-post budget
+    (D44: flagged, never stopped). An estimate from token counts; the bill is the truth."""
+    budget = get_settings().post_budget_usd
+    usd = record.metrics.cost_usd
+    calls = len(record.costs)
+    if not calls:
+        return {"over": False, "line": "no model calls charged (sample or fixture output)"}
+    over = over_budget(record, budget)
+    line = f"${usd:.2f} for {calls} model call{'s' if calls != 1 else ''}, budget ${budget:.2f}"
+    return {"over": over, "line": line + (" · over budget" if over else "")}

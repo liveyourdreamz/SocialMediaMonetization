@@ -381,6 +381,56 @@
       "title": "ClaimCheckResult",
       "type": "object"
     },
+    "CostLine": {
+      "additionalProperties": false,
+      "description": "One model call charged to the post (D44; priced by cap.domain.cost).",
+      "properties": {
+        "what": {
+          "title": "What",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "input_tokens": {
+          "default": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "default": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "cache_read_tokens": {
+          "default": 0,
+          "title": "Cache Read Tokens",
+          "type": "integer"
+        },
+        "cache_write_tokens": {
+          "default": 0,
+          "title": "Cache Write Tokens",
+          "type": "integer"
+        },
+        "usd": {
+          "default": 0.0,
+          "title": "Usd",
+          "type": "number"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "what",
+        "model"
+      ],
+      "title": "CostLine",
+      "type": "object"
+    },
     "CriticIssue": {
       "additionalProperties": false,
       "properties": {
@@ -1476,6 +1526,13 @@
     },
     "metrics": {
       "$ref": "#/$defs/Metrics"
+    },
+    "costs": {
+      "items": {
+        "$ref": "#/$defs/CostLine"
+      },
+      "title": "Costs",
+      "type": "array"
     },
     "flags": {
       "$ref": "#/$defs/Flags"

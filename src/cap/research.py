@@ -25,6 +25,7 @@ import httpx
 
 from cap import fetch
 from cap.config import get_settings
+from cap.domain.cost import note, usage_of
 from cap.fetch import HEADERS, UA, failed_reason
 from cap.prompts import SONNET
 
@@ -186,6 +187,7 @@ def _search_with_model(
         "nothing else:\nURL | why this page\n"
     )
     resp = _ask_scout(client, system, _scout_request(topic, channel, claims), tool)
+    note("research scout", SONNET, usage_of(resp))
     searched, text = _read_reply(resp.content)
     return _chosen(searched, text), text.strip()[:300]
 

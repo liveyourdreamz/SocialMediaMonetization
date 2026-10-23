@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Literal, NewType
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from cap.config import get_settings
+from cap.domain.cost import note
 from cap.prompts import PromptSpec, new_nonce, pack_version, system_prompt, untrusted
 
 if TYPE_CHECKING:
@@ -163,6 +164,8 @@ class ModelClient(ABC):
         why = ""
         for attempt in (1, 2):  # D28: one retry then park
             last = self._complete(call)
+            if last.usage:  # a billed reply (the mock and a failed request have none)
+                note(f"{spec.prompt_id} call {spec.call}", last.model or spec.model, last.usage)
             if last.stop_reason == "refusal":
                 reason = f"model_refusal:{last.stop_category or 'unspecified'}"
                 blocked = _blocked_output(output_model, spec, reason)

@@ -92,7 +92,10 @@ class Settings(BaseSettings):
 
     model_backend: ModelBackend = ModelBackend.MOCK
     anthropic_api_key: SecretStr | None = None
-    anthropic_max_budget_usd_per_post: float = 5.0  # not yet enforced; kill-gate work
+    # What one post's model calls should cost at most (D44): the PRD's $500 a month over
+    # about 40 posts. A post over it is flagged on the card, never stopped; the hard cap
+    # is the spend limit on the API key itself.
+    post_budget_usd: float = Field(default=12.5, gt=0)
     log_thinking: bool = False  # test runs: thinking.display summarized, logged by code
 
     # Approval token signing key (HMAC). Local default is for tests only; the validator

@@ -7,6 +7,7 @@ from __future__ import annotations
 from cap.ui.views.card import (  # noqa: F401 - the screens read cap.ui.views.*
     QueueItem,
     card_context,
+    cost_view,
     queue_items,
 )
 from cap.ui.views.digest import (  # noqa: F401 - the screens read cap.ui.views.*

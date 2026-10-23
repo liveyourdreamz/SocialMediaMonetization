@@ -277,6 +277,19 @@ class Metrics(Strict):
     revenue_status: Literal["none", "estimated", "adjusted", "finalised"] = "none"  # P12
 
 
+class CostLine(Strict):
+    """One model call charged to the post (D44; priced by cap.domain.cost)."""
+
+    what: str  # the prompt or service, e.g. "P2 call 1", "research scout"
+    model: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    usd: float = 0.0
+    at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class PlantedFault(Strict):
     type: FaultType
     span: str
@@ -328,6 +341,7 @@ class PostRecord(Strict):
     approval: Approval = Field(default_factory=Approval)
     publish: Publish = Field(default_factory=Publish)
     metrics: Metrics = Field(default_factory=Metrics)
+    costs: list[CostLine] = Field(default_factory=list)  # metrics.cost_usd is their sum
     flags: Flags = Field(default_factory=Flags)
     history: list[str] = Field(default_factory=list)  # audit trail lines, append only
 
