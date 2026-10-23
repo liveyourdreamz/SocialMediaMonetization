@@ -46,7 +46,28 @@ def test_a_brief_interrupted_by_a_restart_resumes_and_reaches_the_queue(tmp_path
     got = store.get(rec.post_id)
     assert got.status == PostStatus.AWAITING_APPROVAL, got.history[-3:]
     assert any("resumed after a restart: brief" in h for h in got.history)
-    assert [j.status for j in store.jobs.jobs_for(rec.post_id)] == [JobStatus.DONE]
+    jobs = store.jobs.jobs_for(rec.post_id)
+    assert [(j.kind, j.status) for j in jobs] == [
+        (JobKind.BRIEF, JobStatus.DONE),
+        (JobKind.CHECKS, JobStatus.DONE),
+        (JobKind.RENDER, JobStatus.DONE),
+    ]
+
+
+def test_a_crash_during_the_checks_resumes_at_the_checks_not_the_writing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    store = MemoryStore()
+    rec = _filed(store)
+    assert Worker(store).run_once()  # the writing step finishes and queues the checks
+    written = store.get(rec.post_id).draft.script
+    _crash_mid_job(store)  # the checks start; the app stops
+    Worker(store).recover()
+    drain(store, rec.post_id)
+    got = store.get(rec.post_id)
+    assert got.status == PostStatus.AWAITING_APPROVAL and got.draft.script.endswith(written[-40:])
+    attempts = {j.kind: j.attempts for j in store.jobs.jobs_for(rec.post_id)}
+    assert attempts == {JobKind.BRIEF: 1, JobKind.CHECKS: 2, JobKind.RENDER: 1}
+    assert any("resumed after a restart: checks" in h for h in got.history)
 
 
 def test_a_job_interrupted_too_often_is_given_up_and_the_post_parked():

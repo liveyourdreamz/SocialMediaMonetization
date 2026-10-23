@@ -24,7 +24,7 @@ from collections.abc import Callable
 
 from cap.approval import release_job
 from cap.audit import acting_as
-from cap.demo.seed import run_brief_job, run_tour
+from cap.demo.seed import run_checks_job, run_render_job, run_tour, run_write_job
 from cap.jobs import Job, JobKind
 from cap.schema.post_record import PostRecord, PostStatus, ReleaseStatus
 from cap.store import IN_FLIGHT, PostStore, park_if_interrupted
@@ -35,7 +35,9 @@ _log = logging.getLogger("cap.worker")
 
 def default_handlers() -> dict[JobKind, Handler]:
     return {
-        JobKind.BRIEF: run_brief_job,
+        JobKind.BRIEF: run_write_job,
+        JobKind.CHECKS: run_checks_job,
+        JobKind.RENDER: run_render_job,
         JobKind.RELEASE: release_job.run,
         JobKind.TOUR: run_tour,
     }

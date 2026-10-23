@@ -199,10 +199,8 @@ def test_auto_routes_by_subject_and_patch_needs_no_test_log(keyed, monkeypatch):
     assert routing._heuristic("How rainbows work") == "B"
     assert routing._heuristic("How a lithium battery works") == "A"
     monkeypatch.setattr(routing, "route", lambda topic: ("B", "chosen by the model"))
-    started: list[str] = []
-    monkeypatch.setattr("cap.demo.seed.run_brief", lambda *a, **k: started.append(a[1]))
     store = MemoryStore()
-    api = Browser(create_app(store), follow_redirects=False)
+    api = Browser(create_app(store, run_jobs=False), follow_redirects=False)  # queued only
     api.sign_in("hemant")
     assert 'value="auto" checked' in api.get("/operator").text
     api.form("/operator/brief", channel="auto", topic="How rainbows work")
@@ -213,10 +211,10 @@ def test_auto_routes_by_subject_and_patch_needs_no_test_log(keyed, monkeypatch):
     api.form("/operator/brief", channel="A", topic="How a lithium battery works")
     rec = next(p for p in store.all() if p.brief.topic == "How a lithium battery works")
     assert rec.status.value == "drafting" and rec.brief.format_id == "take_it_apart"
-    import time
+    from cap.jobs import JobKind
 
-    for _ in range(50):
-        if len(started) == 2:
-            break
-        time.sleep(0.05)
-    assert started == ["B", "A"]
+    queued = [j for p in store.all() for j in store.jobs.jobs_for(p.post_id)]
+    assert [(j.kind, store.get(j.post_id).channel_id.value) for j in queued] == [
+        (JobKind.BRIEF, "B"),
+        (JobKind.BRIEF, "A"),
+    ]

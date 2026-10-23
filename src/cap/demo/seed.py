@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from cap import pipeline
 from cap.demo import CHARACTER_BLOCK, SOURCES, TEST_LOG, happy_fixtures
 from cap.domain.card import prepare_card
 from cap.jobs import Job, JobKind
@@ -198,20 +199,38 @@ def run_brief(
     test_log: str = "",
     record: PostRecord | None = None,
 ) -> PostRecord:
-    """The whole pipeline on one brief. Mock backend: the sample episode with the brief's
-    topic recorded; Anthropic backend: a real draft of the topic from the model's own
-    knowledge, any pinned page and the test log, then sources found for its claims
-    (D41)."""
+    """The whole pipeline on one brief, in this thread (the full check and the tests;
+    the app runs the same steps as queued jobs). Mock backend: the sample episode with
+    the brief's topic recorded; Anthropic backend: a real draft of the topic from the
+    model's own knowledge, any pinned page and the test log, then sources found for its
+    claims (D41)."""
+    rec = record or new_brief(channel, topic)
+    deps, sources = _setup(store, rec, test_log, urls=urls or [])
+    out = _finish(run_post(rec, sources, deps))
+    store.put(out)
+    return out
+
+
+def _setup(
+    store: PostStore,
+    rec: PostRecord,
+    test_log: str,
+    *,
+    urls: list[str] | None = None,
+) -> tuple[PipelineDeps, list[dict[str, Any]]]:
+    """What every step of a brief needs: the model client, the character blocks and
+    anchors, the test log, research (real backend) and progress saves. With `urls`
+    (the write step) the pinned pages are fetched and returned as the sources."""
     from cap.characters import ANCHOR_ELEMENTS, CHARACTER_BLOCKS
     from cap.config import get_settings
     from cap.fetch import fetch_sources
     from cap.models import get_client
 
-    rec = record or new_brief(channel, topic)
     ch = rec.channel_id
     real = get_settings().model_backend.value != "mock"
     test_log = test_log.strip()
     research = None
+    sources: list[dict[str, Any]] = []
     if real:
         # D41: the drafter writes from the topic and its own knowledge (plus any pinned
         # page and the test log); the research step then looks for a source for each
@@ -220,18 +239,19 @@ def run_brief(
         from cap.fetch import failed_reason
         from cap.research import find_sources
 
-        sources = fetch_sources(urls) if urls else []
-        for s in sources:
-            why = failed_reason(s)
-            if why:
-                rec.log(f"could not fetch {s['url']}: {why}")
-        sources = [s for s in sources if not failed_reason(s)]
         if urls:
+            fetched = fetch_sources(urls)
+            for s in fetched:
+                why = failed_reason(s)
+                if why:
+                    rec.log(f"could not fetch {s['url']}: {why}")
+            sources = [s for s in fetched if not failed_reason(s)]
             rec.log(f"fetched {len(sources)} of {len(urls)} pinned source(s)")
         rec.brief.anchor_elements = ANCHOR_ELEMENTS[ch.value][:2]
         blocks = {k: v + "\n\n" + KNOWLEDGE_NOTE for k, v in CHARACTER_BLOCKS.items()}
         anchors = ANCHOR_ELEMENTS
         logs = {rec.post_id: test_log} if test_log else {}
+        topic = rec.brief.topic
 
         def research(drafted: PostRecord):  # type: ignore[no-untyped-def]
             claims = [c.text for c in drafted.draft.claims if not c.in_test_log]
@@ -242,9 +262,8 @@ def run_brief(
         sources = fetch_sources(urls) if urls else SOURCES
         blocks, anchors = {ch.value: CHARACTER_BLOCK}, {ch.value: ["test log"]}
         logs = {rec.post_id: test_log or TEST_LOG}
-    client = get_client(happy_fixtures())
     deps = PipelineDeps(
-        client=client,
+        client=get_client(happy_fixtures()),
         anchor_elements=anchors,
         character_blocks=blocks,
         test_logs=logs,
@@ -252,15 +271,60 @@ def run_brief(
         research=research,
         on_progress=store.put,
     )
-    out = run_post(rec, sources, deps)
-    if get_settings().model_backend.value == "mock":
-        out.log("drafted by the mock backend from the sample episode (no API key yet)")
-    if ch == Channel.C and get_settings().model_backend.value == "mock":
+    return deps, sources
+
+
+def _finish(out: PostRecord) -> PostRecord:
+    """After the last step that ran: the mock backend says so on the record, and in
+    mock mode channel C gets the Arabic sample (the drafter wrote English)."""
+    from cap.config import get_settings
+
+    if get_settings().model_backend.value != "mock":
+        return out
+    out.log("drafted by the mock backend from the sample episode (no API key yet)")
+    if out.channel_id == Channel.C:
         out = _falak_arabic(out)
         if out.status == PostStatus.AWAITING_APPROVAL:
             prepare_card(out)
-    store.put(out)
     return out
+
+
+# ---- the brief's three steps as queued jobs (cap.worker runs them) -------------------
+
+
+def run_write_job(store: PostStore, job: Job) -> None:
+    """BRIEF: fetch any pinned pages, write the script and variants; queue the checks
+    with the sources they need."""
+    test_log = str(job.payload.get("test_log", ""))
+    rec = store.get(job.post_id)
+    deps, sources = _setup(store, rec, test_log, urls=list(job.payload.get("urls", [])))
+    rec = pipeline.write(rec, pipeline.as_sources(sources), deps)
+    _next(store, rec, JobKind.CHECKS, {"test_log": test_log, "sources": sources})
+
+
+def run_checks_job(store: PostStore, job: Job) -> None:
+    """CHECKS: research and the four gates; queue the render unless the post stopped."""
+    test_log = str(job.payload.get("test_log", ""))
+    rec = store.get(job.post_id)
+    deps, _ = _setup(store, rec, test_log)
+    sources = pipeline.as_sources(list(job.payload.get("sources", [])))
+    rec = pipeline.checks(rec, sources, deps)
+    _next(store, rec, JobKind.RENDER, {"test_log": test_log})
+
+
+def run_render_job(store: PostStore, job: Job) -> None:
+    """RENDER: the review cut; the post reaches the approval queue."""
+    rec = store.get(job.post_id)
+    deps, _ = _setup(store, rec, str(job.payload.get("test_log", "")))
+    store.put(_finish(pipeline.render(rec, deps)))
+
+
+def _next(store: PostStore, rec: PostRecord, kind: JobKind, payload: dict[str, Any]) -> None:
+    if pipeline.stopped(rec):
+        store.put(_finish(rec))
+        return
+    store.put(rec)
+    store.jobs.enqueue(kind, rec.post_id, payload)
 
 
 def begin_tour(store: PostStore) -> PostRecord:
@@ -300,20 +364,6 @@ def run_tour(store: PostStore, job: Job) -> None:
     out = run_post(rec, ex.SOURCES, deps)
     out.log("drafted from the worked example (fixtures), not the live model")
     store.put(out)
-
-
-def run_brief_job(store: PostStore, job: Job) -> None:
-    """The worker's handler for a BRIEF job: the brief as filed, with the pinned pages
-    and test log it was filed with."""
-    rec = store.get(job.post_id)
-    run_brief(
-        store,
-        rec.channel_id.value,
-        rec.brief.topic,
-        urls=list(job.payload.get("urls", [])),
-        test_log=str(job.payload.get("test_log", "")),
-        record=rec,
-    )
 
 
 def seed_store(store: PostStore, demo: bool = False, canary: bool = False) -> None:

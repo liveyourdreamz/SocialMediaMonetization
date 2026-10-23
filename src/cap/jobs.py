@@ -27,7 +27,9 @@ MAX_ATTEMPTS = 3  # a job interrupted this many times is given up and its post p
 
 
 class JobKind(StrEnum):
-    BRIEF = "brief"  # run the pipeline on a filed brief
+    BRIEF = "brief"  # a filed brief's first step: write the script and variants
+    CHECKS = "checks"  # research and the four gates
+    RENDER = "render"  # the review cut; the post reaches the approval queue
     RELEASE = "release"  # the final render and seal after approval
     TOUR = "tour"  # the guided tour's worked example
 
