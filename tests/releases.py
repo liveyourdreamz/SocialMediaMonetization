@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from cap import release
-from cap.approval import token as tok
+from cap.domain import token as tok
 from cap.schema.post_record import (
     Channel,
     Decision,

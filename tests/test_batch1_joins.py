@@ -54,7 +54,7 @@ def test_the_file_store_keeps_its_history_beside_its_records(tmp_path: Path) -> 
 def test_every_published_source_list_uses_the_one_rule() -> None:
     """The renderer, the outbox package and the release description list the same
     links: supported claims only, never the test log."""
-    from cap.gates.verdict import confirmed_sources
+    from cap.domain.verdict import confirmed_sources
     from cap.ui.views import package
 
     rec = PostRecord(channel_id=Channel.A)
@@ -83,7 +83,7 @@ def test_finalising_an_approval_writes_the_history(tmp_path: Path, backend, monk
     card path and the post must be in the store's history."""
     from cap.approval import release_job
     from cap.approval.app import finalise_and_issue
-    from cap.approval.card import prepare_card, record_verdict
+    from cap.domain.card import prepare_card, record_verdict
     from cap.schema.post_record import Decision
 
     backend("anthropic")

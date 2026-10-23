@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 
 from cap import release
-from cap.approval import token as tok
 from cap.config import get_settings
+from cap.domain import token as tok
 from cap.policy import TOKEN_TTL_HOURS
 from cap.publisher import (
     DryRunAdapter,

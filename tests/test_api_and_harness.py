@@ -2,8 +2,8 @@ from fastapi.testclient import TestClient
 
 from cap.approval import release_job
 from cap.approval.app import Store, create_app
-from cap.approval.token import ApprovalToken, verify
 from cap.config import get_settings
+from cap.domain.token import ApprovalToken, verify
 from cap.gates.disclosure import MFK_FACTOR_WEIGHTS
 from cap.harness import run_all
 from cap.models import MockClient

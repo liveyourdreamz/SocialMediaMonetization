@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from cap.agents import draft
-from cap.approval import token as tok
 from cap.demo import CHARACTER_BLOCK, TEST_LOG
+from cap.domain import token as tok
 from cap.models import MockClient
 from cap.pipeline import run_post
 from cap.publisher import (

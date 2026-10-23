@@ -12,8 +12,9 @@ from types import SimpleNamespace
 import pytest
 
 from cap.agents import adapt
-from cap.approval.card import finalise, record_verdict
 from cap.config import get_settings
+from cap.domain.card import finalise, record_verdict
+from cap.domain.verdict import gates_cleared
 from cap.gates import (
     FileHistory,
     InMemoryHistory,
@@ -90,14 +91,14 @@ def _passing() -> PostRecord:
 
 def test_the_verdict_is_pass_questions_or_reject():
     r = _passing()
-    assert decide(r).outcome == Outcome.PASS and r.gates_cleared
+    assert decide(r).outcome == Outcome.PASS and gates_cleared(r)
 
     r.gates.ethics.verdict = Verdict.ESCALATE
     v = decide(r)
     assert v.outcome == Outcome.QUESTIONS and v.questions[0].startswith("Ethics")
-    assert not r.gates_cleared  # a question nobody settled
+    assert not gates_cleared(r)  # a question nobody settled
     r.approval.decisions_acknowledged = list(v.questions)
-    assert r.gates_cleared
+    assert gates_cleared(r)
 
     for breaks in (
         lambda g: setattr(g.originality, "passed", False),
@@ -109,7 +110,7 @@ def test_the_verdict_is_pass_questions_or_reject():
         bad = _passing()
         breaks(bad.gates)
         bad.approval.decisions_acknowledged = ["anything at all"]
-        assert decide(bad).outcome == Outcome.REJECT and not bad.gates_cleared
+        assert decide(bad).outcome == Outcome.REJECT and not gates_cleared(bad)
 
 
 def test_a_pipeline_reject_names_every_failed_gate(fixtures, record, tmp_path):
@@ -368,9 +369,9 @@ def test_an_unscored_result_is_a_card_question_and_publishable_once_settled(
     out = _run(fixtures, record, tmp_path)
     assert out.status == PostStatus.AWAITING_APPROVAL, out.flags.stop_reason
     assert [q for q in out.flags.needs_decision if q.startswith("Made for kids: unscored")]
-    assert not out.gates_cleared
+    assert not gates_cleared(out)
     done = _approve(out)
-    assert done.status == PostStatus.APPROVED and done.gates_cleared
+    assert done.status == PostStatus.APPROVED and gates_cleared(done)
 
 
 def test_zero_factors_in_the_pipeline_is_a_question_too(fixtures, record, tmp_path):
@@ -408,7 +409,7 @@ def test_unconfirmed_claims_are_one_card_question_in_flag_mode(fixtures, record,
     facts_qs = [q for q in out.flags.needs_decision if q.startswith("Facts:")]
     assert out.status == PostStatus.AWAITING_APPROVAL and len(facts_qs) == 1
     assert f"{n} claims could not be confirmed" in facts_qs[0]
-    assert not out.gates_cleared and _approve(out).gates_cleared
+    assert not gates_cleared(out) and gates_cleared(_approve(out))
 
 
 def test_unconfirmed_claims_reject_in_block_mode(fixtures, record, tmp_path, monkeypatch):

@@ -31,12 +31,12 @@ import unicodedata
 
 from cap.agents.outputs import P10CallAOutput, P10VerifyOutput
 from cap.models import ModelClient, SourceDoc
+from cap.policy import TESTLOG_SCHEME
 from cap.post_context import post_context
 from cap.prompts import spec
 from cap.schema.post_record import Claim, ClaimCheckResult, ClaimStatus, FactsGate, PostRecord
 
 Source = SourceDoc  # the gate's public name for a fetched document
-TESTLOG_SCHEME = "testlog://"
 
 
 def testlog_source(record: PostRecord, test_log: str) -> SourceDoc:
@@ -250,7 +250,7 @@ def check_facts(
 
     # PRD 4.14: endorsement wording fails the post in every mode. Unconfirmed claims
     # fail it in block mode; in flag mode (D41) they become one card question
-    # (cap.gates.verdict) and the gate itself passes.
+    # (cap.domain.verdict) and the gate itself passes.
     unconfirmed = [cc for cc in gate.claim_checks if cc.final != "supported"]
     flag_mode = get_settings().fact_mode == "flag"
     gate.passed = not endorsement_wording and (flag_mode or not unconfirmed)

@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from cap.approval.app import Store
-from cap.approval.card import prepare_card
 from cap.demo import CHARACTER_BLOCK, SOURCES, TEST_LOG, happy_fixtures
+from cap.domain.card import prepare_card
 from cap.models import MockClient
 from cap.pipeline import PipelineDeps, run_post
 from cap.schema.post_record import (

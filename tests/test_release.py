@@ -14,8 +14,8 @@ import pytest
 from cap import release
 from cap.approval import release_job
 from cap.approval.app import Store, create_app, finalise_and_issue, publish_now
-from cap.approval.card import record_verdict
 from cap.config import get_settings
+from cap.domain.card import record_verdict
 from cap.pipeline import run_post
 from cap.publisher import LocalFolderAdapter, youtube
 from cap.schema.post_record import Decision, PostStatus, ReleaseStatus
@@ -180,7 +180,7 @@ def test_a_failed_final_render_stays_approved_without_a_token_and_can_be_retried
 def test_the_outbox_reissues_an_expired_token(tmp_path):
     from datetime import UTC, datetime, timedelta
 
-    from cap.approval import token as tok
+    from cap.domain import token as tok
     from cap.policy import TOKEN_TTL_HOURS
 
     store = Store()

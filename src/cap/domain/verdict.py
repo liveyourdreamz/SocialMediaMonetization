@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from cap.gates.facts import TESTLOG_SCHEME
+from cap.policy import TESTLOG_SCHEME
 from cap.schema.post_record import Gates, PostRecord, Verdict
 
 MFK_QUESTION_BANDS = ("doubtful", "unscored")

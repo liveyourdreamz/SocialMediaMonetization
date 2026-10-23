@@ -41,3 +41,6 @@ YPP_SUBSCRIBERS = 1_000
 YPP_WATCH_HOURS_12MO = 8_000
 YPP_SHORTS_VIEWS_90D = 20_000_000
 YPP_BAR_DATE = "2027-02-01"
+
+# A claim confirmed by Hemant's own test log cites this scheme, never a web link.
+TESTLOG_SCHEME = "testlog://"

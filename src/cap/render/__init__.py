@@ -490,7 +490,7 @@ def render(  # type: ignore[no-untyped-def]
     voice = VOICES.get((character, lang), "en-GB-RyanNeural")
     work = out_dir / record.post_id / ("final" if stage == "final" else "")
     work.mkdir(parents=True, exist_ok=True)
-    from cap.gates.verdict import confirmed_sources
+    from cap.domain.verdict import confirmed_sources
 
     sources = confirmed_sources(record)  # the one filter: supported claims, no test log
     tool = sc.tool_name(record.draft.title, record.brief.topic) if character == "Patch" else ""

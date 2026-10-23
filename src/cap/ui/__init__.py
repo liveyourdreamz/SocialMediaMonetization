@@ -1,6 +1,6 @@
 """The screens (D38, D39), rendered server-side on the Proof design system.
 
-Every rule the card enforces lives in cap.approval.card; these routes only collect
+Every rule the card enforces lives in cap.domain.card; these routes only collect
 the reviewer's inputs and show what the card functions return. A screen can never
 show what the API would refuse: the blind card is built by build_card(), which
 drops the gate fields until the verdict is recorded, and card_for() drops them for
@@ -22,7 +22,6 @@ from starlette.concurrency import run_in_threadpool
 from cap import release
 from cap.approval import google, release_job
 from cap.approval.app import Store, finalise_and_issue, publish_now, visible_to
-from cap.approval.card import CardError, record_stage_one, record_verdict
 from cap.approval.identity import (
     COOKIE,
     CSRF_COOKIE,
@@ -40,6 +39,7 @@ from cap.approval.identity import (
 from cap.approval.sessions import LIFETIME_S
 from cap.approval.throttle import SignInThrottle
 from cap.config import get_settings
+from cap.domain.card import CardError, record_stage_one, record_verdict
 from cap.publisher import PublishRefusedError
 from cap.schema.post_record import Decision, PostStatus, ReasonCode
 from cap.ui import tour, views

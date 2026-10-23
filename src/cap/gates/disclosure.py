@@ -11,7 +11,7 @@
   know, an id given twice or an id left out makes the output unscored (fail closed),
   never silently ignored or scored clear. "Unclear" on either of the two heaviest
   factors is doubtful whatever the score. Doubtful and unscored never auto-decide: they
-  are card questions for Hemant (cap.gates.verdict; PRD 3, 4.13).
+  are card questions for Hemant (cap.domain.verdict; PRD 3, 4.13).
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from collections.abc import Sequence
 from typing import Literal
 
 from cap.agents.outputs import P9Output
+from cap.domain.disclosure import ad_prefix_ok, is_paid
 from cap.models import ModelClient
-from cap.policy import AD_PREFIX, AFFILIATE_MARKERS
 from cap.prompts import spec
 from cap.schema.post_record import DisclosureGate, PostRecord
 
@@ -112,24 +112,6 @@ def _p9_user_message(record: PostRecord) -> str:
         f"<thumbnail_text>{record.draft.thumbnail_text}</thumbnail_text>\n"
         f"<variants>{variants}</variants>\n"
         f"<channel>{record.channel_id.value}</channel>"
-    )
-
-
-def is_paid(record: PostRecord) -> bool:
-    if record.sponsor is not None or record.brief.sponsor_id:
-        return True
-    text = " ".join([record.draft.title, record.draft.caption, record.draft.script]).lower()
-    return any(m in text for m in AFFILIATE_MARKERS)
-
-
-def ad_prefix_ok(record: PostRecord) -> bool:
-    """When paid, every variant's title and caption start with the Ad token."""
-    if not record.variants:
-        return record.draft.title.startswith(AD_PREFIX) and record.draft.caption.startswith(
-            AD_PREFIX
-        )
-    return all(
-        v.title.startswith(AD_PREFIX) and v.caption.startswith(AD_PREFIX) for v in record.variants
     )
 
 

@@ -34,7 +34,12 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from cap.approval import release_job
-from cap.approval.card import (
+from cap.approval.hosts import HostGuard, static_hosts
+from cap.approval.identity import Reviewer, reviewer_identity, signed_in_name
+from cap.approval.sessions import SessionStore
+from cap.approval.throttle import SignInThrottle
+from cap.config import get_settings
+from cap.domain.card import (
     CanaryMissedError,
     CardError,
     CardView,
@@ -43,11 +48,6 @@ from cap.approval.card import (
     record_stage_one,
     record_verdict,
 )
-from cap.approval.hosts import HostGuard, static_hosts
-from cap.approval.identity import Reviewer, reviewer_identity, signed_in_name
-from cap.approval.sessions import SessionStore
-from cap.approval.throttle import SignInThrottle
-from cap.config import get_settings
 from cap.gates.history import FileHistory, HistoryStore, default_history, record_approved
 from cap.publisher import PlatformAdapter, PublishRefusedError
 from cap.schema.migrate import load_record

@@ -5,7 +5,7 @@ import random
 
 import pytest
 
-from cap.approval.card import (
+from cap.domain.card import (
     CanaryMissedError,
     CardError,
     build_card,

@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from cap.approval.token import ApprovalToken
+from cap.domain.token import ApprovalToken
 from cap.release import Manifest, PublishRefusedError, authorise, canonical_bytes, leaves_machine
 from cap.schema.post_record import PostRecord, PostStatus
 

@@ -36,6 +36,7 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "types-PyYAML",
+    "import-linter>=2.1",
 ]
 
 [project.scripts]
@@ -68,3 +69,43 @@ mypy_path = "src"
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
+
+# ---- Layer contracts (M1, ADR-001) -------------------------------------------------
+# A module may import modules in the layers below it, never above. "|" marks siblings
+# that must not import each other. Every exception is listed under ignore_imports with
+# the step that removes it; tests/test_architecture.py fails if the list grows.
+[tool.importlinter]
+root_package = "cap"
+include_external_packages = false
+
+[[tool.importlinter.contracts]]
+name = "Layers: entry points > web > application > agents and gates > knowledge > adapters > domain"
+type = "layers"
+layers = [
+    "cap.cli",
+    "cap.check | cap.smoke",
+    "cap.ui",
+    "cap.approval",
+    "cap.demo",
+    "cap.pipeline",
+    "cap.publisher",
+    "cap.release",
+    "cap.render",
+    "cap.harness | cap.research",
+    "cap.gates",
+    "cap.agents",
+    "cap.post_context",
+    "cap.models | cap.routing",
+    "cap.prompts | cap.rulebook | cap.characters",
+    "cap.fetch | cap.connections | cap.setup | cap.updater | cap.instance | cap.lan",
+    "cap.safehttp | cap.secretfile",
+    "cap.domain",
+    "cap.schema",
+    "cap.policy | cap.config | cap.version | cap.console",
+]
+ignore_imports = [
+    # M1 step 2 (the store port): the web app and the demo seeder reach the store through
+    # cap.approval.app today; both move to the store port, and these two lines go.
+    "cap.approval.app -> cap.ui",
+    "cap.demo.seed -> cap.approval.app",
+]

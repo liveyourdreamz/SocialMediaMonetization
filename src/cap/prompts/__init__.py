@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+from cap.version import pack_version  # noqa: F401 - re-exported for callers
+
 PACK_DIR = Path(__file__).with_name("pack")
 
 OPUS = "claude-opus-5-5"
@@ -63,11 +65,6 @@ SHARED_ALL = ("shared_context", "untrusted_text_rule", "fail_closed_rule")
 SHARED_BY_CALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("P10", "C"): ("untrusted_text_rule", "fail_closed_rule"),
 }
-
-
-@lru_cache
-def pack_version() -> str:
-    return json.loads((PACK_DIR / "index.json").read_text())["pack_version"]
 
 
 @lru_cache

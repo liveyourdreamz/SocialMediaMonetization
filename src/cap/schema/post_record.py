@@ -113,7 +113,7 @@ class ReasonCode(StrEnum):
 
 
 def _pack_version() -> str:
-    from cap.prompts import pack_version
+    from cap.version import pack_version
 
     return pack_version()
 
@@ -425,14 +425,6 @@ class PostRecord(Strict):
     metrics: Metrics = Field(default_factory=Metrics)
     flags: Flags = Field(default_factory=Flags)
     history: list[str] = Field(default_factory=list)  # audit trail lines, append only
-
-    @property
-    def gates_cleared(self) -> bool:
-        """Publishable as far as the gates go (cap.gates.verdict owns the rule): no gate
-        failed outright, and every question on the card was acknowledged (D43, R-20)."""
-        from cap.gates.verdict import gates_cleared
-
-        return gates_cleared(self)
 
     def stop(self, step: str, reason: str, status: PostStatus | None = None) -> None:
         """Record where and why the post stopped; the workflow bar reads these."""

@@ -18,8 +18,8 @@ from typing import Any, TypedDict
 from langgraph.graph import END, StateGraph
 
 from cap.agents import AgentBlockedError, adapt, critique, critique_text, draft
-from cap.approval.card import prepare_card
 from cap.config import get_settings
+from cap.domain.card import prepare_card
 from cap.gates import (
     HistoryIndex,
     Outcome,
@@ -174,7 +174,7 @@ def build_graph(deps: PipelineDeps):  # type: ignore[no-untyped-def]
                 record.gates.originality = _originality_over_variants(record, deps, anchors)
         record.gates.ethics = check_ethics(record, deps.client)
         record.gates.disclosure = check_disclosure(record, deps.client)
-        # one rule decides what the four results mean together (cap.gates.verdict)
+        # one rule decides what the four results mean together (cap.domain.verdict)
         verdict = decide(record)
         if verdict.outcome == Outcome.REJECT:
             record.status = PostStatus.REJECTED

@@ -24,17 +24,12 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from cap.console import utf8_console
+
 if TYPE_CHECKING:
     from cap.config import Settings
 
 ALREADY_RUNNING = 3  # cap serve: another window serves this data folder; it was opened
-
-
-def utf8_console() -> None:
-    """Windows consoles default to cp1252; Falak's Arabic titles are printed to them."""
-    for stream in (sys.stdout, sys.stderr):
-        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower() != "utf-8":
-            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 
 def main(argv: list[str] | None = None) -> int:

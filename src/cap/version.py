@@ -3,6 +3,7 @@ and printed by `cap serve`, so "is this the new code?" has an answer on the page
 
 from __future__ import annotations
 
+import json
 import subprocess
 from functools import lru_cache
 from pathlib import Path
@@ -23,3 +24,11 @@ def build_id() -> str:
     except (OSError, subprocess.SubprocessError):
         pass
     return "unknown build (not a git checkout)"
+
+
+@lru_cache(maxsize=1)
+def pack_version() -> str:
+    """The prompt pack's version, stamped on every post record. It lives here, at the
+    bottom layer, so the record schema can stamp it without importing the prompts."""
+    index = Path(__file__).resolve().parent / "prompts" / "pack" / "index.json"
+    return str(json.loads(index.read_text(encoding="utf-8"))["pack_version"])

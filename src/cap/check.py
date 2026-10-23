@@ -32,7 +32,7 @@ def _console() -> str:
     """Falak's Arabic titles are printed to the console; a cp1252 Windows console would
     raise UnicodeEncodeError in the pipeline thread. cli.main() switches stdout to
     UTF-8; this proves it held."""
-    from cap.cli import utf8_console
+    from cap.console import utf8_console
 
     utf8_console()
     enc = (sys.stdout.encoding or "").lower()
@@ -364,8 +364,8 @@ def _approve_and_publish(store, rec, adapter) -> None:  # type: ignore[no-untype
     Every rule the card and the publisher enforce applies, none is set by hand."""
     from cap.approval import release_job
     from cap.approval.app import finalise_and_issue, publish_now
-    from cap.approval.card import record_stage_one, record_verdict
     from cap.config import get_settings
+    from cap.domain.card import record_stage_one, record_verdict
     from cap.schema.post_record import Channel, Decision, PostStatus, ReleaseStatus
 
     s = get_settings()

@@ -14,7 +14,7 @@ from cap import policy
 from cap.approval.app import Store, card_for
 from cap.approval.identity import Reviewer
 from cap.config import get_settings
-from cap.gates.verdict import confirmed_sources
+from cap.domain.verdict import confirmed_sources
 from cap.render import OPENING_SLOT
 from cap.schema.post_record import Decision, PostRecord, PostStatus, ReasonCode
 

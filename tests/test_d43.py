@@ -6,8 +6,9 @@ import pytest
 
 from cap import release
 from cap.agents import OPENING_LINE_SLOT, adapt, critique, draft
-from cap.approval.card import CardError, finalise, record_verdict
 from cap.demo import CHARACTER_BLOCK, TEST_LOG
+from cap.domain.card import CardError, finalise, record_verdict
+from cap.domain.verdict import gates_cleared
 from cap.models import MockClient
 from cap.pipeline import run_post
 from cap.publisher import DryRunAdapter, PublishRefusedError, publish
@@ -44,7 +45,7 @@ def test_approving_an_escalated_post_needs_the_tick(fixtures, record, tmp_path):
     done = _approve(rec, acknowledged=True)
     assert done.status == PostStatus.APPROVED
     assert done.approval.decisions_acknowledged == done.flags.needs_decision
-    assert done.gates_cleared
+    assert gates_cleared(done)
 
 
 def test_the_publisher_takes_a_settled_post_and_refuses_an_unsettled_one(
@@ -68,7 +69,7 @@ def test_an_outright_ethics_fail_still_rejects(fixtures, record, tmp_path):
     )
     out = run_post(record, SOURCES, make_deps(MockClient(fixtures), record, tmp_path))
     assert out.status == PostStatus.REJECTED and out.gates.ethics.verdict == Verdict.FAIL
-    assert not out.gates_cleared
+    assert not gates_cleared(out)
 
 
 def test_a_missing_signature_phrase_is_added_not_rejected(fixtures, record, tmp_path):

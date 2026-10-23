@@ -14,7 +14,7 @@ Why one function. "May this be released?" used to be answered by the post's stat
 field plus a few checks in `publish()`, and `publish_to` skipped them for every
 adapter after the first. `authorise()` is now the only answer: the human approval
 (re-verified from the record, not trusted from the status), the gates
-(`PostRecord.gates_cleared`, never re-implemented here), the canary and tour rules,
+(`cap.domain.verdict.gates_cleared`, never re-implemented here), the canary and tour rules,
 the final render, the manifest and the token. The publisher calls it before every
 upload; `seal()` and `reissue()` call the approval half before issuing a token.
 """
@@ -28,8 +28,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from cap.approval import token as tok
 from cap.config import get_settings
+from cap.domain import token as tok
+from cap.domain.verdict import gates_cleared
 from cap.policy import AI_ROLE_DISCLOSURE
 from cap.schema.post_record import (
     Channel,
@@ -166,7 +167,7 @@ def canonical_bytes(document: dict[str, Any]) -> bytes:
 def description_for(record: PostRecord, caption: str | None = None) -> str:
     """The published description: the caption, the links that confirmed a claim
     (never one that confirmed nothing, review H2) and the AI-character disclosure."""
-    from cap.gates.verdict import confirmed_sources
+    from cap.domain.verdict import confirmed_sources
 
     text = (record.draft.caption if caption is None else caption).strip()
     sources = confirmed_sources(record)
@@ -281,7 +282,7 @@ def check_approval(record: PostRecord) -> None:
             raise PublishRefusedError(
                 "channel C needs a stage-one approval by an authorised Arabic reviewer (D19)"
             )
-    if not record.gates_cleared:
+    if not gates_cleared(record):
         raise PublishRefusedError(
             "a gate did not pass and was not a question settled on the card; R-20 forbids "
             "any other override"

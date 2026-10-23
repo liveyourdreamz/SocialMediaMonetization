@@ -40,7 +40,7 @@ Role = Literal["writer", "checker"]
 
 def post_context(record: PostRecord, role: Role = "writer") -> str:
     from cap.config import get_settings
-    from cap.gates.disclosure import is_paid
+    from cap.domain.disclosure import is_paid
 
     s = get_settings()
     ch = record.channel_id.value

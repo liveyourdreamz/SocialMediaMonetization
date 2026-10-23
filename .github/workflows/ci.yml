@@ -17,6 +17,8 @@ jobs:
         run: uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
       - name: Types
         run: uv run mypy
+      - name: Layer contracts
+        run: uv run lint-imports
       - name: Tests
         run: uv run pytest --cov=cap --cov-report=term-missing
       - name: Prompts match the registry

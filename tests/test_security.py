@@ -94,9 +94,9 @@ def test_finding_2_a_platform_error_never_shows_the_app_secret(tmp_path, monkeyp
 def test_finding_3_a_tour_post_never_reaches_the_configured_platform(tmp_path, monkeypatch):
     from cap.approval import release_job
     from cap.approval.app import finalise_and_issue, publish_now
-    from cap.approval.card import record_verdict
     from cap.config import get_settings
     from cap.demo.seed import demo_post
+    from cap.domain.card import record_verdict
     from cap.schema.post_record import Decision, PostStatus
 
     monkeypatch.chdir(tmp_path)

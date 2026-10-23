@@ -1,0 +1,42 @@
+"""The layer contracts (M1, ADR-001) hold, and their exception list only shrinks.
+
+Each exception in pyproject.toml names the M1 step that removes it. A new exception is
+a new tangle; this test makes adding one a visible, reviewed change.
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+ROOT = Path(__file__).parents[1]
+MAX_EXCEPTIONS = 2  # lower this as each M1 step removes one; never raise it
+
+
+def _contracts() -> list[dict]:
+    return tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["importlinter"]["contracts"]
+
+
+def test_the_exception_list_only_shrinks():
+    total = sum(len(c.get("ignore_imports", [])) for c in _contracts())
+    assert total <= MAX_EXCEPTIONS, f"{total} layer exceptions; the limit is {MAX_EXCEPTIONS}"
+
+
+def test_the_layer_contracts_hold():
+    exe = shutil.which("lint-imports", path=str(Path(sys.executable).parent))  # .exe on Windows
+    assert exe, "import-linter is not installed (uv sync --all-extras)"
+    out = subprocess.run([exe], cwd=ROOT, capture_output=True, text=True)
+    assert out.returncode == 0, out.stdout[-3000:]
+
+
+def test_the_domain_imports_nothing_above_it():
+    allowed = ("cap.domain", "cap.schema", "cap.policy", "cap.config", "cap.version")
+    for f in (ROOT / "src" / "cap" / "domain").glob("*.py"):
+        for line in f.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if s.startswith(("from cap", "import cap")):
+                mod = s.split()[1]
+                assert mod.startswith(allowed), f"{f.name}: {s}"

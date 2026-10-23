@@ -4,6 +4,7 @@ import pytest
 
 from cap.agents import draft
 from cap.demo import CHARACTER_BLOCK, TEST_LOG
+from cap.domain.verdict import gates_cleared
 from cap.gates import (
     InMemoryHistory,
     Outcome,
@@ -39,7 +40,7 @@ def test_happy_path_reaches_queue(client, record, tmp_path):
     out = run_post(record, SOURCES, make_deps(client, record, tmp_path))
     assert out.status == PostStatus.AWAITING_APPROVAL, out.history
     assert decide(out).outcome == Outcome.PASS, out.gates.model_dump()
-    assert not out.flags.needs_decision and out.gates_cleared
+    assert not out.flags.needs_decision and gates_cleared(out)
     assert out.flags.card_prepared and out.approval.spot_check is not None
     assert out.asset.sha256 and (tmp_path / f"{out.post_id}.render.txt").exists()
     assert len(out.variants) == 2
@@ -74,7 +75,7 @@ def test_judge_disagreement_goes_to_the_card_as_a_question(fixtures, record, tmp
     assert out.gates.ethics.verdict == Verdict.ESCALATE and out.gates.ethics.disagreement
     assert out.flags.needs_decision and out.flags.needs_decision[0].startswith("Ethics")
     assert "R-16" in out.flags.needs_decision[0]
-    assert not out.gates_cleared  # not publishable until Hemant settles it
+    assert not gates_cleared(out)  # not publishable until Hemant settles it
 
 
 def test_hard_rule_fires_before_judges_and_stops_the_gate(record, client):
