@@ -20,10 +20,10 @@ NEEDED = (
 @pytest.fixture
 def calls(tmp_path, monkeypatch):
     import cap.models
-    from cap.approval.app import Store
     from cap.demo import happy_fixtures
     from cap.demo.seed import run_brief
     from cap.models import MockClient
+    from cap.store import MemoryStore
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
@@ -41,7 +41,7 @@ def calls(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "cap.research.find_sources", lambda t, c, claims=None: ([], ["research: none"])
     )
-    run_brief(Store(), "A", "How a rainbow works")
+    run_brief(MemoryStore(), "A", "How a rainbow works")
     yield [c for m in made for c in m.calls]
     get_settings.cache_clear()
 

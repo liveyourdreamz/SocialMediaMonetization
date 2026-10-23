@@ -19,11 +19,11 @@ import pytest
 from pydantic import ValidationError
 
 from cap import cli, instance, lan
-from cap.approval.app import FileStore, create_app
 from cap.config import ENV_FILE_ENCODING, Settings, get_settings
 from cap.demo.seed import new_brief
 from cap.schema.migrate import MIGRATIONS, load_record
 from cap.schema.post_record import SCHEMA_VERSION, PostRecord, PostStatus
+from cap.server import create_app
 from cap.setup import (
     DECLINED,
     KeyFormatError,
@@ -33,6 +33,7 @@ from cap.setup import (
     read_key,
     write_key,
 )
+from cap.store.files import FileStore
 
 # ---- stored records (H8) ---------------------------------------------------------------
 
@@ -53,7 +54,7 @@ def test_unknown_fields_from_another_build_do_not_stop_start_up(tmp_path: Path) 
     data["brief"]["retired_setting"] = "x"
     path.write_text(json.dumps(data), encoding="utf-8")
     store = FileStore(tmp_path)
-    assert len(store.posts) == 1 and not store.quarantined
+    assert store.count() == 1 and not store.quarantined
 
 
 def test_one_unreadable_record_is_quarantined_and_the_rest_load(
@@ -66,13 +67,13 @@ def test_one_unreadable_record_is_quarantined_and_the_rest_load(
     junk.write_bytes(b"{not json")
     with caplog.at_level(logging.WARNING, logger="cap.store"):
         store = FileStore(tmp_path)
-    assert list(store.posts) == [good.stem]
+    assert [p.post_id for p in store.all()] == [good.stem]
     q = tmp_path / "posts" / "quarantine"
     for f in (bad, junk):
         assert not f.exists() and (q / f.name).exists()
         assert "could not read it" in (q / f"{f.name}.error.txt").read_text(encoding="utf-8")
     assert len([r for r in caplog.records if r.name == "cap.store"]) == 2  # one line each
-    assert len(FileStore(tmp_path).posts) == 1  # and the next start is quiet
+    assert FileStore(tmp_path).count() == 1  # and the next start is quiet
 
 
 def test_a_broken_state_file_is_quarantined(tmp_path: Path) -> None:
@@ -86,7 +87,7 @@ def test_a_v1_record_migrates_and_interrupted_work_is_parked(tmp_path: Path) -> 
     data = json.loads(path.read_text(encoding="utf-8"))
     del data["schema_version"]  # written before the field existed
     path.write_text(json.dumps(data), encoding="utf-8")
-    rec = next(iter(FileStore(tmp_path).posts.values()))
+    rec = FileStore(tmp_path).all()[0]
     assert rec.schema_version == SCHEMA_VERSION and rec.status == PostStatus.PARKED
     assert json.loads(path.read_text(encoding="utf-8"))["schema_version"] == SCHEMA_VERSION
 

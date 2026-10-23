@@ -250,24 +250,18 @@ def _run_app(
     import uvicorn
 
     from cap import lan
-    from cap.approval.app import FileStore, create_app
     from cap.demo.seed import seed_store
-    from cap.publisher import LocalFolderAdapter
+    from cap.server import create_app
+    from cap.store.files import FileStore
     from cap.ui import templates
     from cap.version import build_id
 
     store = FileStore(data)
-    if settings.publisher == "youtube":
-        from cap.publisher.youtube import YouTubeAdapter
-
-        store.publisher = YouTubeAdapter()
-    else:
-        store.publisher = LocalFolderAdapter(data / "published")
-    if not store.posts:
+    if not store.count():
         if settings.renderer == "video":
             print("first run: rendering the demo posts (voice + video), about a minute...")
         seed_store(store, demo=args.demo, canary=args.canary or args.demo)
-    print(f"records in {data.resolve()}: {len(store.posts)} posts, {len(store.queue())} waiting")
+    print(f"records in {data.resolve()}: {store.count()} posts, {len(store.queue())} waiting")
     if settings.model_backend.value != model:
         print(f"note: CAP_MODEL_BACKEND in the environment overrides .env ({model})")
     print(f"build: {build_id()}")

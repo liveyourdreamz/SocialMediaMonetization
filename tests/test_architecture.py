@@ -13,7 +13,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
-MAX_EXCEPTIONS = 2  # lower this as each M1 step removes one; never raise it
+MAX_EXCEPTIONS = 0  # the list is empty; keep it so
 
 
 def _contracts() -> list[dict]:

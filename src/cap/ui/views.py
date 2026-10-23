@@ -11,12 +11,13 @@ from statistics import median
 from typing import Any
 
 from cap import policy
-from cap.approval.app import Store, card_for
+from cap.approval.app import card_for
 from cap.approval.identity import Reviewer
 from cap.config import get_settings
 from cap.domain.verdict import confirmed_sources
 from cap.render import OPENING_SLOT
 from cap.schema.post_record import Decision, PostRecord, PostStatus, ReasonCode
+from cap.store import PostStore
 
 LABELS = {
     "en": {
@@ -199,7 +200,7 @@ def queue_items(records: list[PostRecord], for_role: str, lang: str = "en") -> l
 
 
 def card_context(
-    record: PostRecord, store: Store, reviewer: Reviewer, lang: str = "en"
+    record: PostRecord, store: PostStore, reviewer: Reviewer, lang: str = "en"
 ) -> dict[str, Any]:
     card = card_for(record, reviewer)  # the Arabic reviewer never gets gate fields
     labels = LABELS[lang]
@@ -357,23 +358,23 @@ class Portfolio:
 CLOSED = (PostStatus.APPROVED, PostStatus.REJECTED, PostStatus.PARKED, PostStatus.PUBLISHED)
 
 
-def _finalised(store: Store) -> list[PostRecord]:
+def _finalised(store: PostStore) -> list[PostRecord]:
     """Posts a reviewer has closed (not canaries, not pending revisions)."""
-    return [p for p in store.posts.values() if p.status in CLOSED and p.approval.decided_at]
+    return [p for p in store.all() if p.status in CLOSED and p.approval.decided_at]
 
 
-def canary_record(store: Store) -> tuple[int, int]:
-    caught = sum(1 for p in store.posts.values() if p.flags.canary_outcome == "caught")
-    missed = sum(1 for p in store.posts.values() if p.flags.canary_outcome == "missed")
+def canary_record(store: PostStore) -> tuple[int, int]:
+    caught = sum(1 for p in store.all() if p.flags.canary_outcome == "caught")
+    missed = sum(1 for p in store.all() if p.flags.canary_outcome == "missed")
     return caught, missed
 
 
-def canary_rate(store: Store) -> str:
+def canary_rate(store: PostStore) -> str:
     """The schedule restarts at a miss (P14): count cards closed since the last one."""
     closed = _finalised(store)
     misses = [
         p.approval.decided_at
-        for p in store.posts.values()
+        for p in store.all()
         if p.flags.canary_outcome == "missed" and p.approval.decided_at
     ]
     since = max(misses) if misses else None
@@ -386,18 +387,18 @@ def canary_rate(store: Store) -> str:
     return f"1 in {get_settings().canary_schedule[-1][0]}"
 
 
-def portfolio(store: Store) -> Portfolio:
+def portfolio(store: PostStore) -> Portfolio:
     s = get_settings()
     now = datetime.now(UTC)
     q = store.queue()
     oldest = max(((now - p.created_at).days for p in q), default=0)
-    a = store.analytics
+    a = store.state.analytics
     chans: dict[str, dict[str, Any]] = a.get("channels", {})
     port: dict[str, Any] = a.get("portfolio", {})
 
     # figures
     approved_posts = [
-        p for p in store.posts.values() if p.status in (PostStatus.APPROVED, PostStatus.PUBLISHED)
+        p for p in store.all() if p.status in (PostStatus.APPROVED, PostStatus.PUBLISHED)
     ]
     if "revenue_usd" in port and approved_posts:
         rev = Figure(
@@ -521,7 +522,7 @@ def portfolio(store: Store) -> Portfolio:
     src_parts.append(port.get("cost_source", "costs: no ledger yet"))
     return Portfolio(
         month=now.strftime("%B %Y"),
-        note=store.analytics_note,
+        note=store.state.analytics_note,
         queue_count=len(q),
         queue_minutes=round(sum(p.approval.expected_reading_s for p in q) / 60),
         queue_oldest_days=oldest,
@@ -531,8 +532,8 @@ def portfolio(store: Store) -> Portfolio:
         gate_body=gate_body,
         gate_meta=gate_meta,
         sources=" · ".join(src_parts),
-        published_count=sum(1 for p in store.posts.values() if p.status == PostStatus.PUBLISHED),
-        approved_waiting=sum(1 for p in store.posts.values() if p.status == PostStatus.APPROVED),
+        published_count=sum(1 for p in store.all() if p.status == PostStatus.PUBLISHED),
+        approved_waiting=sum(1 for p in store.all() if p.status == PostStatus.APPROVED),
     )
 
 
@@ -564,7 +565,7 @@ class Digest:
     proposals: list[str]
 
 
-def digest(store: Store) -> Digest:
+def digest(store: PostStore) -> Digest:
     now = datetime.now(UTC)
     since = now - timedelta(days=7)
     week = [
@@ -597,7 +598,7 @@ def digest(store: Store) -> Digest:
     )
     canaries = [
         p
-        for p in store.posts.values()
+        for p in store.all()
         if p.flags.canary and p.approval.decided_at and p.approval.decided_at >= since
     ]
     return Digest(
@@ -621,9 +622,9 @@ def digest(store: Store) -> Digest:
 # ---------------------------------------------------------------- operator
 
 
-def parked(store: Store) -> list[tuple[PostRecord, str]]:
+def parked(store: PostStore) -> list[tuple[PostRecord, str]]:
     out = []
-    for p in store.posts.values():
+    for p in store.all():
         if p.status == PostStatus.PARKED:
             reason = next((h for h in reversed(p.history) if "parked: " in h), "")
             text = reason.split("parked: ", 1)[-1] if reason else "escalated by the reviewer"
@@ -633,21 +634,19 @@ def parked(store: Store) -> list[tuple[PostRecord, str]]:
     return out
 
 
-def published(store: Store) -> list[PostRecord]:
-    out = [p for p in store.posts.values() if p.status == PostStatus.PUBLISHED]
+def published(store: PostStore) -> list[PostRecord]:
+    out = [p for p in store.all() if p.status == PostStatus.PUBLISHED]
     return sorted(out, key=lambda p: p.publish.published_at or p.created_at, reverse=True)
 
 
-def recent_briefs(store: Store) -> list[PostRecord]:
+def recent_briefs(store: PostStore) -> list[PostRecord]:
     """The last few posts in any state, newest first: what a brief turned into."""
-    return sorted(store.posts.values(), key=lambda p: p.created_at, reverse=True)[:8]
+    return sorted(store.all(), key=lambda p: p.created_at, reverse=True)[:8]
 
 
-def outbox(store: Store) -> list[PostRecord]:
+def outbox(store: PostStore) -> list[PostRecord]:
     """Approved, token issued, not yet published: what the publisher will send."""
-    out = [
-        p for p in store.posts.values() if p.status == PostStatus.APPROVED and not p.flags.canary
-    ]
+    out = [p for p in store.all() if p.status == PostStatus.APPROVED and not p.flags.canary]
     return sorted(out, key=lambda p: p.approval.decided_at or p.created_at)
 
 

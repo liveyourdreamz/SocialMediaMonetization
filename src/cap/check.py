@@ -292,11 +292,11 @@ def full_run(out: Callable[[str], None] = print, channels: str = "ABC") -> int:
     opening line and the spot check, finalise), the final render with that line, and
     a publish to a local check folder. Nothing goes to your queue or to any platform.
     It reports the step and the reason for the first thing that fails in each run."""
-    from cap.approval.app import Store
     from cap.config import get_settings
     from cap.demo.seed import run_brief
     from cap.publisher import LocalFolderAdapter
     from cap.schema.post_record import PostStatus
+    from cap.store import MemoryStore
 
     s = get_settings()
     if s.model_backend.value != "anthropic":
@@ -314,7 +314,7 @@ def full_run(out: Callable[[str], None] = print, channels: str = "ABC") -> int:
     for ch in channels:
         topic = FULL_RUN_TOPICS[ch]
         t0 = time.time()
-        store = Store()
+        store = MemoryStore()
         try:
             rec = run_brief(store, ch, topic)
         except Exception as e:  # noqa: BLE001 - reported with the channel
@@ -392,7 +392,6 @@ def _approve_and_publish(store, rec, adapter) -> None:  # type: ignore[no-untype
     release_job.wait(rec.post_id, timeout=600)
     if rec.release.status != ReleaseStatus.READY:
         raise RuntimeError(f"final video: {rec.release.error or rec.release.status.value}")
-    store.publisher = adapter
-    refused = publish_now(store, rec)
+    refused = publish_now(store, rec, publisher=adapter)
     if refused or rec.status != PostStatus.PUBLISHED:
         raise RuntimeError(refused or f"status after publish: {rec.status.value}")

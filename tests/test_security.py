@@ -4,8 +4,9 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from cap.approval.app import Store, create_app
 from cap.demo.seed import seed_store
+from cap.server import create_app
+from cap.store import MemoryStore
 from tests.conftest import SIGNIN, laptop_wifi
 
 
@@ -21,7 +22,7 @@ def lan(tmp_path, monkeypatch):
     monkeypatch.setenv("CAP_RENDERER", "text")
     laptop_wifi(monkeypatch, "192.168.1.20")
     get_settings.cache_clear()
-    store = Store()
+    store = MemoryStore()
     seed_store(store)
     app = create_app(store)
     phone = TestClient(
@@ -112,8 +113,7 @@ def test_finding_3_a_tour_post_never_reaches_the_configured_platform(tmp_path, m
             uploads.append(release.post_id)
             return "VIDEO123"
 
-    store = Store()
-    store.publisher = FakeYouTube()  # what CAP_PUBLISHER=youtube configures
+    store = MemoryStore()
     rec = demo_post()
     rec.flags.tour = True
     store.put(rec)
@@ -127,7 +127,7 @@ def test_finding_3_a_tour_post_never_reaches_the_configured_platform(tmp_path, m
         for chosen in ([], ["youtube_long"]):  # nothing ticked, or YouTube ticked
             rec.status = PostStatus.APPROVED
             rec.publish.platform_post_ids.clear()
-            assert publish_now(store, rec, chosen) is None
+            assert publish_now(store, rec, chosen, publisher=FakeYouTube()) is None
             assert uploads == [] and rec.publish.destinations == ["local"]
             assert rec.status == PostStatus.PUBLISHED
     finally:
@@ -151,7 +151,7 @@ def test_finding_6_uploads_must_be_real_images_and_are_capped(lan):
         files=files,
     )
     assert r.status_code == 303
-    rec = next(p for p in store.posts.values() if p.brief.topic == "Batteries")
+    rec = next(p for p in store.all() if p.brief.topic == "Batteries")
     assert any("10 screenshot(s) attached" in h for h in rec.history)
 
 

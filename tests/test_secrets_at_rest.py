@@ -37,11 +37,11 @@ def test_the_meta_page_token_never_reaches_a_template(meta_connected):
 
 
 def test_the_connections_page_never_shows_the_page_token(meta_connected, monkeypatch):
-    from cap.approval.app import Store
+    from cap.store import MemoryStore
     from tests.test_ui import Browser, create_app
 
     monkeypatch.chdir(meta_connected)
-    api = Browser(create_app(Store()), follow_redirects=False)
+    api = Browser(create_app(MemoryStore()), follow_redirects=False)
     api.sign_in("hemant")
     html = api.get("/connections").text
     assert "Falak Page" in html and PAGE_TOKEN not in html

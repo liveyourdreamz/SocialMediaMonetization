@@ -9,9 +9,9 @@ import pytest
 
 from cap import connections as conn
 from cap.approval import release_job
-from cap.approval.app import FileStore
 from cap.publisher import LocalFolderAdapter, Upload
 from cap.schema.post_record import PostStatus
+from cap.store.files import FileStore
 from tests.test_ui import Browser, create_app
 
 
@@ -106,7 +106,6 @@ def test_connect_round_trip_stores_the_token_and_shows_the_account(world, monkey
 
 def test_outbox_offers_connected_destinations_and_records_each_result(world, monkeypatch):
     store, api = world
-    store.publisher = None  # destinations decide
     post = next(p for p in store.queue() if p.channel_id.value == "A" and not p.flags.canary)
     api.get(f"/posts/{post.post_id}")
     api.form(
@@ -184,7 +183,6 @@ def test_outbox_offers_connected_destinations_and_records_each_result(world, mon
 
 def test_a_tour_post_never_leaves_the_laptop(world, monkeypatch):
     store, api = world
-    store.publisher = None
     conn.save(
         "youtube",
         {

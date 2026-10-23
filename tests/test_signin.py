@@ -12,9 +12,10 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from cap.approval.app import Store, create_app
 from cap.demo.seed import seed_store
 from cap.schema.post_record import Channel
+from cap.server import create_app
+from cap.store import MemoryStore
 from tests.conftest import SIGNIN, laptop_wifi
 
 LAPTOP = "http://127.0.0.1:8000"
@@ -30,7 +31,7 @@ def served(tmp_path, monkeypatch):
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
     laptop_wifi(monkeypatch, "192.168.1.20")
     get_settings.cache_clear()
-    store = Store()
+    store = MemoryStore()
     seed_store(store, demo=True)
     app = create_app(store)
 
@@ -266,7 +267,7 @@ def test_h4_arabic_reviewer_still_sees_channel_c_only(served):
     store, client = served
     layla = client(PHONE_HOST, "192.168.1.51")
     sign_in(layla, SIGNIN["layla"])
-    a = next(p for p in store.posts.values() if p.channel_id == Channel.A)
+    a = next(p for p in store.all() if p.channel_id == Channel.A)
     assert layla.get(f"/posts/{a.post_id}").status_code == 403
 
 

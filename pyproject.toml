@@ -84,12 +84,14 @@ type = "layers"
 layers = [
     "cap.cli",
     "cap.check | cap.smoke",
+    "cap.server",
     "cap.ui",
     "cap.approval",
     "cap.demo",
     "cap.pipeline",
     "cap.publisher",
     "cap.release",
+    "cap.store",
     "cap.render",
     "cap.harness | cap.research",
     "cap.gates",
@@ -103,9 +105,4 @@ layers = [
     "cap.schema",
     "cap.policy | cap.config | cap.version | cap.console",
 ]
-ignore_imports = [
-    # M1 step 2 (the store port): the web app and the demo seeder reach the store through
-    # cap.approval.app today; both move to the store port, and these two lines go.
-    "cap.approval.app -> cap.ui",
-    "cap.demo.seed -> cap.approval.app",
-]
+ignore_imports = []

@@ -54,10 +54,10 @@ class _Working:
 @pytest.fixture
 def flagged_post(keyed, monkeypatch):  # noqa: F811 - pytest fixture injection
     """A real brief in flag mode where research finds nothing that confirms anything."""
-    from cap.approval.app import Store
     from cap.config import get_settings
     from cap.demo import happy_fixtures
     from cap.demo.seed import run_brief
+    from cap.store import MemoryStore
 
     monkeypatch.setenv("CAP_RENDERER", "text")
     monkeypatch.setenv("CAP_FACT_MODE", "flag")
@@ -77,7 +77,7 @@ def flagged_post(keyed, monkeypatch):  # noqa: F811 - pytest fixture injection
             ["research: one unrelated page"],
         ),
     )
-    store = Store()
+    store = MemoryStore()
     rec = run_brief(store, "A", "Notely 7-day test", test_log="Day 3: sync failed twice.")
     assert rec.status == PostStatus.AWAITING_APPROVAL, rec.history[-3:]
     return store, rec
@@ -201,7 +201,7 @@ def test_l2_publish_refuses_a_tour_post_on_a_real_platform(tmp_path):
     ],
 )
 def test_h4_a_post_interrupted_by_a_restart_is_parked_with_its_step(tmp_path, status, step):
-    from cap.approval.app import FileStore
+    from cap.store.files import FileStore
 
     first = FileStore(tmp_path)
     rec = PostRecord(channel_id=Channel.B, status=status)
@@ -226,7 +226,7 @@ def test_h4_progress_is_saved_as_each_stage_starts(fixtures, record, tmp_path):
 
 
 def test_m6_concurrent_saves_of_one_post_never_collide(tmp_path):
-    from cap.approval.app import FileStore
+    from cap.store.files import FileStore
 
     store = FileStore(tmp_path)
     rec = PostRecord(channel_id=Channel.A, status=PostStatus.AWAITING_APPROVAL)

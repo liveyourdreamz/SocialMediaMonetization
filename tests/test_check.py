@@ -42,12 +42,12 @@ def test_a_real_brief_gets_its_channels_character_and_drafts_from_the_topic(tmp_
     """With the real backend a brief must not be handed the demo's Notely sources and
     Patch's stub block: Falak gets Falak's block, and a brief with nothing to draft
     from parks with a reason that says what to add."""
-    from cap.approval.app import Store
     from cap.config import get_settings
     from cap.demo import happy_fixtures
     from cap.demo.seed import run_brief
     from cap.models import MockClient
     from cap.schema.post_record import PostStatus
+    from cap.store import MemoryStore
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
@@ -75,7 +75,7 @@ def test_a_real_brief_gets_its_channels_character_and_drafts_from_the_topic(tmp_
         ],
     )
     try:
-        store = Store()
+        store = MemoryStore()
         monkeypatch.setattr(
             "cap.research.find_sources",
             lambda topic, ch, claims=None: ([], ["research failed: no network"]),
@@ -175,10 +175,10 @@ def test_fetch_failures_say_why_and_wikipedia_uses_its_rest_api(monkeypatch):
 
 
 def test_a_pinned_page_that_fails_is_reported_and_the_draft_still_runs(tmp_path, monkeypatch):
-    from cap.approval.app import Store
     from cap.config import get_settings
     from cap.demo.seed import new_brief, run_brief
     from cap.schema.post_record import PostStatus
+    from cap.store import MemoryStore
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
@@ -208,7 +208,7 @@ def test_a_pinned_page_that_fails_is_reported_and_the_draft_still_runs(tmp_path,
         ],
     )
     try:
-        store = Store()
+        store = MemoryStore()
         rec = run_brief(store, "B", "Rainbows", urls=["https://x.example/a"])
         assert rec.status != PostStatus.PARKED, rec.history[-1]  # D41: the draft goes ahead
         assert any("could not fetch https://x.example/a: HTTP 403" in h for h in rec.history)
@@ -224,12 +224,12 @@ def test_a_pinned_page_that_fails_is_reported_and_the_draft_still_runs(tmp_path,
 def test_a_topic_alone_is_enough_the_system_finds_the_sources(tmp_path, monkeypatch):
     """The PRD's agent 1 finds the sources; Hemant files a topic and approves."""
     from cap import research
-    from cap.approval.app import Store
     from cap.config import get_settings
     from cap.demo import happy_fixtures
     from cap.demo.seed import run_brief
     from cap.models import MockClient
     from cap.schema.post_record import PostStatus
+    from cap.store import MemoryStore
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
@@ -262,7 +262,7 @@ def test_a_topic_alone_is_enough_the_system_finds_the_sources(tmp_path, monkeypa
         ],
     )
     try:
-        store = Store()
+        store = MemoryStore()
         rec = run_brief(store, "B", "How rainbows form")
         assert asked == [("How rainbows form", "B")]
         assert rec.status != PostStatus.PARKED

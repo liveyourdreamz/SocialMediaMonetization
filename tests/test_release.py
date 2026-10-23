@@ -13,12 +13,14 @@ import pytest
 
 from cap import release
 from cap.approval import release_job
-from cap.approval.app import Store, create_app, finalise_and_issue, publish_now
+from cap.approval.app import finalise_and_issue, publish_now
 from cap.config import get_settings
 from cap.domain.card import record_verdict
 from cap.pipeline import run_post
 from cap.publisher import LocalFolderAdapter, youtube
 from cap.schema.post_record import Decision, PostStatus, ReleaseStatus
+from cap.server import create_app
+from cap.store import MemoryStore
 from tests.conftest import SOURCES, make_deps
 from tests.releases import sealed
 from tests.test_ui import Browser
@@ -50,7 +52,7 @@ def _approve(store, rec, line: str = LINE) -> None:
 def test_the_review_render_shows_a_placeholder_and_the_published_file_speaks_the_line(
     client, record, tmp_path
 ):
-    store = Store()
+    store = MemoryStore()
     rec = _queued(client, record, tmp_path)
     review = Path(rec.asset.uri).read_text(encoding="utf-8")
     assert "[Your opening line goes here]" in review and "[[HEMANT" not in review
@@ -60,8 +62,10 @@ def test_the_review_render_shows_a_placeholder_and_the_published_file_speaks_the
     assert rec.release.status == ReleaseStatus.READY and rec.approval.token
     final = Path(next(f.uri for f in rec.release.files if f.role == "long"))
     assert final != Path(rec.asset.uri) and LINE in final.read_text(encoding="utf-8")
-    store.publisher = LocalFolderAdapter(tmp_path / "pub")
-    assert publish_now(store, rec) is None and rec.status == PostStatus.PUBLISHED
+    assert (
+        publish_now(store, rec, publisher=LocalFolderAdapter(tmp_path / "pub")) is None
+        and rec.status == PostStatus.PUBLISHED
+    )
     published = tmp_path / "pub" / rec.post_id / final.name
     assert LINE in published.read_text(encoding="utf-8")
 
@@ -82,7 +86,7 @@ def test_the_video_final_render_speaks_the_line_the_review_render_does_not(
         real(text, voice, out)
 
     monkeypatch.setattr(renderer, "silent_voice", listening)
-    store = Store()
+    store = MemoryStore()
     rec = _queued(client, record, tmp_path)
     assert not any(LINE in s for s in spoken)
     assert not any("opening line goes here" in s for s in spoken)  # a silent card, not voiced
@@ -118,15 +122,14 @@ def test_publishing_is_refused_while_the_final_video_is_being_made(
         return real(*a, **k)
 
     monkeypatch.setattr(release_job, "render_stage", slow)
-    store = Store()
+    store = MemoryStore()
     rec = _queued(client, record, tmp_path)
     store.put(rec)
     _approve(store, rec)
     try:
         assert rec.status == PostStatus.APPROVED
         assert rec.release.status == ReleaseStatus.PREPARING and not rec.approval.token
-        store.publisher = LocalFolderAdapter(tmp_path / "pub")
-        refused = publish_now(store, rec)
+        refused = publish_now(store, rec, publisher=LocalFolderAdapter(tmp_path / "pub"))
         assert refused and "not ready" in refused and not (tmp_path / "pub").exists()
         api = Browser(create_app(store), follow_redirects=False)
         api.sign_in("hemant")
@@ -154,7 +157,7 @@ def test_a_failed_final_render_stays_approved_without_a_token_and_can_be_retried
         return real(*a, **k)
 
     monkeypatch.setattr(release_job, "render_stage", flaky)
-    store = Store()
+    store = MemoryStore()
     rec = _queued(client, record, tmp_path)
     store.put(rec)
     _approve(store, rec)
@@ -183,7 +186,7 @@ def test_the_outbox_reissues_an_expired_token(tmp_path):
     from cap.domain import token as tok
     from cap.policy import TOKEN_TTL_HOURS
 
-    store = Store()
+    store = MemoryStore()
     r, _, _ = sealed(tmp_path)
     r.approval.token = tok.issue(
         r.post_id,
@@ -207,7 +210,7 @@ def test_the_outbox_reissues_an_expired_token(tmp_path):
 
 
 def test_the_publish_button_does_not_block_other_requests(tmp_path, monkeypatch):
-    store = Store()
+    store = MemoryStore()
     r, _, _ = sealed(tmp_path)
     store.put(r)
     gate = threading.Event()
@@ -317,9 +320,9 @@ def test_the_card_says_what_is_true_about_voice_and_provenance(tmp_path, monkeyp
     from cap.ui.views import card_context
 
     monkeypatch.chdir(tmp_path)
-    store = Store()
+    store = MemoryStore()
     seed_store(store)
-    rec = next(iter(store.posts.values()))
+    rec = next(iter(store.all()))
     rows = dict(card_context(rec, store, Reviewer("hemant", "approver"))["media_rows"])
     assert "ElevenLabs" not in rows["Voice"] and "edge-tts" in rows["Voice"]
     assert "C2PA signed" not in rows["Synthetic label"]

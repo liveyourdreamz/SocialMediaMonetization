@@ -4,9 +4,8 @@ content, and the last stops are done for real on the tour post."""
 import time
 
 from cap.approval import release_job
-from cap.approval.app import FileStore
-from cap.publisher import LocalFolderAdapter
 from cap.schema.post_record import PostStatus
+from cap.store.files import FileStore
 from cap.ui.tour import STOPS
 from tests.test_ui import Browser, create_app
 
@@ -14,7 +13,7 @@ from tests.test_ui import Browser, create_app
 def _wait_tour(store, timeout=180.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        for p in store.posts.values():
+        for p in store.all():
             if p.flags.tour and p.status.value not in ("drafting", "gated", "rendering"):
                 return p
         time.sleep(0.1)
@@ -30,7 +29,6 @@ def test_the_tour_runs_idea_to_published_on_a_real_post(tmp_path, monkeypatch):
 
     get_settings.cache_clear()
     store = FileStore(tmp_path / "cap-data")
-    store.publisher = LocalFolderAdapter(tmp_path / "cap-data" / "published")
     api = Browser(create_app(store), follow_redirects=False)
     api.sign_in("hemant")
 
@@ -95,15 +93,15 @@ def test_the_tour_runs_idea_to_published_on_a_real_post(tmp_path, monkeypatch):
 
 
 def test_a_non_tour_post_has_no_tour_pages(tmp_path, monkeypatch):
-    from cap.approval.app import Store
     from cap.demo.seed import seed_store
+    from cap.store import MemoryStore
 
     monkeypatch.chdir(tmp_path)
-    store = Store()
+    store = MemoryStore()
     seed_store(store)
     api = Browser(create_app(store), follow_redirects=False)
     api.sign_in("hemant")
-    pid = next(iter(store.posts))
+    pid = store.all()[0].post_id
     assert api.get(f"/tour/{pid}/1").status_code == 404
 
 
@@ -114,12 +112,12 @@ def test_the_card_shows_the_video_being_approved(tmp_path, monkeypatch):
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
     monkeypatch.setenv("CAP_RENDERER", "video")
     monkeypatch.setenv("CAP_VOICE", "silent")
-    from cap.approval.app import Store
     from cap.config import get_settings
     from cap.demo.seed import seed_store
+    from cap.store import MemoryStore
 
     get_settings.cache_clear()
-    store = Store()
+    store = MemoryStore()
     seed_store(store, demo=True)
     api = Browser(create_app(store), follow_redirects=False)
     api.sign_in("hemant")
@@ -132,7 +130,7 @@ def test_the_card_shows_the_video_being_approved(tmp_path, monkeypatch):
     assert r.status_code == 200 and r.headers["content-type"] == "video/mp4"
     # Layla's stage-one card carries it too, labelled in Arabic
     api.sign_in("layla")
-    c = next(p for p in store.posts.values() if p.channel_id.value == "C")
+    c = next(p for p in store.all() if p.channel_id.value == "C")
     html = api.get(f"/posts/{c.post_id}").text
     assert f"/assets/{c.post_id}/long.mp4" in html and "الفيديو الذي توافق عليه" in html
 
@@ -142,15 +140,15 @@ def test_screenshots_uploaded_with_a_brief_are_kept_for_the_renderer(tmp_path, m
 
     from PIL import Image
 
-    from cap.approval.app import Store
     from cap.config import get_settings
+    from cap.store import MemoryStore
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
     monkeypatch.setenv("CAP_RENDERER", "text")
     get_settings.cache_clear()
     try:
-        store = Store()
+        store = MemoryStore()
         api = Browser(create_app(store), follow_redirects=False)
         api.sign_in("hemant")
         buf = io.BytesIO()
@@ -170,7 +168,7 @@ def test_screenshots_uploaded_with_a_brief_are_kept_for_the_renderer(tmp_path, m
             ],
         )
         assert r.status_code == 303
-        rec = next(p for p in store.posts.values() if p.brief.topic == "Shots")
+        rec = next(p for p in store.all() if p.brief.topic == "Shots")
         folder = tmp_path / "d" / "media" / rec.post_id
         assert sorted(p.name for p in folder.iterdir()) == ["00-day3.png"]
         assert any("1 screenshot(s) attached" in h for h in rec.history)

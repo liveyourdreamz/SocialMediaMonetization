@@ -9,7 +9,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from cap.approval.app import Store
 from cap.demo import CHARACTER_BLOCK, SOURCES, TEST_LOG, happy_fixtures
 from cap.domain.card import prepare_card
 from cap.models import MockClient
@@ -23,6 +22,7 @@ from cap.schema.post_record import (
     PostRecord,
     PostStatus,
 )
+from cap.store import PostStore
 
 
 def demo_post(channel: Channel = Channel.A, canary: bool = False) -> PostRecord:
@@ -189,7 +189,7 @@ def new_brief(channel: str, topic: str) -> PostRecord:
 
 
 def run_brief(
-    store: Store,
+    store: PostStore,
     channel: str,
     topic: str,
     *,
@@ -262,7 +262,7 @@ def run_brief(
     return out
 
 
-def start_tour(store: Store) -> PostRecord:
+def start_tour(store: PostStore) -> PostRecord:
     """The record the guided tour follows: the worked Patch example (Notely, 7 days),
     drafted from the fixtures whatever the model backend, rendered by the real renderer.
     Returns at once with the record in the store as 'drafting'; the pipeline runs in a
@@ -307,7 +307,7 @@ def start_tour(store: Store) -> PostRecord:
     return rec
 
 
-def seed_store(store: Store, demo: bool = False, canary: bool = False) -> None:
+def seed_store(store: PostStore, demo: bool = False, canary: bool = False) -> None:
     a = demo_post(Channel.A)
     a.created_at = datetime.now(UTC) - timedelta(days=2)
     store.put(a)
@@ -317,7 +317,6 @@ def seed_store(store: Store, demo: bool = False, canary: bool = False) -> None:
         store.put(b)
         c = prepare_card(_falak_arabic(demo_post(Channel.C)))
         store.put(c)
-        store.analytics = EXAMPLE_ANALYTICS
-        store.analytics_note = "example figures"
+        store.set_analytics(EXAMPLE_ANALYTICS, "example figures")
     if canary:
         store.put(demo_post(Channel.A, canary=True))

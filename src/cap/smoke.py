@@ -25,7 +25,7 @@ class SmokeError(AssertionError):
 def _wait(store, topic: str, timeout: float = 60.0) -> str:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        for p in store.posts.values():
+        for p in store.all():
             if p.brief.topic == topic and p.status.value not in ("drafting", "gated", "rendering"):
                 return p.post_id
         time.sleep(0.1)
@@ -52,11 +52,11 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
     from fastapi.testclient import TestClient
 
     from cap.approval import release_job
-    from cap.approval.app import FileStore, create_app
     from cap.config import get_settings
     from cap.demo.seed import seed_store
-    from cap.publisher import LocalFolderAdapter
     from cap.schema.post_record import PostStatus
+    from cap.server import create_app
+    from cap.store.files import FileStore
 
     get_settings.cache_clear()
     cwd = Path.cwd()
@@ -72,7 +72,6 @@ def run(root: Path, out: Callable[[str], None] = print) -> int:
 
     try:
         store = FileStore(data)
-        store.publisher = LocalFolderAdapter(data / "published")
         seed_store(store, demo=True, canary=True)
         api = TestClient(
             create_app(store), base_url="http://127.0.0.1:8000", follow_redirects=False

@@ -10,9 +10,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from cap.approval import release_job
-from cap.approval.app import Store, create_app
 from cap.demo.seed import seed_store
 from cap.schema.post_record import Channel, PostStatus
+from cap.server import create_app
+from cap.store import MemoryStore
 from cap.ui.tokens import is_current
 from tests.conftest import SIGNIN
 
@@ -33,14 +34,14 @@ class Browser(TestClient):
 @pytest.fixture
 def world(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # the stand-in renderer writes under renders/
-    store = Store()
+    store = MemoryStore()
     seed_store(store, demo=True, canary=True)
     api = Browser(create_app(store), follow_redirects=False)
     api.sign_in("hemant")
     return store, api
 
 
-def _post(store: Store, channel: Channel, canary: bool = False):
+def _post(store: MemoryStore, channel: Channel, canary: bool = False):
     return next(p for p in store.queue() if p.channel_id == channel and p.flags.canary == canary)
 
 
@@ -72,7 +73,7 @@ def test_portfolio_marks_examples_and_names_sources(world):
     for absent in ("daily views", "subscriber delta", "trending"):
         assert absent not in html.lower()
     # with no analytics at all the screen says so instead of inventing
-    store.analytics, store.analytics_note = {}, ""
+    store.set_analytics({}, "")
     html = api.get("/").text
     assert "no pull yet" in html and "example figures" not in html
 
@@ -273,8 +274,7 @@ def test_every_post_form_carries_the_csrf_field(world):
 def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
     """Brief -> pipeline -> queue -> approve -> token -> publisher -> published folder,
     with records surviving a restart (FileStore)."""
-    from cap.approval.app import FileStore
-    from cap.publisher import LocalFolderAdapter
+    from cap.store.files import FileStore
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "cap-data"))
@@ -283,7 +283,6 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
     get_settings.cache_clear()
     data = tmp_path / "cap-data"
     store = FileStore(data)
-    store.publisher = LocalFolderAdapter(data / "published")
     api = Browser(create_app(store), follow_redirects=False)
     api.sign_in("hemant")
     # file a brief from the operator screen: the pipeline runs in the background
@@ -352,7 +351,7 @@ def _wait_for_brief(store, topic: str, timeout: float = 30.0) -> str:
     """The brief runs in a thread; wait until it leaves the running states."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        for p in store.posts.values():
+        for p in store.all():
             if p.brief.topic == topic and p.status.value not in ("drafting", "gated", "rendering"):
                 return p.post_id
         time.sleep(0.1)

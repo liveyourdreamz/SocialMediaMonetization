@@ -4,7 +4,7 @@ Every rule the card enforces lives in cap.domain.card; these routes only collect
 the reviewer's inputs and show what the card functions return. A screen can never
 show what the API would refuse: the blind card is built by build_card(), which
 drops the gate fields until the verdict is recorded, and card_for() drops them for
-the Arabic reviewer always. Time on card is the server's clock (Store.open_card),
+the Arabic reviewer always. Time on card is the server's clock (PostStore.open_card),
 never a number the browser sends. Every POST carries a CSRF token.
 """
 
@@ -21,7 +21,7 @@ from starlette.concurrency import run_in_threadpool
 
 from cap import release
 from cap.approval import google, release_job
-from cap.approval.app import Store, finalise_and_issue, publish_now, visible_to
+from cap.approval.app import finalise_and_issue, publish_now, visible_to
 from cap.approval.identity import (
     COOKIE,
     CSRF_COOKIE,
@@ -42,6 +42,7 @@ from cap.config import get_settings
 from cap.domain.card import CardError, record_stage_one, record_verdict
 from cap.publisher import PublishRefusedError
 from cap.schema.post_record import Decision, PostStatus, ReasonCode
+from cap.store import PostStore
 from cap.ui import tour, views
 
 HERE = Path(__file__).resolve().parent
@@ -52,7 +53,9 @@ templates.env.filters["day"] = views.day
 templates.env.globals["workflow"] = views.workflow
 
 
-def _ctx(request: Request, store: Store, reviewer: Reviewer | None, **extra: Any) -> dict[str, Any]:
+def _ctx(
+    request: Request, store: PostStore, reviewer: Reviewer | None, **extra: Any
+) -> dict[str, Any]:
     return {
         "request": request,
         "reviewer": reviewer,
@@ -77,7 +80,7 @@ def _spot(value: str | None) -> bool | None:
     return None if value in (None, "") else value == "yes"
 
 
-def ui_router(store: Store) -> APIRouter:
+def ui_router(store: PostStore) -> APIRouter:
     r = APIRouter(include_in_schema=False)
 
     def render(
@@ -470,7 +473,7 @@ def ui_router(store: Store) -> APIRouter:
             return render(
                 request, "paused.html", reviewer, rtl=True, last=None, caught=None, missed=None
             )
-        missed = [p for p in store.posts.values() if p.flags.canary_outcome == "missed"]
+        missed = [p for p in store.all() if p.flags.canary_outcome == "missed"]
         last = max(missed, key=lambda p: p.approval.decided_at or p.created_at) if missed else None
         caught, miss = views.canary_record(store)
         chip = last.approval.pre_reveal_reason_code if last else None
@@ -720,7 +723,7 @@ def ui_router(store: Store) -> APIRouter:
     @r.get("/tour", response_class=HTMLResponse)
     def tour_intro(request: Request, reviewer: Reviewer = Depends(current_reviewer)) -> Response:
         _approver(reviewer)
-        current = [p for p in store.posts.values() if p.flags.tour]
+        current = [p for p in store.all() if p.flags.tour]
         current.sort(key=lambda p: p.created_at, reverse=True)
         return render(
             request,
@@ -803,9 +806,7 @@ def ui_router(store: Store) -> APIRouter:
             outbox=views.outbox(store),
             connections_summary=_connections_summary(),
             build=__import__("cap.version", fromlist=["build_id"]).build_id(),
-            running=any(
-                p.status.value in ("drafting", "gated", "rendering") for p in store.posts.values()
-            ),
+            running=any(p.status.value in ("drafting", "gated", "rendering") for p in store.all()),
         )
 
     return r

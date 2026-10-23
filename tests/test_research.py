@@ -126,11 +126,11 @@ def test_if_the_scout_fails_outright_wikipedia_search_takes_over(keyed, monkeypa
 
 def test_a_cocoons_brief_reaches_the_queue(keyed, monkeypatch):
     """Hemant's brief, end to end: topic only, channel B, the API refuses two domains."""
-    from cap.approval.app import Store
     from cap.demo import happy_fixtures
     from cap.demo.seed import run_brief
     from cap.models import MockClient
     from cap.schema.post_record import PostStatus
+    from cap.store import MemoryStore
 
     monkeypatch.setenv("CAP_RENDERER", "text")
     from cap.config import get_settings
@@ -146,7 +146,7 @@ def test_a_cocoons_brief_reaches_the_queue(keyed, monkeypatch):
         [refuse, lambda kw: _search_reply(["https://www.britannica.com/animal/cocoon"])],
     )
     monkeypatch.setattr("cap.models.get_client", lambda fixtures=None: MockClient(happy_fixtures()))
-    rec = run_brief(Store(), "B", "Cocoons")
+    rec = run_brief(MemoryStore(), "B", "Cocoons")
     assert rec.status != PostStatus.PARKED, rec.history[-1]
     assert any("source: https://www.britannica.com/animal/cocoon" in h for h in rec.history)
 
@@ -154,12 +154,12 @@ def test_a_cocoons_brief_reaches_the_queue(keyed, monkeypatch):
 def test_flag_mode_unconfirmed_claims_reach_the_card_block_mode_rejects(keyed, monkeypatch):
     """D41: with nothing found to confirm the claims, flag mode queues the post with each
     claim marked unconfirmed on the card; block mode (the old guardrail) rejects it."""
-    from cap.approval.app import Store
     from cap.config import get_settings
     from cap.demo import happy_fixtures
     from cap.demo.seed import run_brief
     from cap.models import MockClient
     from cap.schema.post_record import PostStatus
+    from cap.store import MemoryStore
 
     monkeypatch.setenv("CAP_RENDERER", "text")
     monkeypatch.setattr("cap.models.get_client", lambda fixtures=None: MockClient(happy_fixtures()))
@@ -180,7 +180,9 @@ def test_flag_mode_unconfirmed_claims_reach_the_card_block_mode_rejects(keyed, m
     for mode, expect in (("flag", PostStatus.AWAITING_APPROVAL), ("block", PostStatus.REJECTED)):
         monkeypatch.setenv("CAP_FACT_MODE", mode)
         get_settings.cache_clear()
-        rec = run_brief(Store(), "A", "Notely 7-day test", test_log="Day 3: sync failed twice.")
+        rec = run_brief(
+            MemoryStore(), "A", "Notely 7-day test", test_log="Day 3: sync failed twice."
+        )
         assert rec.status == expect, (mode, rec.history[-3:])
         if mode == "flag":
             assert any("unconfirmed, flagged on the card" in h for h in rec.history)
@@ -191,7 +193,7 @@ def test_auto_routes_by_subject_and_patch_needs_no_test_log(keyed, monkeypatch):
     """21 Oct: 'How rainbows work' went to Patch because the form pre-selected A; and
     D42 makes Patch a general explainer, so no test log is required."""
     from cap import routing
-    from cap.approval.app import Store
+    from cap.store import MemoryStore
     from tests.test_ui import Browser, create_app
 
     assert routing._heuristic("How rainbows work") == "B"
@@ -199,17 +201,17 @@ def test_auto_routes_by_subject_and_patch_needs_no_test_log(keyed, monkeypatch):
     monkeypatch.setattr(routing, "route", lambda topic: ("B", "chosen by the model"))
     started: list[str] = []
     monkeypatch.setattr("cap.demo.seed.run_brief", lambda *a, **k: started.append(a[1]))
-    store = Store()
+    store = MemoryStore()
     api = Browser(create_app(store), follow_redirects=False)
     api.sign_in("hemant")
     assert 'value="auto" checked' in api.get("/operator").text
     api.form("/operator/brief", channel="auto", topic="How rainbows work")
-    rec = next(p for p in store.posts.values() if p.brief.topic == "How rainbows work")
+    rec = next(p for p in store.all() if p.brief.topic == "How rainbows work")
     assert rec.channel_id.value == "B" and any(
         "B · Falak (chosen by the model)" in h for h in rec.history
     )
     api.form("/operator/brief", channel="A", topic="How a lithium battery works")
-    rec = next(p for p in store.posts.values() if p.brief.topic == "How a lithium battery works")
+    rec = next(p for p in store.all() if p.brief.topic == "How a lithium battery works")
     assert rec.status.value == "drafting" and rec.brief.format_id == "take_it_apart"
     import time
 

@@ -128,12 +128,12 @@ def test_an_adapter_that_declines_gets_variants_built_from_the_draft(fixtures, r
 
 
 def test_the_card_shows_the_question_and_needs_the_tick(fixtures, record, tmp_path, monkeypatch):
-    from cap.approval.app import Store
+    from cap.store import MemoryStore
     from tests.test_ui import Browser, create_app
 
     monkeypatch.chdir(tmp_path)
     rec = _escalated(fixtures, record, tmp_path)
-    store = Store()
+    store = MemoryStore()
     store.put(rec)
     api = Browser(create_app(store), follow_redirects=False)
     api.sign_in("hemant")

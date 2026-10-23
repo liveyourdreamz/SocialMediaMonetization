@@ -1,7 +1,6 @@
 from fastapi.testclient import TestClient
 
 from cap.approval import release_job
-from cap.approval.app import Store, create_app
 from cap.config import get_settings
 from cap.domain.token import ApprovalToken, verify
 from cap.gates.disclosure import MFK_FACTOR_WEIGHTS
@@ -9,6 +8,8 @@ from cap.harness import run_all
 from cap.models import MockClient
 from cap.pipeline import run_post
 from cap.schema.post_record import PostStatus
+from cap.server import create_app
+from cap.store import MemoryStore
 from tests.conftest import SOURCES, make_deps, ok
 
 H = {"X-Reviewer": "hemant"}
@@ -19,7 +20,7 @@ def _queued_post(client, record, tmp_path):
 
 
 def test_api_full_approval_flow(client, record, tmp_path):
-    store = Store()
+    store = MemoryStore()
     post = _queued_post(client, record, tmp_path)
     store.put(post)
     api = TestClient(create_app(store))
@@ -98,7 +99,7 @@ def test_api_full_approval_flow(client, record, tmp_path):
 
 
 def test_api_rejected_post_cannot_be_flipped_to_approved(client, record, tmp_path):
-    store = Store()
+    store = MemoryStore()
     post = _queued_post(client, record, tmp_path)
     store.put(post)
     api = TestClient(create_app(store))
@@ -126,7 +127,7 @@ def test_api_rejected_post_cannot_be_flipped_to_approved(client, record, tmp_pat
 def test_api_identity_stand_in_is_opt_in(client, record, tmp_path, monkeypatch):
     monkeypatch.setenv("CAP_DEV_REVIEWER_HEADER", "false")
     get_settings.cache_clear()
-    api = TestClient(create_app(Store()))
+    api = TestClient(create_app(MemoryStore()))
     assert api.get("/api/queue", headers=H).status_code == 503
 
 
