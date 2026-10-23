@@ -67,7 +67,7 @@ def test_no_file_grows_past_the_limit():
 
 
 def test_the_list_of_long_files_only_shrinks():
-    for rel, limit in LONG_FILES.items():
+    for rel in LONG_FILES:
         f = ROOT / rel
         if f.exists():
             n = len(f.read_text(encoding="utf-8").splitlines())
