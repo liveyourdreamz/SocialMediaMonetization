@@ -75,7 +75,8 @@ class LocalPostgres:
 
     @property
     def log_file(self) -> Path:
-        return self.data_dir / "pg.log"
+        # inside the cluster: the one folder the server can always write (see init)
+        return self.cluster / "server.log"
 
     def _run(self, tool: str, *args: str, timeout: int = 120) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603 - fixed argv from our own paths, no shell
