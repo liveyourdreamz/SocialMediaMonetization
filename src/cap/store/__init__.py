@@ -11,6 +11,7 @@ The store keeps facts, never wiring: no adapter, client or setting lives on it.
 
 from __future__ import annotations
 
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -23,8 +24,35 @@ if TYPE_CHECKING:
     from cap.gates.history import HistoryStore
 
 
+# Statuses a post is in only while a worker is busy with it, and the step each means.
+IN_FLIGHT = {
+    PostStatus.BRIEFED: "draft",
+    PostStatus.DRAFTING: "draft",
+    PostStatus.GATED: "checks",
+    PostStatus.RENDERING: "video",
+}
+
+
+def park_if_interrupted(record: PostRecord) -> bool:
+    """A post found mid-step at start-up lost its worker when the app stopped (review
+    H4). Park it with the step it was on; True when the record changed. The job queue
+    (M1 step 3) replaces this with a resume."""
+    step = IN_FLIGHT.get(record.status)
+    if step is None:
+        return False
+    record.stop(step, "interrupted: the app restarted while this was running")
+    record.status = PostStatus.PARKED
+    record.log("parked: interrupted by a restart; file it again")
+    return True
+
+
 class PostNotFoundError(LookupError):
     """No post has this id. The web layer turns it into a 404."""
+
+
+class PostConflictError(RuntimeError):
+    """The post was saved by someone else since this copy was read. Re-read and redo
+    the change; never overwrite (the other save would be lost)."""
 
 
 @dataclass
@@ -47,6 +75,7 @@ class PostStore(ABC):
 
     def __init__(self) -> None:
         self.state = AppState()
+        self.unreadable: list[str] = []  # stored posts this build could not read, by id
 
     # ---- posts ------------------------------------------------------------------------
 
@@ -56,7 +85,9 @@ class PostStore(ABC):
 
     @abstractmethod
     def put(self, record: PostRecord) -> None:
-        """Save the post as it is now (insert or replace)."""
+        """Save the post. `record.revision` must equal the stored revision (0 for a new
+        post), else PostConflictError; on success the store and `record` both move to
+        the next revision."""
 
     @abstractmethod
     def all(self) -> list[PostRecord]:
@@ -136,19 +167,27 @@ class MemoryStore(PostStore):
     def __init__(self) -> None:
         super().__init__()
         self._posts: dict[str, PostRecord] = {}
+        self._lock = threading.Lock()
         self._opened: dict[tuple[str, str], datetime] = {}
 
+    # Copies in and out, as a database does: code that changes a record it read must
+    # save it, and nothing may rely on two readers sharing one object.
     def get(self, post_id: str) -> PostRecord:
         try:
-            return self._posts[post_id]
+            return self._posts[post_id].model_copy(deep=True)
         except KeyError as e:
             raise PostNotFoundError(post_id) from e
 
     def put(self, record: PostRecord) -> None:
-        self._posts[record.post_id] = record
+        with self._lock:
+            stored = self._posts.get(record.post_id)
+            if (stored.revision if stored else 0) != record.revision:
+                raise PostConflictError(record.post_id)
+            record.revision += 1
+            self._posts[record.post_id] = record.model_copy(deep=True)
 
     def all(self) -> list[PostRecord]:
-        return list(self._posts.values())
+        return [p.model_copy(deep=True) for p in self._posts.values()]
 
     def count(self) -> int:
         return len(self._posts)

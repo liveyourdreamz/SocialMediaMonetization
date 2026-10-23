@@ -1408,6 +1408,12 @@
       "title": "Post Id",
       "type": "string"
     },
+    "revision": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Revision",
+      "type": "integer"
+    },
     "channel_id": {
       "$ref": "#/$defs/Channel"
     },

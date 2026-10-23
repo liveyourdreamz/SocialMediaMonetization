@@ -232,12 +232,12 @@ def test_m6_concurrent_saves_of_one_post_never_collide(tmp_path):
     rec = PostRecord(channel_id=Channel.A, status=PostStatus.AWAITING_APPROVAL)
     errors: list[Exception] = []
 
+    store.put(rec)
+
     def save(i: int) -> None:
         try:
-            for _ in range(25):
-                r = rec.model_copy(deep=True)
-                r.log(f"writer {i}")
-                store.put(r)
+            for n in range(25):
+                _change(store, rec.post_id, lambda r, i=i, n=n: r.log(f"writer {i} #{n}"))
         except Exception as e:  # noqa: BLE001 - the assertion below reports it
             errors.append(e)
 
@@ -248,7 +248,22 @@ def test_m6_concurrent_saves_of_one_post_never_collide(tmp_path):
         th.join()
     assert not errors, errors
     assert not list((tmp_path / "posts").glob("*.tmp"))
-    FileStore(tmp_path).get(rec.post_id)  # the file on disk is whole
+    lines = FileStore(tmp_path).get(rec.post_id).history  # the file on disk is whole
+    assert sum("writer" in h for h in lines) == 100  # and no save was lost
+
+
+def _change(store, post_id, change) -> None:
+    """Read, change, save; on a conflict, read again and redo the change."""
+    from cap.store import PostConflictError
+
+    while True:
+        r = store.get(post_id)
+        change(r)
+        try:
+            store.put(r)
+            return
+        except PostConflictError:
+            continue
 
 
 # ---- R-12 follows the fact mode (22 Oct, found by the full-run test) ---------------

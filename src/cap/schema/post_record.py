@@ -407,6 +407,9 @@ SCHEMA_VERSION = 2
 class PostRecord(Strict):
     schema_version: int = SCHEMA_VERSION
     post_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    # How many times the store has saved this post. A save from a copy older than the
+    # stored one is refused (cap.store.PostConflictError), so no change is lost silently.
+    revision: int = Field(default=0, ge=0)
     channel_id: Channel
     status: PostStatus = PostStatus.BRIEFED
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

@@ -101,7 +101,7 @@ def test_blind_card_then_reveal_with_server_side_clock(world):
     # approve without the line: refused with the card re-rendered, nothing recorded
     r = api.form(f"/posts/{post.post_id}/verdict", decision="approve")
     assert r.status_code == 422 and "opening line" in r.text
-    assert post.approval.pre_reveal_decision is None
+    assert store.get(post.post_id).approval.pre_reveal_decision is None
     # a proper approve: the server's clock says it was too fast (seconds, not minutes)
     time.sleep(0.2)
     r = api.form(
@@ -112,13 +112,15 @@ def test_blind_card_then_reveal_with_server_side_clock(world):
         time_on_card_s="9999",  # ignored: the browser never sets the clock
     )
     assert r.status_code == 303
-    assert post.approval.too_fast is True and post.approval.time_on_card_s < 5
+    approval = store.get(post.post_id).approval
+    assert approval.too_fast is True and approval.time_on_card_s < 5
     html = api.get(f"/posts/{post.post_id}").text
     assert "Your verdict, recorded" in html and "machines thought" in html
     assert "Seven days, one surprise." in html  # the line now sits in the script
     r = api.form(f"/posts/{post.post_id}/finalise")
-    assert r.status_code == 303 and post.status == PostStatus.APPROVED
+    assert r.status_code == 303 and store.get(post.post_id).status == PostStatus.APPROVED
     release_job.wait(post.post_id, 30)
+    post = store.get(post.post_id)
     assert post.approval.token  # issued server-side, once the final render is done
     assert post.approval.token not in api.get(f"/posts/{post.post_id}").text  # never shown
 
@@ -135,7 +137,7 @@ def test_reject_needs_a_chip_and_a_wrong_chip_on_a_canary_pauses(world):
     assert "machines thought" in html and "This was a canary" not in html  # fault stays hidden
     r = api.form(f"/posts/{canary.post_id}/finalise")
     assert r.headers["location"] == "/paused" and store.paused
-    assert canary.flags.canary_outcome == "missed"
+    assert store.get(canary.post_id).flags.canary_outcome == "missed"
     # every screen carries the band; actions are refused; an approver reopens
     assert "Queue paused" in api.get("/queue").text
     other = _post(store, Channel.B)
@@ -166,7 +168,7 @@ def test_channel_c_waits_for_stage_one_and_layla_sees_only_her_queue(world):
     page = layla.get(f"/posts/{c.post_id}").text
     assert "Originality" not in page and "النص" in page
     r = layla.form(f"/posts/{c.post_id}/stage-one", decision="approve", notes="سليم")
-    assert r.status_code == 303 and c.approval.stage_one.reviewer == "layla"
+    assert r.status_code == 303 and store.get(c.post_id).approval.stage_one.reviewer == "layla"
     assert c.post_id not in layla.get("/queue").text
     # Hemant now sees stage one and can approve
     assert "stage one: layla" in api.get("/queue").text
@@ -211,6 +213,7 @@ def test_api_enforces_roles_and_the_server_clock(world):
         f"/api/posts/{b.post_id}/verdict",
         json={"decision": "reject", "reason_code": "other", "time_on_card_s": 9999},
     )
+    b = store.get(b.post_id)
     assert r.status_code == 200 and b.approval.time_on_card_s < 5 and b.approval.too_fast
 
 
@@ -227,7 +230,7 @@ def test_canary_is_scored_blind_even_if_revised_with_the_answer_in_hand(world):
         reason_code="out_group_title",
     )
     assert r.headers["location"] == "/paused"
-    assert canary.flags.canary_outcome == "missed" and store.paused
+    assert store.get(canary.post_id).flags.canary_outcome == "missed" and store.paused
 
 
 def test_a_refused_revision_leaves_the_record_intact(world):
@@ -241,7 +244,7 @@ def test_a_refused_revision_leaves_the_record_intact(world):
         opening_line="x",
         spot_check_supported="yes",
     )
-    assert r.status_code == 422 and c.approval.pre_reveal_decision is None
+    assert r.status_code == 422 and store.get(c.post_id).approval.pre_reveal_decision is None
     api.form(f"/posts/{c.post_id}/verdict", decision="reject", reason_code="language")
     r = api.form(
         f"/posts/{c.post_id}/finalise",
@@ -250,11 +253,13 @@ def test_a_refused_revision_leaves_the_record_intact(world):
         spot_check_supported="yes",
     )
     assert r.status_code == 422
+    c = store.get(c.post_id)
     assert (
         c.approval.decision == c.approval.pre_reveal_decision
         and not c.approval.revised_after_reveal
     )
     r = api.form(f"/posts/{c.post_id}/finalise")  # keep reject still works
+    c = store.get(c.post_id)
     assert r.status_code == 303 and c.status == PostStatus.REJECTED and c.approval.decided_at
 
 
@@ -305,6 +310,7 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
     r = api.form(f"/posts/{post_id}/finalise")
     assert r.status_code == 303
     release_job.wait(post_id, 30)
+    rec = store.get(post_id)
     # approval stops at the token: the post waits in the outbox with a preview
     assert rec.status == PostStatus.APPROVED and rec.approval.token
     assert not (data / "published" / post_id).exists()
@@ -316,6 +322,7 @@ def test_end_to_end_on_the_laptop_build(tmp_path, monkeypatch):
     # publish: the plain-code publisher verifies the token and writes the folder
     r = api.form(f"/posts/{post_id}/publish")
     assert r.status_code == 303
+    rec = store.get(post_id)
     assert rec.status == PostStatus.PUBLISHED and "local" in rec.publish.platform_post_ids
     assert (data / "published" / post_id / "manifest.json").exists()
     assert "Publish now" not in api.get(f"/posts/{post_id}/preview").text
@@ -484,6 +491,7 @@ def test_a_post_that_has_not_reached_the_queue_shows_progress_not_a_crash(world)
     assert "Writing the script" in html and "Still running" in html and "refresh" in html
     rec.status = PostStatus.PARKED
     rec.log("parked: render failed: voice service unreachable")
+    store.put(rec)
     html = api.get(f"/posts/{rec.post_id}").text
     assert "Stopped at" in html and "voice service unreachable" in html and "Step " in html
     assert "refresh" not in html

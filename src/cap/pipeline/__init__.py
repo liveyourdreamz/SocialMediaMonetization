@@ -2,8 +2,9 @@
 
 brief -> draft -> critic -> adapt -> gates -> render -> awaiting_approval
 Any agent that fails closed parks the post (status parked) and the graph ends; a
-human decides. The state is the post record plus the sources; the checkpointer is
-SQLite locally and Postgres in production, chosen by settings.
+human decides. The state is the post record plus the sources; each run uses an
+in-memory checkpointer, and the post record in Postgres is the durable state (the job
+queue, M1 step 3, resumes a post at its step from that record).
 
 The four gates run in one node here; they are independent and will be fanned out
 once the renderer is real and gate latency matters.
@@ -11,6 +12,7 @@ once the renderer is real and gate latency matters.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypedDict
@@ -62,11 +64,15 @@ class PipelineDeps:
 
 
 def _progress(deps: PipelineDeps, record: PostRecord) -> None:
-    if deps.on_progress is not None:
-        try:
-            deps.on_progress(record.model_copy(deep=True))
-        except Exception:  # noqa: BLE001 - a progress save never stops the post
-            pass
+    if deps.on_progress is None:
+        return
+    saved = record.model_copy(deep=True)
+    try:
+        deps.on_progress(saved)
+    except Exception:  # a progress save never stops the post; it is logged
+        logging.getLogger("cap.pipeline").exception("progress save failed for %s", record.post_id)
+        return
+    record.revision = saved.revision  # the next save builds on this one
 
 
 def _rec(state: PipelineState) -> PostRecord:
@@ -293,16 +299,6 @@ def compile_pipeline(deps: PipelineDeps, checkpointer: Any | None = None):  # ty
 
         checkpointer = MemorySaver()
     return graph.compile(checkpointer=checkpointer)
-
-
-def sqlite_checkpointer():  # type: ignore[no-untyped-def]
-    """Local checkpointer (settings.checkpoint_path). Production swaps in Postgres."""
-    import sqlite3
-
-    from langgraph.checkpoint.sqlite import SqliteSaver
-
-    conn = sqlite3.connect(get_settings().checkpoint_path, check_same_thread=False)
-    return SqliteSaver(conn)
 
 
 def run_post(

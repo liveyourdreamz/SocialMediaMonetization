@@ -28,6 +28,7 @@ from cap.console import utf8_console
 
 if TYPE_CHECKING:
     from cap.config import Settings
+    from cap.store import PostStore
 
 ALREADY_RUNNING = 3  # cap serve: another window serves this data folder; it was opened
 
@@ -78,7 +79,12 @@ def main(argv: list[str] | None = None) -> int:
     yt.add_argument("action", choices=["auth", "test"])
     t = sub.add_parser("tokens")
     t.add_argument("action", choices=["build", "check"])
+    db = sub.add_parser("db", help="the laptop's own Postgres")
+    db.add_argument("action", choices=["install", "status"])
     args = p.parse_args(argv)
+
+    if args.cmd == "db":
+        return _db(args.action)
 
     if args.cmd == "schema":
         from cap.schema import export_json_schema
@@ -181,6 +187,46 @@ def _open_later(url: str, delay: float = 1.5) -> None:
     threading.Timer(delay, lambda: webbrowser.open(url)).start()
 
 
+def _db(action: str) -> int:
+    """`cap db install`: put the portable PostgreSQL programs in place (Windows; other
+    systems use their own Postgres). `cap db status`: where they are and whether the
+    database is running."""
+    import os
+
+    from cap import localpg, pginstall
+    from cap.config import get_settings
+
+    settings = get_settings()
+    if action == "install":
+        if os.name != "nt":
+            found = localpg.find_bin(settings.pg_bin)
+            print(f"database programs: {found or 'not found; install PostgreSQL 16'}")
+            return 0 if found else 1
+        try:
+            fresh = pginstall.install()
+        except pginstall.InstallError as e:
+            print(f"  could not set up the database programs: {e}", file=sys.stderr)
+            return 1
+        print(
+            f"  database programs {'installed' if fresh else 'already in place'} "
+            f"(PostgreSQL {pginstall.VERSION})"
+        )
+        return 0
+    found = localpg.find_bin(settings.pg_bin)
+    if settings.database_url:
+        print("database: the configured CAP_DATABASE_URL")
+        return 0
+    if found is None:
+        print("database programs: not found (run install.bat again)")
+        return 1
+    pg = localpg.LocalPostgres(found, Path(settings.data_dir), settings.pg_port)
+    state = (
+        "running" if pg.running() else ("set up, stopped" if pg.initialised() else "not set up yet")
+    )
+    print(f"database programs: {found}\ndatabase: {state} (127.0.0.1:{settings.pg_port})")
+    return 0
+
+
 def _serve(args: argparse.Namespace) -> int:
     import os
     import shutil
@@ -221,6 +267,9 @@ def _serve(args: argparse.Namespace) -> int:
         )
     try:
         if args.reset and data.exists():
+            from cap import localpg
+
+            localpg.stop_if_running(data, settings.pg_bin, settings.pg_port)
             for child in data.iterdir():
                 if child.is_dir():
                     shutil.rmtree(child)
@@ -247,21 +296,50 @@ def _already_running(port: int, open_browser: bool, why: str) -> int:
 def _run_app(
     args: argparse.Namespace, settings: Settings, data: Path, model: str, env_file: Path
 ) -> int:
+    from cap import localpg
+    from cap.store.postgres import PostgresStore
+
+    try:
+        with localpg.database_url(
+            settings.database_url, data, settings.pg_bin, settings.pg_port
+        ) as url:
+            store = PostgresStore.open(url)
+            try:
+                return _serve_store(args, settings, data, model, env_file, store)
+            finally:
+                store.close()
+    except localpg.LocalPostgresError as e:
+        print(f"The app could not start its database: {e}", file=sys.stderr)
+        return 1
+
+
+def _serve_store(
+    args: argparse.Namespace,
+    settings: Settings,
+    data: Path,
+    model: str,
+    env_file: Path,
+    store: PostStore,
+) -> int:
     import uvicorn
 
     from cap import lan
     from cap.demo.seed import seed_store
     from cap.server import create_app
-    from cap.store.files import FileStore
+    from cap.store import importer
     from cap.ui import templates
     from cap.version import build_id
 
-    store = FileStore(data)
+    if importer.needed(data, store):
+        n = importer.import_files(data, store)
+        print(f"moved {n} posts from the old record files into the database (files kept aside)")
+    if store.unreadable:
+        print(f"note: {len(store.unreadable)} stored posts cannot be read by this build")
     if not store.count():
         if settings.renderer == "video":
             print("first run: rendering the demo posts (voice + video), about a minute...")
         seed_store(store, demo=args.demo, canary=args.canary or args.demo)
-    print(f"records in {data.resolve()}: {store.count()} posts, {len(store.queue())} waiting")
+    print(f"database: {store.count()} posts, {len(store.queue())} waiting")
     if settings.model_backend.value != model:
         print(f"note: CAP_MODEL_BACKEND in the environment overrides .env ({model})")
     print(f"build: {build_id()}")

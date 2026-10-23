@@ -172,6 +172,7 @@ def test_a_failed_final_render_stays_approved_without_a_token_and_can_be_retried
     r = api.form(f"/posts/{rec.post_id}/release/retry")
     assert r.status_code == 303 and "refused" not in r.headers["location"]
     release_job.wait(rec.post_id, 30)
+    rec = store.get(rec.post_id)
     assert rec.release.status == ReleaseStatus.READY and rec.approval.token
     assert rec.release.attempts == 2
     assert "Publish now" in api.get(f"/posts/{rec.post_id}/preview").text
@@ -202,7 +203,7 @@ def test_the_outbox_reissues_an_expired_token(tmp_path):
     html = api.get(f"/posts/{r.post_id}/preview").text
     assert "Re-issue the token" in html and "Publish now" not in html
     assert api.form(f"/posts/{r.post_id}/release/reissue").status_code == 303
-    assert release.token_state(r) == "valid"
+    assert release.token_state(store.get(r.post_id)) == "valid"
     assert "Publish now" in api.get(f"/posts/{r.post_id}/preview").text
 
 
@@ -239,7 +240,7 @@ def test_the_publish_button_does_not_block_other_requests(tmp_path, monkeypatch)
     gate.set()
     publishing.join(10)
     assert answered_while_publishing
-    assert r.status == PostStatus.PUBLISHED
+    assert store.get(r.post_id).status == PostStatus.PUBLISHED
 
 
 # ---- C2: the YouTube adapter sends what the manifest says ----------------------

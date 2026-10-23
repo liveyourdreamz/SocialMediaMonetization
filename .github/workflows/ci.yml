@@ -8,6 +8,17 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:  # D45: every test that touches the store runs on Postgres
+        image: postgres:16
+        env:
+          POSTGRES_USER: cap
+          POSTGRES_PASSWORD: cap
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CAP_TEST_DATABASE_URL: postgresql://cap:cap@127.0.0.1:5432/postgres
+      CAP_REQUIRE_PG: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -49,7 +60,14 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Tests on Windows
         shell: pwsh
+        env:
+          # the runner's own PostgreSQL service (user postgres, password root)
+          CAP_TEST_DATABASE_URL: postgresql://postgres:root@127.0.0.1:5432/postgres
+          CAP_REQUIRE_PG: "1"
         run: |
+          $svc = Get-Service -Name "postgresql*" | Select-Object -First 1
+          Set-Service -Name $svc.Name -StartupType Manual
+          Start-Service -Name $svc.Name
           uv sync --locked --all-extras
           uv run pytest -q -x --tb=short 2>&1 | Tee-Object -FilePath pytest.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

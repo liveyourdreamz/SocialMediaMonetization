@@ -87,7 +87,8 @@ class FileHistory:
 
     path: Path
 
-    def _read(self) -> list[Entry]:
+    def entries(self) -> list[Entry]:
+        """Every readable line, oldest first."""
         try:
             raw = self.path.read_bytes()
         except FileNotFoundError:
@@ -108,12 +109,12 @@ class FileHistory:
         return out
 
     def recent(self, channel_id: str, days: int) -> list[tuple[str, str]]:
-        return _window(self._read(), days)
+        return _window(self.entries(), days)
 
     def add(self, record: PostRecord) -> bool:
         if not eligible(record):
             return False
-        if any(e.post_id == record.post_id for e in self._read()):
+        if any(e.post_id == record.post_id for e in self.entries()):
             return True  # approval is once per post; a repeat call changes nothing
         e = _entry(record)
         line = json.dumps(

@@ -46,8 +46,12 @@ class Settings(BaseSettings):
     gcp_region: str = "europe-west4"
     gcp_project: str = ""
 
-    database_url: str = "sqlite:///cap-local.db"
-    checkpoint_path: str = "cap-checkpoints.sqlite"
+    # Postgres everywhere, never SQLite (D45, ADR-006). Empty: the laptop's own Postgres,
+    # which the app starts from the portable binaries install.bat put in place
+    # (cap.localpg). A URL (Cloud SQL later, or CI's server) is used as given.
+    database_url: str = ""
+    pg_bin: str = ""  # where initdb and pg_ctl live; empty: found as cap.localpg describes
+    pg_port: int = Field(default=54329, ge=1024, le=65535)
 
     # Google sign-in (OIDC). When both are set, /login offers "Sign in with Google" and
     # the e-mail must map to a reviewer below. Values come from .env locally and Secret

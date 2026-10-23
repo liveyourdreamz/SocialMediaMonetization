@@ -9,7 +9,6 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.5",
     "langgraph>=0.2.60",
-    "langgraph-checkpoint-sqlite>=2.0.0",
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "httpx>=0.27",
@@ -27,6 +26,7 @@ dependencies = [
     "python-bidi>=0.6.11",
     "google-api-python-client>=2.201.0",
     "google-auth-oauthlib>=1.5.0",
+    "psycopg[binary,pool]>=3.2",
 ]
 
 [project.optional-dependencies]
@@ -99,7 +99,8 @@ layers = [
     "cap.post_context",
     "cap.models | cap.routing",
     "cap.prompts | cap.rulebook | cap.characters",
-    "cap.fetch | cap.connections | cap.setup | cap.updater | cap.instance | cap.lan",
+    "cap.pginstall",
+    "cap.fetch | cap.connections | cap.setup | cap.updater | cap.instance | cap.lan | cap.localpg",
     "cap.safehttp | cap.secretfile",
     "cap.domain",
     "cap.schema",

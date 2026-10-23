@@ -83,3 +83,33 @@ def make_deps(client: MockClient, record: PostRecord, tmp_path: Path) -> Pipelin
 @pytest.fixture
 def testsets() -> dict:
     return json.loads((FIXTURES / "testsets" / "testsets-v1.0.json").read_text())
+
+
+# ---- Postgres (M1, ADR-006) ------------------------------------------------------------
+# CAP_TEST_DATABASE_URL names a server the tests may create databases on (CI: a Postgres
+# service on Linux, the preinstalled one on Windows). Each test gets its own empty
+# database, dropped afterwards. With CAP_REQUIRE_PG=1 (set in CI) a missing server fails
+# the run instead of skipping, so CI can never pass without touching Postgres.
+
+
+@pytest.fixture
+def pg_url():
+    import os
+    import uuid
+
+    import psycopg
+
+    base = os.environ.get("CAP_TEST_DATABASE_URL", "")
+    if not base:
+        if os.environ.get("CAP_REQUIRE_PG") == "1":
+            pytest.fail("CAP_REQUIRE_PG=1 but CAP_TEST_DATABASE_URL is not set")
+        pytest.skip("no test Postgres (set CAP_TEST_DATABASE_URL)")
+    name = f"cap_test_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(base, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{name}"')
+    url = psycopg.conninfo.make_conninfo(base, dbname=name)
+    try:
+        yield url
+    finally:
+        with psycopg.connect(base, autocommit=True) as admin:
+            admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')

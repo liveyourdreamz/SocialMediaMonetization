@@ -8,6 +8,9 @@ echo  Installing dependencies (first time takes a minute)...
 uv sync --quiet
 if errorlevel 1 ( if exist ".venv\Scripts\python.exe" ( echo  WARNING: could not update the dependencies; starting with the ones already installed. ) else ( echo  Dependency install failed and nothing is installed yet. & goto :fail ) )
 for /f "delims=" %%v in ('git log -1 "--format=%%h %%cd" "--date=format:%%d %%b %%H:%%M"') do echo  Code updated to build %%v
+echo  Setting up the database (the first time downloads PostgreSQL, about 370 MB)...
+uv run cap db install
+if errorlevel 1 ( echo  The database could not be set up, and the app needs it. Check the internet connection and run install.bat again. & goto :fail )
 echo.
 if defined CAP_SMOKE (
   rem CI: run the whole loop through the real app instead of serving (see cap smoke)

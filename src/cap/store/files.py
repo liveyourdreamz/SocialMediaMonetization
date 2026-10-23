@@ -16,8 +16,8 @@ from pathlib import Path
 
 from cap.gates.history import FileHistory, HistoryStore
 from cap.schema.migrate import load_record
-from cap.schema.post_record import PostRecord, PostStatus
-from cap.store import MemoryStore
+from cap.schema.post_record import PostRecord
+from cap.store import MemoryStore, park_if_interrupted
 
 
 class FileStore(MemoryStore):
@@ -42,12 +42,7 @@ class FileStore(MemoryStore):
                 _log.info(
                     "%s: set aside fields this build does not know: %s", f.name, loaded.dropped
                 )
-            if rec.status in _IN_FLIGHT:
-                # the thread that was working on it died with the app (review H4)
-                step = _IN_FLIGHT[rec.status]
-                rec.stop(step, "interrupted: the app restarted while this was running")
-                rec.status = PostStatus.PARKED
-                rec.log("parked: interrupted by a restart; file it again")
+            if park_if_interrupted(rec):
                 _atomic_write(f, rec.model_dump_json(indent=1))
             self._posts[rec.post_id] = rec
         state = self.root / "state.json"
@@ -108,14 +103,6 @@ def _quarantine(path: Path, folder: Path, error: Exception) -> Path:
     )
     _log.warning("could not read %s; moved it to %s (reason beside it)", path.name, dest)
     return dest
-
-
-_IN_FLIGHT = {
-    PostStatus.BRIEFED: "draft",
-    PostStatus.DRAFTING: "draft",
-    PostStatus.GATED: "checks",
-    PostStatus.RENDERING: "video",
-}
 
 
 _WRITE_LOCKS: dict[Path, threading.Lock] = {}
