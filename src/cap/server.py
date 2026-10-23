@@ -90,7 +90,7 @@ def create_app(store: PostStore | None = None, *, run_jobs: bool = True) -> Fast
             return await call_next(request)
 
     app.include_router(api_router(store))
-    app.include_router(ui_router(store))
+    app.include_router(ui_router())
     app.mount("/static", STATIC, name="static")
     if local:
         _api_docs(app)
