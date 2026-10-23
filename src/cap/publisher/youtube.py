@@ -221,12 +221,12 @@ def test_upload(out=print) -> int:  # type: ignore[no-untyped-def]
     import subprocess
     import tempfile
 
-    from cap.render import _ffmpeg_exe
+    from cap.render.media import ffmpeg_exe
 
     clip = Path(tempfile.mkdtemp(prefix="cap-yt-test-")) / "cap-connection-test.mp4"
     subprocess.run(
         [
-            _ffmpeg_exe(), "-y", "-loglevel", "error",
+            ffmpeg_exe(), "-y", "-loglevel", "error",
             "-f", "lavfi", "-i", "testsrc=size=1280x720:rate=15:duration=5",
             "-f", "lavfi", "-i", "sine=frequency=440:duration=5",
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(clip),

@@ -69,7 +69,7 @@ def test_every_published_source_list_uses_the_one_rule() -> None:
     import inspect
 
     import cap.release as rel
-    import cap.render as rnd
+    import cap.render.video as rnd
 
     for mod in (rel, rnd):
         src = inspect.getsource(mod)

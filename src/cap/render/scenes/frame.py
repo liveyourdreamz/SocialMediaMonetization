@@ -60,11 +60,11 @@ def loudness(mp3: Path, n_frames: int) -> list[float]:
     import array
     import subprocess
 
-    from cap.render import _ffmpeg_exe
+    from cap.render.media import ffmpeg_exe
 
     r = subprocess.run(
         [
-            _ffmpeg_exe(),
+            ffmpeg_exe(),
             "-v",
             "error",
             "-i",

@@ -7,7 +7,13 @@ uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
 uv run mypy
 uv run lint-imports
-uv run pytest -q
+if [ "$(id -u)" = "0" ]; then
+  # initdb refuses root: the laptop-Postgres tests run in CI and as a normal user
+  echo "ci.sh: running as root, skipping tests/test_localpg.py"
+  uv run pytest -q --deselect tests/test_localpg.py
+else
+  uv run pytest -q
+fi
 uv run cap prompts check
 uv run cap tokens check
 uv run cap schema export >/dev/null && git diff --exit-code -- src/cap/schema/post_record.schema.json

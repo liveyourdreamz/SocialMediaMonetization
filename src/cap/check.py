@@ -76,9 +76,9 @@ def _data_dir() -> str:
 def _ffmpeg() -> str:
     import subprocess
 
-    from cap.render import _ffmpeg_exe
+    from cap.render.media import ffmpeg_exe
 
-    exe = _ffmpeg_exe()
+    exe = ffmpeg_exe()
     r = subprocess.run([exe, "-version"], capture_output=True, text=True, timeout=30)
     if r.returncode != 0:
         raise RuntimeError(r.stderr[-200:])
