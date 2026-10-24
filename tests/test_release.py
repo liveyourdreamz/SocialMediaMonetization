@@ -286,6 +286,9 @@ def test_youtube_declarations_come_from_the_manifest(tmp_path, monkeypatch, kids
     r, _, files = sealed(tmp_path)
     r.gates.disclosure.made_for_kids = kids
     r.gates.disclosure.paid_promo = paid
+    if paid:  # paid promotion goes out only with the Ad prefix on every text (R5)
+        for item in (r.draft, *r.variants):
+            item.title, item.caption = f"Ad: {item.title}", f"Ad: {item.caption}"
     m = release.build_manifest(r)
     fake = _FakeYT()
     monkeypatch.setattr(youtube, "_service", lambda: fake)
@@ -299,7 +302,8 @@ def test_youtube_declarations_come_from_the_manifest(tmp_path, monkeypatch, kids
     assert up.url.endswith(up.post_id)
     youtube.YouTubeAdapter("short").upload(m)
     _, short_body = fake.inserts[1]
-    assert short_body["snippet"]["title"] == "Notely in 60s #Shorts"
+    ad = "Ad: " if paid else ""
+    assert short_body["snippet"]["title"] == f"{ad}Notely in 60s #Shorts"
 
 
 def test_youtube_title_and_description_rules():
@@ -359,3 +363,25 @@ def test_the_full_run_approves_through_the_card_and_publishes_the_line(monkeypat
     assert doc["opening_line"] == check.FULL_RUN_OPENING_LINE and doc["approved_by"] == "hemant"
     published = out / doc["files"]["long"]["name"]
     assert check.FULL_RUN_OPENING_LINE in published.read_text(encoding="utf-8")
+
+
+def test_paid_promotion_never_goes_out_without_the_ad_prefix(tmp_path):
+    """Review R5: the adapter dropped the long-form variant, the release fell back to
+    the draft title, and nothing had checked it. Now the gate checks every text that
+    can be published, and the release refuses whatever slips past."""
+    from cap.domain.disclosure import ad_prefix_ok
+    from cap.publisher import PublishRefusedError
+    from cap.schema.post_record import Platform, Variant
+
+    r, _, _ = sealed(tmp_path)
+    r.brief.sponsor_id = "sp1"
+    r.draft.title, r.draft.caption = "Notely after seven days", "Ad: a week with Notely"
+    r.variants = [Variant(platform=Platform.YOUTUBE_SHORT, title="Ad: Notely in 60s",
+                          caption="Ad: the short cut")]  # fmt: skip
+    assert not ad_prefix_ok(r)  # the gate now sees the draft title the long form would use
+    r.gates.disclosure.paid_promo = True
+    with pytest.raises(PublishRefusedError, match="Ad prefix on: youtube_long"):
+        release.build_manifest(r)
+    r.draft.title = "Ad: Notely after seven days"
+    assert ad_prefix_ok(r)
+    assert release.build_manifest(r).text_for("youtube_long").title.startswith("Ad")

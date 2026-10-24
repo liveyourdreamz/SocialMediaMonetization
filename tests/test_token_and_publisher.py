@@ -246,7 +246,8 @@ def test_any_change_after_approval_is_refused_and_nothing_is_sent(tmp_path, what
     r, t, files = sealed(tmp_path)
     _tamper(r, files, what)
     local, yt = LocalFolderAdapter(tmp_path / "pub"), Recording()
-    with pytest.raises(PublishRefusedError, match="changed since it was approved"):
+    # turning paid promotion on after approval is also refused for its missing Ad prefix
+    with pytest.raises(PublishRefusedError, match="changed since it was approved|Ad prefix"):
         publish_to(r, t, [local, yt])
     assert yt.got == [] and not (tmp_path / "pub").exists()
     assert r.status == PostStatus.APPROVED

@@ -31,7 +31,7 @@ from typing import Any, Literal, Protocol
 from cap.config import get_settings
 from cap.domain import token as tok
 from cap.domain.approval import approval_refusal
-from cap.policy import AI_ROLE_DISCLOSURE
+from cap.policy import AD_PREFIX, AI_ROLE_DISCLOSURE
 from cap.schema.post_record import (
     Decision,
     Platform,
@@ -231,14 +231,21 @@ def build_manifest(record: PostRecord) -> Manifest:
         files.append(ManifestFile(role=rf.role, path=path, sha256=tok.sha256_file(path)))
     if not any(f.role == "long" for f in files):
         raise PublishRefusedError("the release has no long-form file")
+    variants = _variants(record)
+    flags = flags_for(record)
+    if flags.paid_promotion:  # the text that goes out, checked as it goes out (R5)
+        bare = [v.platform for v in variants
+                if not (v.title.startswith(AD_PREFIX) and v.caption.startswith(AD_PREFIX))]  # fmt: skip
+        if bare:
+            raise PublishRefusedError(f"paid promotion without the Ad prefix on: {', '.join(bare)}")
     m = Manifest(
         post_id=record.post_id,
         channel=record.channel_id.value,
         approved_by=record.approval.reviewer,
         opening_line=record.human_contribution.text.strip(),
         files=tuple(sorted(files, key=lambda f: f.role)),
-        variants=_variants(record),
-        flags=flags_for(record),
+        variants=variants,
+        flags=flags,
     )
     digest = hashlib.sha256(canonical_bytes(m.document())).hexdigest()
     return replace(m, sha256=digest)

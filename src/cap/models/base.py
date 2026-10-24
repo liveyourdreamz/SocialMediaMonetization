@@ -22,7 +22,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, NewType
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -34,12 +34,6 @@ if TYPE_CHECKING:
     pass
 
 log = logging.getLogger(__name__)
-
-# Text a model wrote from untrusted input (P4 topics and notes, P10 notes and quotes).
-# It must travel inside the nonce tags, so it carries its own type; a plain str from
-# a fetch or a model cannot be passed where trusted text is expected without an
-# explicit conversion.
-Tainted = NewType("Tainted", str)
 
 MAX_TOKENS = {"low": 8192, "medium": 16384, "high": 32768, "xhigh": 32768, "max": 32768}
 MAX_OUTPUT_TOKENS = 128_000  # the 5.5 models' hard output limit; a larger request is a 400
@@ -147,14 +141,20 @@ class ModelClient(ABC):
     def run[T: Envelope](
         self,
         spec: PromptSpec,
-        user: str,
+        user: str | Callable[[str], str],
         output_model: type[T],
         *,
         sources: list[SourceDoc] | None = None,
-        user_tail: str = "",
+        user_tail: str | Callable[[str], str] = "",
         static_blocks: list[str] | None = None,
     ) -> ModelResult[T]:
+        """`user` and `user_tail` may be builders called with this call's nonce, so
+        model-written text can be wrapped in its tag (cap.prompts.tagged)."""
         nonce = new_nonce()  # one nonce per call, owned here
+        if callable(user):
+            user = user(nonce)
+        if callable(user_tail):
+            user_tail = user_tail(nonce)
         call = ModelCall(
             spec=spec,
             nonce=nonce,

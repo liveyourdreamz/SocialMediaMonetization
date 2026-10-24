@@ -51,7 +51,7 @@ def test_happy_path_reaches_queue(client, record, tmp_path):
     assert len(p1) == 4
     for c in p1:
         variant = next(v for v in out.variants if f'platform="{v.platform.value}"' in c.user)
-        assert c.user == _judge_user_message(out, variant)
+        assert c.user == _judge_user_message(out, variant)(c.nonce)
         assert c.user_tail == "" and c.sources == []
         assert "<rulebook version" in c.system[-1]["text"]
         assert "critic" not in c.user.lower() and "judge" not in c.user.lower()
@@ -375,6 +375,8 @@ def test_paid_promo_needs_ad_prefix(record, client):
             caption="Ad. " + AI_ROLE_DISCLOSURE,
         )
     ]
+    assert not check_disclosure(record, client).ad_prefix_ok  # the draft can go out too (R5)
+    record.draft.title, record.draft.caption = "Ad: We tested", "Ad. " + record.draft.caption
     assert check_disclosure(record, client).ad_prefix_ok
 
 

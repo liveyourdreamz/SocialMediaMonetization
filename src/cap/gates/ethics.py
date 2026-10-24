@@ -18,12 +18,13 @@ through the same ModelClient interface.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Literal
 
 from cap.agents.outputs import P1Output
 from cap.models import ModelClient
 from cap.policy import AI_ROLE_DISCLOSURE_KEY
-from cap.prompts import spec
+from cap.prompts import spec, tagged
 from cap.rulebook import Rulebook, load_rulebook
 from cap.schema.post_record import (
     EthicsGate,
@@ -113,26 +114,31 @@ def hard_rules(record: PostRecord, variant: Variant, rulebook: Rulebook) -> list
     return findings
 
 
-def _judge_user_message(record: PostRecord, variant: Variant) -> str:
+def _judge_user_message(record: PostRecord, variant: Variant) -> Callable[[str], str]:
     """Only content, manifest and sponsor (D26); the rulebook travels as a static
-    system block. The variant text is the pipeline's own output, not fetched text, so
-    it is not wrapped as untrusted."""
+    system block. The variant's words were written by models partly from fetched pages,
+    so each field reaches the judge inside this call's untrusted tag (review R4)."""
     sponsor = record.sponsor.model_dump_json() if record.sponsor else "null"
     from cap.post_context import post_context
 
-    return (
-        f"{post_context(record, 'checker')}\n"
-        f'<variant platform="{variant.platform.value}">\n'
-        f"<title>{variant.title}</title>\n"
-        f"<script>{variant.script_cut or record.draft.script}</script>\n"
-        f"<caption>{variant.caption}</caption>\n"
-        f"<on_screen_text>{variant.on_screen_text or record.draft.on_screen_text}</on_screen_text>\n"
-        f"<thumbnail_text>{variant.thumbnail_text or record.draft.thumbnail_text}</thumbnail_text>\n"
-        f"</variant>\n"
-        f"<media_manifest>{record.media_manifest.model_dump_json()}</media_manifest>\n"
-        f"<channel>{record.channel_id.value}</channel>\n"
-        f"<sponsor>{sponsor}</sponsor>"
-    )
+    def build(nonce: str) -> str:
+        content = tagged(
+            nonce,
+            title=variant.title,
+            script=variant.script_cut or record.draft.script,
+            caption=variant.caption,
+            on_screen_text=str(variant.on_screen_text or record.draft.on_screen_text),
+            thumbnail_text=variant.thumbnail_text or record.draft.thumbnail_text,
+        )
+        return (
+            f"{post_context(record, 'checker')}\n"
+            f'<variant platform="{variant.platform.value}">\n{content}\n</variant>\n'
+            f"<media_manifest>{record.media_manifest.model_dump_json()}</media_manifest>\n"
+            f"<channel>{record.channel_id.value}</channel>\n"
+            f"<sponsor>{sponsor}</sponsor>"
+        )
+
+    return build
 
 
 Judge = Literal["A", "B", "C"]

@@ -17,11 +17,10 @@ def is_paid(record: PostRecord) -> bool:
 
 
 def ad_prefix_ok(record: PostRecord) -> bool:
-    """When paid, every variant's title and caption start with the Ad token."""
-    if not record.variants:
-        return record.draft.title.startswith(AD_PREFIX) and record.draft.caption.startswith(
-            AD_PREFIX
-        )
-    return all(
-        v.title.startswith(AD_PREFIX) and v.caption.startswith(AD_PREFIX) for v in record.variants
-    )
+    """When paid, every title and caption that can be published starts with the Ad
+    token: each variant's, and the draft's, because a platform without its own variant
+    is published with the draft's text (review R5: a dropped long-form variant sent the
+    unchecked draft title)."""
+    texts = [record.draft.title, record.draft.caption]
+    texts += [t for v in record.variants for t in (v.title, v.caption)]
+    return all(t.startswith(AD_PREFIX) for t in texts)

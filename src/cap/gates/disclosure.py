@@ -16,13 +16,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import json
+from collections.abc import Callable, Sequence
 from typing import Literal
 
 from cap.agents.outputs import P9Output
 from cap.domain.disclosure import ad_prefix_ok, is_paid
 from cap.models import ModelClient
-from cap.prompts import spec
+from cap.prompts import spec, tagged
 from cap.schema.post_record import DisclosureGate, PostRecord
 
 # COPPA / YouTube MFK factors with weights. Code constants; changed only with a signed
@@ -96,23 +97,30 @@ def factor_problems(factors: Sequence[tuple[str, str]]) -> list[str]:
     return out
 
 
-def _p9_user_message(record: PostRecord) -> str:
+def _p9_user_message(record: PostRecord) -> Callable[[str], str]:
+    """The post's words, each inside this call's untrusted tag (review R4)."""
     variants = [
         {"platform": v.platform.value, "title": v.title, "caption": v.caption}
         for v in record.variants
     ]
     from cap.post_context import post_context
 
-    return (
-        f"{post_context(record, 'checker')}\n"
-        f"<title>{record.draft.title}</title>\n"
-        f"<script>{record.draft.script}</script>\n"
-        f"<caption>{record.draft.caption}</caption>\n"
-        f"<on_screen_text>{record.draft.on_screen_text}</on_screen_text>\n"
-        f"<thumbnail_text>{record.draft.thumbnail_text}</thumbnail_text>\n"
-        f"<variants>{variants}</variants>\n"
-        f"<channel>{record.channel_id.value}</channel>"
-    )
+    def build(nonce: str) -> str:
+        content = tagged(
+            nonce,
+            title=record.draft.title,
+            script=record.draft.script,
+            caption=record.draft.caption,
+            on_screen_text=str(record.draft.on_screen_text),
+            thumbnail_text=record.draft.thumbnail_text,
+            variants=json.dumps(variants, ensure_ascii=False),
+        )
+        return (
+            f"{post_context(record, 'checker')}\n{content}\n"
+            f"<channel>{record.channel_id.value}</channel>"
+        )
+
+    return build
 
 
 def check_disclosure(record: PostRecord, client: ModelClient) -> DisclosureGate:

@@ -99,13 +99,36 @@ def untrusted(text: str, nonce: str) -> str:
     The body is JSON-encoded once (non-ASCII preserved, so Arabic sources cost no
     extra tokens), with angle brackets escaped as \\u003c and \\u003e so the encoded
     text can never contain a literal tag; only a tag carrying this run's nonce is a
-    real boundary. Callers do not call this directly: the model client does."""
+    real boundary. The model client wraps sources and tool results; prompt builders
+    wrap model-written fields through `tagged`."""
     if not isinstance(text, str):
         raise TypeError("untrusted() takes str only")
     if len(text) > MAX_UNTRUSTED_CHARS:
         text = text[:MAX_UNTRUSTED_CHARS] + " [truncated by the pipeline]"
     encoded = json.dumps(text, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
     return f'<untrusted_text id="{nonce}">{encoded}</untrusted_text>'
+
+
+def tagged(nonce: str, **fields: str) -> str:
+    """Model-written text passed to a later prompt (Pack section 2, taint rule): each
+    field in its own tag, its body wrapped as untrusted with this call's nonce. A draft
+    is written partly from fetched pages, so its words may carry a page's instructions;
+    a judge or checker must read them as data, never as part of its own message
+    (review R4). Enumerated or code-built values do not go through here."""
+    return "\n".join(
+        f"<{name}>{untrusted(str(text), nonce)}</{name}>" for name, text in fields.items()
+    )
+
+
+_TAGGED = r"<{name}><untrusted_text id=\"[^\"]+\">(.*?)</untrusted_text></{name}>"
+
+
+def read_tagged(message: str, name: str) -> str | None:
+    """The text inside a `tagged` field, decoded; None when absent (mocks and tests)."""
+    import re
+
+    m = re.search(_TAGGED.format(name=re.escape(name)), message, re.S)
+    return json.loads(m.group(1)) if m else None
 
 
 def spec(prompt_id: str, call: str = "default") -> PromptSpec:

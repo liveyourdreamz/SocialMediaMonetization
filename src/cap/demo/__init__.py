@@ -78,7 +78,9 @@ def mock_canary(call):  # type: ignore[no-untyped-def]
     import re as _re
 
     fault = _re.search(r"<fault_type>(\w+)</fault_type>", call.user).group(1)
-    base = _json.loads(_re.search(r"<base_draft>(.*)</base_draft>", call.user, _re.S).group(1))
+    from cap.prompts import read_tagged
+
+    base = _json.loads(read_tagged(call.user, "base_draft") or "{}")
     where, text = MOCK_FAULTS[fault]
     draft = {
         k: base.get(k, "" if k not in ("shot_list", "on_screen_text") else [])
@@ -204,7 +206,9 @@ def verify_from_source(call) -> dict:  # type: ignore[no-untyped-def]
     the claim, so the exact-substring check in code is exercised for real."""
     tail = call.user_tail
     body = call.sources[0].body if call.sources else ""
-    claim = tail.split("<claim>")[1].split("</claim>")[0].lower() if "<claim>" in tail else ""
+    from cap.prompts import read_tagged
+
+    claim = (read_tagged(tail, "claim") or "").lower()
     key_words = [w for w in re.findall(r"[a-z0-9]+", claim) if len(w) > 2]
     best, best_hits = "", 0
     for sent in re.split(r"(?<=\.)\s+", body.replace("\n", " ")):

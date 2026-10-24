@@ -33,7 +33,7 @@ from cap.agents.outputs import P10CallAOutput, P10VerifyOutput
 from cap.models import ModelClient, SourceDoc
 from cap.policy import TESTLOG_SCHEME
 from cap.post_context import post_context
-from cap.prompts import spec
+from cap.prompts import spec, tagged
 from cap.schema.post_record import Claim, ClaimCheckResult, ClaimStatus, FactsGate, PostRecord
 
 Source = SourceDoc  # the gate's public name for a fetched document
@@ -75,12 +75,18 @@ def discover_claims(
     ]
     res = client.run(
         spec("P10", "A"),
-        f"{post_context(record, 'checker')}\n"
-        f"<title>{record.draft.title}</title>\n<script>{record.draft.script}</script>\n"
-        f"<variants>{json.dumps(variants, ensure_ascii=False)}</variants>",
+        lambda n: (
+            f"{post_context(record, 'checker')}\n"
+            + tagged(
+                n,
+                title=record.draft.title,
+                script=record.draft.script,
+                variants=json.dumps(variants, ensure_ascii=False),
+            )
+        ),
         P10CallAOutput,
         sources=sources,
-        user_tail=f"<drafter_claims>{json.dumps(hints, ensure_ascii=False)}</drafter_claims>",
+        user_tail=lambda n: tagged(n, drafter_claims=json.dumps(hints, ensure_ascii=False)),
     )
     if res.output is None or res.output.status == "blocked":
         # D43: the drafter's list is checked instead; the post does not stop
@@ -144,11 +150,14 @@ def _verify(
     fast_moving: bool,
 ) -> tuple[ClaimStatus, str, bool, bool]:
     """Returns (status, quote, quote_in_source, injection_suspected)."""
-    tail = (
-        f"<test_log>{test_log}</test_log>\n<claim>{claim.text}</claim>\n"
-        f"<fast_moving_topics>{'yes' if fast_moving else 'no'}</fast_moving_topics>\n"
-        "Does the source, as written, say this?"
-    )
+
+    def tail(nonce: str) -> str:
+        return (
+            f"<test_log>{test_log}</test_log>\n{tagged(nonce, claim=claim.text)}\n"
+            f"<fast_moving_topics>{'yes' if fast_moving else 'no'}</fast_moving_topics>\n"
+            "Does the source, as written, say this?"
+        )
+
     res = client.run(
         spec("P10", call),
         f"<source_url>{source.url}</source_url>",

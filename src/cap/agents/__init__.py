@@ -22,7 +22,7 @@ from cap.agents.outputs import (
 from cap.models import ModelClient, ModelResult, SourceDoc
 from cap.policy import AI_ROLE_DISCLOSURE_KEY, disclosure_block
 from cap.post_context import post_context
-from cap.prompts import spec
+from cap.prompts import spec, tagged
 from cap.schema.post_record import (
     Claim,
     CriticIssue,
@@ -68,22 +68,32 @@ def _write_script(
         "a statement of fact a viewer could check, and every number is one. Explain the "
         "rest with reasoning and analogy, not further facts.</claim_limit>"
     )
-    if critique:
-        user1 += f"\n<critique>{critique}</critique>\n<previous_draft>{record.draft.script}</previous_draft>"
-    r1 = client.run(spec("P2", "1"), user1, P2Call1Output, sources=sources, static_blocks=statics)
+    previous = record.draft.script
+
+    def message(nonce: str, extra: str = "") -> str:
+        text = user1
+        if critique:  # the critic's notes and the draft are model-written (review R4)
+            text += "\n" + tagged(nonce, critique=critique, previous_draft=previous)
+        return text + extra
+
+    r1 = client.run(spec("P2", "1"), message, P2Call1Output, sources=sources, static_blocks=statics)
     d = _script_of(r1)
     if d is None:
         # D43: one retry with the reason; every value it could be missing is in post_context
         why = r1.output.blocked_reason if r1.output else r1.reason
         record.log(f"drafter declined ({str(why)[:160]}); retrying with the reason")
-        retry = (
-            f"{user1}\n<previous_attempt_blocked>{why}</previous_attempt_blocked>\n"
+        extra = (
+            f"\n<previous_attempt_blocked>{why}</previous_attempt_blocked>\n"
             "<instruction>Every value this post needs is in post_context above and is "
             "given. Write the script now; where something is genuinely unknown, write "
             "around it rather than blocking.</instruction>"
         )
         r1 = client.run(
-            spec("P2", "1"), retry, P2Call1Output, sources=sources, static_blocks=statics
+            spec("P2", "1"),
+            lambda n: message(n, extra),
+            P2Call1Output,
+            sources=sources,
+            static_blocks=statics,
         )
         d = _script_of(r1)
         if d is None:
@@ -111,7 +121,7 @@ def _list_claims(
     check."""
     r2 = client.run(
         spec("P2", "2"),
-        f"{post_context(record)}\n<script>{record.draft.script}</script>",
+        lambda n: f"{post_context(record)}\n{tagged(n, script=record.draft.script)}",
         P2Call2Output,
         sources=sources,
         user_tail=f"<test_log>{test_log}</test_log>\n<claim_limit>List at most {limit} "
@@ -226,10 +236,13 @@ def critique(
     """P3, one pass only (PRD agent 5). The issues are stored on the record so they
     travel to the gates and are revealed on the card after the verdict (D33)."""
     draft_json = record.draft.model_dump_json(include={"title", "script", "caption", "claims"})
-    user = (
-        f"{post_context(record)}\n<draft>{draft_json}</draft>\n"
-        f"<brief>{record.brief.model_dump_json()}</brief>"
-    )
+
+    def user(nonce: str) -> str:
+        return (
+            f"{post_context(record)}\n{tagged(nonce, draft=draft_json)}\n"
+            f"<brief>{record.brief.model_dump_json()}</brief>"
+        )
+
     r = client.run(
         spec("P3"), user, P3Output, static_blocks=[character_block] if character_block else None
     )
@@ -257,13 +270,19 @@ def adapt(record: PostRecord, client: ModelClient, platforms: list[Platform]) ->
     """P7: platform variants. Code checks that no new claims were introduced (PRD
     agent 6 diff check) by requiring every numeral in a variant to appear in the
     script or title."""
-    user = (
-        f"{post_context(record)}\n"
-        f"<brief>{record.brief.model_dump_json()}</brief>\n"
-        f"<title>{record.draft.title}</title>\n<script>{record.draft.script}</script>\n"
-        f"<caption>{record.draft.caption}</caption>\n"
-        f"<platforms>{[p.value for p in platforms]}</platforms>"
-    )
+
+    def user(nonce: str) -> str:
+        draft = tagged(
+            nonce,
+            title=record.draft.title,
+            script=record.draft.script,
+            caption=record.draft.caption,
+        )
+        return (
+            f"{post_context(record)}\n<brief>{record.brief.model_dump_json()}</brief>\n"
+            f"{draft}\n<platforms>{[p.value for p in platforms]}</platforms>"
+        )
+
     r = client.run(spec("P7"), user, P7Output, static_blocks=[disclosure_block()])
     if r.output is None or r.output.status == "blocked":
         why = r.output.blocked_reason if r.output else r.reason
@@ -337,12 +356,15 @@ def write_canary(
     """P14: a seeded-fault post for the queue. Flagged by code here, never by the
     model; the publisher refuses the flag (D23). The planted fault is stored so the
     card can reveal it and the spot check can target it."""
-    user = (
-        f"<fault_type>{fault_type.value}</fault_type>\n"
-        f"<base_post_context>{post_context(record)}</base_post_context>\n"
-        f"<placement>{placement}</placement>\n"
-        f"<base_draft>{json.dumps(base_draft, ensure_ascii=False)}</base_draft>"
-    )
+
+    def user(nonce: str) -> str:
+        return (
+            f"<fault_type>{fault_type.value}</fault_type>\n"
+            f"<base_post_context>{post_context(record)}</base_post_context>\n"
+            f"<placement>{placement}</placement>\n"
+            + tagged(nonce, base_draft=json.dumps(base_draft, ensure_ascii=False))
+        )
+
     statics = [b for b in (character_block, disclosure_block()) if b]
     r = client.run(spec("P14"), user, P14Output, static_blocks=statics)
     if r.output is None or r.output.status == "blocked" or r.output.canary_draft is None:
