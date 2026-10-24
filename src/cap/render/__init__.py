@@ -15,7 +15,7 @@ Output: the long-form 1920x1080 mp4, a 1080x1920 Short when the post has a Short
     cut, a thumbnail png. Twice per post: the review render before approval (the
     opening line a visible placeholder) and the final render after it (the line
     spoken); the approval token binds the final files through the release manifest
-    (cap.release). C2PA signing (D29) is not done here yet and the preview says so.
+    (cap.release). C2PA signing (D29) happens on the final release (cap.render.provenance).
 
 Everything the picture shows comes from the approved record; the renderer never
 invents words. Rendering is deterministic apart from the voice service.

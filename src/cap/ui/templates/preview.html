@@ -24,7 +24,7 @@
 
   <div class="stack-sm">
     <h2 style="font-size: 22px; line-height: 28px; font-weight: 600; margin: 0">What goes out</h2>
-    <p class="meta">{% if record.asset.kind == 'video' %}{{ record.asset.duration_s | round | int }} s · edge-tts voice {{ record.asset.voice }} · the final video, with your opening line · provenance signing (C2PA) not yet implemented{% else %}text only: the renderer was off{% endif %}</p>
+    <p class="meta">{% if record.asset.kind == 'video' %}{{ record.asset.duration_s | round | int }} s · edge-tts voice {{ record.asset.voice }} · the final video, with your opening line · {% if record.release.c2pa_signed %}C2PA-signed as AI-generated ({{ record.release.c2pa_signed | join(', ') }}; self-signed certificate, D29){% else %}not C2PA-signed{% endif %}{% else %}text only: the renderer was off{% endif %}</p>
     <p class="meta"{% if cost.over %} style="color: var(--signal)"{% endif %}>Model cost (estimate): {{ cost.line }}</p>
   </div>
 

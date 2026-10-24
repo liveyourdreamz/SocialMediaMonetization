@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # the drafter writes to it at the character's speaking rate and the critic checks it.
     video_length_s: int = Field(default=30, ge=15, le=1800)
     voice: Literal["edge", "silent"] = "edge"
+    # D29: sign the final release's videos and thumbnail with a C2PA manifest ("off"
+    # only for a machine where the native library cannot load).
+    c2pa: Literal["sign", "off"] = "sign"
+    c2pa_dir: str = ""  # where the signing certificate lives; empty = <data_dir>/c2pa
 
     # Where approved posts go: "local" (a folder under data_dir) or "youtube" (a real
     # upload through the Google OAuth client; `cap youtube auth` first).

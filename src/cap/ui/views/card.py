@@ -103,7 +103,14 @@ def card_context(
         ),
         (
             "Synthetic label",
-            "on: AI-character label on every frame; provenance signing (C2PA) not yet implemented"
+            "on: AI-character label on every frame; "
+            + (
+                "C2PA-signed as AI-generated: " + ", ".join(record.release.c2pa_signed)
+                if record.release.c2pa_signed
+                else "the final video is C2PA-signed as AI-generated when it is made"
+                if get_settings().c2pa == "sign"
+                else "C2PA signing is off (CAP_C2PA=off)"
+            )
             if media["synthetic_elements_present"]
             else "off",
         ),

@@ -14,7 +14,10 @@ The queue allows one release job per post at a time.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from cap import release
+from cap.config import get_settings
 from cap.jobs import Job, JobKind
 from cap.render.package import render_root, render_stage
 from cap.schema.post_record import Decision, PostRecord, PostStatus, Release, ReleaseStatus
@@ -58,6 +61,7 @@ def run(store: PostStore, job: Job) -> None:
     record = store.get(job.post_id)
     try:
         rendered = render_stage(record, render_root(record), "final", record.asset.kind)
+        signed = _sign(record, list(rendered.files.values()))
     except Exception as e:  # noqa: BLE001 - every failure is shown with a retry
         failed(store, job.post_id, f"{type(e).__name__}: {e}")
         return
@@ -65,11 +69,25 @@ def run(store: PostStore, job: Job) -> None:
     def sealed(r: PostRecord) -> None:
         try:
             release.seal(r, rendered.files)
+            r.release.c2pa_signed = signed
+            if signed:
+                r.log(f"C2PA provenance signed: {', '.join(signed)} (self-signed, D29)")
             r.log("approved: the final video is ready; waiting in the Outbox")
         except release.PublishRefusedError as e:
             _mark_failed(r, str(e))
 
     store.update(job.post_id, sealed)
+
+
+def _sign(record: PostRecord, files: list[Path]) -> list[str]:
+    """D29: the C2PA manifest goes in before the seal, so the token binds the signed
+    files. A signing failure fails the release (retry on the Outbox): an unsigned
+    file never goes out while signing is on."""
+    if get_settings().c2pa == "off":
+        return []
+    from cap.render.provenance import sign_release
+
+    return sign_release(record.draft.title, record.post_id, record.channel_id.value, files)
 
 
 def failed(store: PostStore, post_id: str, why: str) -> None:

@@ -34,8 +34,14 @@ def _stop_workers():
     stop_workers()
 
 
+@pytest.fixture(scope="session")
+def _c2pa_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("c2pa")  # one signing certificate for the whole run
+
+
 @pytest.fixture(autouse=True)
-def _local_settings(monkeypatch):
+def _local_settings(monkeypatch, _c2pa_dir):
+    monkeypatch.setenv("CAP_C2PA_DIR", str(_c2pa_dir))
     monkeypatch.setenv("CAP_ENV", "test")
     monkeypatch.setenv("CAP_DEV_REVIEWER_HEADER", "true")
     monkeypatch.setenv("CAP_TEST_CLIENT", "true")  # X-Reviewer and the TestClient hosts

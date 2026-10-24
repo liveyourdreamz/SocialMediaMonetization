@@ -1154,6 +1154,13 @@
           "title": "Manifest Sha256",
           "type": "string"
         },
+        "c2pa_signed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "C2Pa Signed",
+          "type": "array"
+        },
         "error": {
           "default": "",
           "title": "Error",

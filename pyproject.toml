@@ -26,6 +26,7 @@ dependencies = [
     "google-api-python-client>=2.201.0",
     "google-auth-oauthlib>=1.5.0",
     "psycopg[binary,pool]>=3.2",
+    "c2pa-python==0.38.0",  # 0.38.1 has no Windows build (D29)
 ]
 
 [project.optional-dependencies]

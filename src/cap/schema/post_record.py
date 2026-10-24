@@ -216,6 +216,7 @@ class Release(Strict):
     status: ReleaseStatus = ReleaseStatus.NONE
     files: list[ReleaseFile] = Field(default_factory=list)
     manifest_sha256: str = ""
+    c2pa_signed: list[str] = Field(default_factory=list)  # files carrying a C2PA manifest
     error: str = ""
     attempts: int = 0
     prepared_at: datetime | None = None

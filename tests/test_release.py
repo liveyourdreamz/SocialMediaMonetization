@@ -330,8 +330,15 @@ def test_the_card_says_what_is_true_about_voice_and_provenance(tmp_path, monkeyp
     rec = next(iter(store.all()))
     rows = dict(card_context(rec, store, Reviewer("hemant", "approver"))["media_rows"])
     assert "ElevenLabs" not in rows["Voice"] and "edge-tts" in rows["Voice"]
-    assert "C2PA signed" not in rows["Synthetic label"]
-    assert "not yet implemented" in rows["Synthetic label"]
+    assert "when it is made" in rows["Synthetic label"]  # not signed until the release
+    rec.release.c2pa_signed = ["long.mp4"]
+    rows = dict(card_context(rec, store, Reviewer("hemant", "approver"))["media_rows"])
+    assert "C2PA-signed as AI-generated: long.mp4" in rows["Synthetic label"]
+    monkeypatch.setenv("CAP_C2PA", "off")
+    get_settings.cache_clear()
+    rec.release.c2pa_signed = []
+    rows = dict(card_context(rec, store, Reviewer("hemant", "approver"))["media_rows"])
+    assert "signing is off" in rows["Synthetic label"]
 
 
 # ---- C3: `cap check --full` approves through the real card ---------------------
