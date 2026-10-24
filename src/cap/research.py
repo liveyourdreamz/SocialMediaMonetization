@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from urllib.parse import unquote, urlparse, urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 import httpx
 
@@ -28,52 +28,8 @@ from cap.config import get_settings
 from cap.domain.cost import note, usage_of
 from cap.fetch import HEADERS, UA, failed_reason
 from cap.prompts import SONNET
+from cap.sources import BLOCKED_DOMAINS, SCIENCE_DOMAINS, verification_ok
 
-# PRD section 5, source library. Subdomains are included by the search tool.
-SCIENCE_DOMAINS = [
-    "wikipedia.org",
-    "britannica.com",
-    "nasa.gov",
-    "noaa.gov",
-    "usgs.gov",
-    "esa.int",
-    "copernicus.eu",
-    "nist.gov",
-    "weather.gov",
-    "metoffice.gov.uk",
-    "who.int",
-    "iea.org",
-    "nature.com",
-    "science.org",
-    "pnas.org",
-    "plos.org",
-    "royalsociety.org",
-    "sciencedirect.com",
-    "springer.com",
-    "doi.org",
-    "mit.edu",
-    "stanford.edu",
-    "ox.ac.uk",
-    "cam.ac.uk",
-    "scientificamerican.com",
-    "newscientist.com",
-]
-# Not sources for any channel (PRD 4.7: social media and UGC are never sources).
-BLOCKED_DOMAINS = [
-    "facebook.com",
-    "instagram.com",
-    "tiktok.com",
-    "x.com",
-    "twitter.com",
-    "reddit.com",
-    "youtube.com",
-    "quora.com",
-    "pinterest.com",
-    "threads.net",
-    "linkedin.com",
-    "medium.com",
-    "substack.com",
-]
 MAX_SOURCES = 5
 # Domains the search API has refused for this process ("not accessible to our user
 # agent"); dropped from the allow-list on retry so one refusal never sinks a search.
@@ -89,12 +45,7 @@ def refused_domains(message: str) -> list[str]:
 
 
 def _domain_ok(url: str, channel: str) -> bool:
-    host = urlparse(url).netloc.lower()
-    if any(host == d or host.endswith("." + d) for d in BLOCKED_DOMAINS):
-        return False
-    if channel == "A":
-        return True
-    return any(host == d or host.endswith("." + d) for d in SCIENCE_DOMAINS)
+    return verification_ok(url, channel)
 
 
 def _search_tool(channel: str) -> tuple[dict[str, Any], str]:

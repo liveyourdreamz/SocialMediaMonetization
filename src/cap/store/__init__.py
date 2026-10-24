@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from cap.audit import AuditLog, MemoryAuditLog
+from cap.ideabook import IdeaBook, MemoryIdeaBook
 from cap.jobs import JobQueue, MemoryJobQueue
 from cap.schema.post_record import PostRecord, PostStatus
 
@@ -89,9 +90,10 @@ class PostStore(ABC):
     card by a reviewer starts it.
     """
 
-    def __init__(self, jobs: JobQueue, audit: AuditLog) -> None:
+    def __init__(self, jobs: JobQueue, audit: AuditLog, ideas: IdeaBook | None = None) -> None:
         self.jobs = jobs
         self.audit = audit
+        self.ideas = ideas or MemoryIdeaBook()  # the week's ideas and their memory (D48)
         self.state = AppState()
         self.unreadable: list[str] = []  # stored posts this build could not read, by id
 

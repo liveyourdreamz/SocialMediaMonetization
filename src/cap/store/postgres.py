@@ -31,6 +31,7 @@ from cap.store import (
 )
 from cap.store.pgaudit import PostgresAuditLog
 from cap.store.pgaudit import append as audit_append
+from cap.store.pgideas import PostgresIdeaBook
 from cap.store.pgjobs import PostgresJobQueue
 
 _log = logging.getLogger("cap.store")
@@ -51,7 +52,7 @@ def connect(url: str, *, max_size: int = 8) -> ConnectionPool:
 
 class PostgresStore(PostStore):
     def __init__(self, pool: ConnectionPool) -> None:
-        super().__init__(PostgresJobQueue(pool), PostgresAuditLog(pool))
+        super().__init__(PostgresJobQueue(pool), PostgresAuditLog(pool), PostgresIdeaBook(pool))
         self._pool = pool
         with self._pool.connection() as conn:
             applied = migrations.apply(conn)
