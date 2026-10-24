@@ -574,7 +574,7 @@ def test_an_arabic_topic_searches_arabic_wikipedia(monkeypatch):
             )
 
     monkeypatch.setattr(research.httpx, "Client", _Client)
-    monkeypatch.setattr("cap.fetch.fetch_sources", lambda urls, timeout=20.0: [])
+    monkeypatch.setattr("cap.fetch.fetch_sources", lambda urls, timeout=20.0, allow=None: [])
     research.find_sources("لماذا تمطر الغيوم", "C")
     assert seen == ["https://ar.wikipedia.org/w/api.php"]
     assert research.wikipedia_language("How clouds form", "B") == "en"

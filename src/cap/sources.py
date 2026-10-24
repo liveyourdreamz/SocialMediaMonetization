@@ -103,8 +103,17 @@ STORY_SOURCES: tuple[StorySource, ...] = (
 
 
 def _host_path(url: str) -> tuple[str, str]:
+    """The host as the network will see it (lower case, no trailing dot) and the path.
+    An address with a user name, a password or an unusual port matches nothing: the
+    raw netloc let "www.reddit.com." and "youtube.com.:443" through (review L1)."""
     p = urlparse(url)
-    return p.netloc.lower(), p.path or "/"
+    try:
+        port = p.port
+    except ValueError:
+        return "", "/"
+    if p.username or p.password or port not in (None, 80, 443):
+        return "", "/"
+    return (p.hostname or "").rstrip(".").lower(), p.path or "/"
 
 
 def _under(host: str, domains: list[str]) -> bool:

@@ -47,7 +47,7 @@ def fake_sources():
         demand=lambda ch, today: [],
         feeds=lambda ch, today: ([STORY], []),
         wiki_search=lambda q, lang: [],
-        fetch_page=lambda url: "Module prices fell.",
+        fetch_page=lambda url, channel: "Module prices fell.",
     )
 
 

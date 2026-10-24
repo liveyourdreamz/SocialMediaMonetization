@@ -25,7 +25,7 @@ from cap.sources import allowed
 MAX_STORY_RESULTS, MAX_WIKI_RESULTS = 5, 3
 MAX_PAGE_CHARS = 12_000
 WikiSearch = Callable[[str, str], list[tuple[str, str]]]  # (query, lang) -> [(title, url)]
-FetchPage = Callable[[str], str]  # url -> readable text; raises on failure
+FetchPage = Callable[[str, str], str]  # (url, channel) -> readable text; raises on failure
 
 _WORD = re.compile(r"\w+", re.UNICODE)
 
@@ -89,7 +89,7 @@ class ScoutTools:
         if not allowed(it.url, self.channel):  # the list may have changed mid-run
             raise PermissionError("that page is no longer on the allow-list")
         self.fetches += 1
-        text = self.fetch_page(it.url)[:MAX_PAGE_CHARS]
+        text = self.fetch_page(it.url, self.channel)[:MAX_PAGE_CHARS]
         return json.dumps({"id": rid, "url": it.url, "role": it.role, "text": text},
                           ensure_ascii=False)  # fmt: skip
 

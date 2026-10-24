@@ -13,6 +13,7 @@ redirect hop included (cap.safehttp).
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -93,10 +94,19 @@ def check_public(url: str) -> None:
     resolve_public(u.hostname, u.port or (443 if u.scheme == "https" else 80))
 
 
-def _get(c: httpx.Client, url: str, headers: dict[str, str]) -> httpx.Response:
-    """GET with redirects followed by hand, every hop checked, the body capped."""
+Allow = Callable[[str], bool]  # may this address be read at all (the caller's allow-list)
+
+
+def _get(
+    c: httpx.Client, url: str, headers: dict[str, str], allow: Allow | None = None
+) -> httpx.Response:
+    """GET with redirects followed by hand, every hop checked (a public address and, when
+    the caller has one, its allow-list: an allowed page that redirects elsewhere must
+    not become a source, review M2), the body capped."""
     for _ in range(MAX_HOPS + 1):
         check_public(url)
+        if allow is not None and not allow(url):
+            raise BlockedURLError(f"redirected off the allow-list to {urlparse(url).hostname}")
         with c.stream("GET", url, headers=headers) as r:
             if r.is_redirect and r.headers.get("location"):
                 url = str(r.url.join(r.headers["location"]))
@@ -121,7 +131,7 @@ def _get(c: httpx.Client, url: str, headers: dict[str, str]) -> httpx.Response:
     raise BlockedURLError("too many redirects")
 
 
-def fetch_one(c: httpx.Client, url: str) -> tuple[str, str | None]:
+def fetch_one(c: httpx.Client, url: str, allow: Allow | None = None) -> tuple[str, str | None]:
     """Body text and page date; raises on failure after the fallbacks."""
     rest = wikipedia_rest(url)
     attempts: list[tuple[str, dict[str, str]]] = []
@@ -132,7 +142,7 @@ def fetch_one(c: httpx.Client, url: str) -> tuple[str, str | None]:
     last: Exception | None = None
     for target, headers in attempts:
         try:
-            r = _get(c, target, headers)
+            r = _get(c, target, headers, allow)
             ctype = r.headers.get("content-type", "")
             if "html" in ctype or "xml" in ctype:
                 return extract_text(r.text)
@@ -149,7 +159,11 @@ def fetch_one(c: httpx.Client, url: str) -> tuple[str, str | None]:
     raise last
 
 
-def fetch_sources(urls: list[str], timeout: float = 20.0) -> list[dict[str, Any]]:
+def fetch_sources(
+    urls: list[str], timeout: float = 20.0, allow: Allow | None = None
+) -> list[dict[str, Any]]:
+    """Each page's readable text, or a "[fetch failed: ...]" body. With `allow`, every
+    redirect hop must pass it too."""
     out: list[dict[str, Any]] = []
     now = datetime.now(UTC).isoformat()
     # no proxy from the environment: a proxy would resolve the name itself, after the check
@@ -161,7 +175,7 @@ def fetch_sources(urls: list[str], timeout: float = 20.0) -> list[dict[str, Any]
             if not url.startswith(("http://", "https://")):
                 continue
             try:
-                body, date = fetch_one(c, url)
+                body, date = fetch_one(c, url, allow)
                 if not body.strip():
                     body = f"{FAILED}the page had no readable text]"
             except Exception as e:  # noqa: BLE001 - a dead link is a missing source, not a crash

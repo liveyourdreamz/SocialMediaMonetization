@@ -27,7 +27,7 @@ def sources(demand_down=False):
         demand=demand,
         feeds=lambda ch, today: ([STORY], ["https://www.positive.news/feed/: ConnectError"]),
         wiki_search=lambda q, lang: [("Solar cell", "https://en.wikipedia.org/wiki/Solar_cell")],
-        fetch_page=lambda url: "Module prices fell from $2.00 to $0.20 per watt.",
+        fetch_page=lambda url, channel: "Module prices fell from $2.00 to $0.20 per watt.",
     )
 
 

@@ -231,7 +231,8 @@ def find_sources(
             log.append(f"research failed: {type(e).__name__}: {str(e)[:160]}")
             return [], log
     urls = [u for u in urls if _domain_ok(u, channel)]
-    docs = fetch.fetch_sources(urls)  # via the module, so a test's patch of it holds
+    # via the module, so a test's patch of it holds; redirects stay on the list (M2)
+    docs = fetch.fetch_sources(urls, allow=lambda u: _domain_ok(u, channel))
     good: list[dict[str, Any]] = []
     for d in docs:
         why = failed_reason(d)

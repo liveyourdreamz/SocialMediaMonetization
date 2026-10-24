@@ -66,7 +66,7 @@ def _search_reply(urls):
 def _fetch_ok(monkeypatch):
     monkeypatch.setattr(
         "cap.fetch.fetch_sources",
-        lambda urls, timeout=20.0: [
+        lambda urls, timeout=20.0, allow=None: [
             {
                 "url": u,
                 "body": "Silk cocoons are spun by larvae.",

@@ -106,10 +106,11 @@ def _wiki_search(query: str, lang: str) -> list[tuple[str, str]]:
     return [(unquote(urlparse(u).path.rsplit("/", 1)[-1]).replace("_", " "), u) for u in urls]
 
 
-def _fetch_page(url: str) -> str:
+def _fetch_page(url: str, channel: str) -> str:
     from cap.fetch import failed_reason, fetch_sources
+    from cap.sources import allowed
 
-    doc = fetch_sources([url])[0]
+    doc = fetch_sources([url], allow=lambda u: allowed(u, channel) is not None)[0]
     why = failed_reason(doc)
     if why:
         raise RuntimeError(why)

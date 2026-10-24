@@ -57,7 +57,7 @@ def scout(fetched=None):
         return [("Solar cell", f"https://{lang}.wikipedia.org/wiki/Solar_cell"),
                 ("Bad", "https://www.reddit.com/r/solar")]  # fmt: skip
 
-    def page(url):
+    def page(url, channel):
         (fetched if fetched is not None else []).append(url)
         return "page text " * 10
 

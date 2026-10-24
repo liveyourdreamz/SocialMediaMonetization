@@ -64,7 +64,7 @@ def test_a_real_brief_gets_its_channels_character_and_drafts_from_the_topic(tmp_
     monkeypatch.setattr("cap.models.get_client", lambda fixtures=None: Spy(happy_fixtures()))
     monkeypatch.setattr(
         "cap.fetch.fetch_sources",
-        lambda urls, timeout=20.0: [
+        lambda urls, timeout=20.0, allow=None: [
             {
                 "url": u,
                 "body": "Seawater desalination uses reverse osmosis.",
@@ -197,7 +197,7 @@ def test_a_pinned_page_that_fails_is_reported_and_the_draft_still_runs(tmp_path,
     )
     monkeypatch.setattr(
         "cap.fetch.fetch_sources",
-        lambda urls, timeout=20.0: [
+        lambda urls, timeout=20.0, allow=None: [
             {
                 "url": u,
                 "body": "[fetch failed: HTTP 403 from the site]",
@@ -251,7 +251,7 @@ def test_a_topic_alone_is_enough_the_system_finds_the_sources(tmp_path, monkeypa
     monkeypatch.setattr(research, "_search_with_model", scout)
     monkeypatch.setattr(
         "cap.fetch.fetch_sources",
-        lambda urls, timeout=20.0: [
+        lambda urls, timeout=20.0, allow=None: [
             {
                 "url": u,
                 "body": f"Text from {u}. Notes are stored locally first and then synced.",
