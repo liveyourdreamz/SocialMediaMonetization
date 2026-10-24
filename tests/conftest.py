@@ -10,6 +10,7 @@ import pytest
 
 from cap.config import get_settings
 from cap.demo import CHARACTER_BLOCK, SOURCES, TEST_LOG, happy_fixtures, ok, source_docs
+from cap.gates.history import InMemoryHistory
 from cap.models import MockClient
 from cap.pipeline import PipelineDeps
 from cap.schema.post_record import Brief, Channel, Lane, PostRecord
@@ -91,6 +92,7 @@ def record() -> PostRecord:
 def make_deps(client: MockClient, record: PostRecord, tmp_path: Path) -> PipelineDeps:
     return PipelineDeps(
         client=client,
+        history=InMemoryHistory(),
         anchor_elements={"A": ["test log", "day 3"]},
         character_blocks={"A": CHARACTER_BLOCK},
         test_logs={record.post_id: TEST_LOG},

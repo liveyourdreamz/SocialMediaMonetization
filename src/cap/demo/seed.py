@@ -12,6 +12,7 @@ from typing import Any
 from cap import pipeline
 from cap.demo import CHARACTER_BLOCK, SOURCES, TEST_LOG, happy_fixtures
 from cap.domain.card import prepare_card
+from cap.gates.history import InMemoryHistory
 from cap.jobs import Job, JobKind
 from cap.models import MockClient
 from cap.pipeline import PipelineDeps, run_post
@@ -36,6 +37,7 @@ def demo_post(channel: Channel = Channel.A, canary: bool = False) -> PostRecord:
     )
     deps = PipelineDeps(
         client=MockClient(happy_fixtures()),
+        history=InMemoryHistory(),  # a demo sample: compared with nothing, never kept
         anchor_elements={channel.value: ["test log"]},
         character_blocks={channel.value: CHARACTER_BLOCK},
         test_logs={rec.post_id: TEST_LOG},
@@ -254,6 +256,7 @@ def _setup(
         logs = {rec.post_id: test_log or TEST_LOG}
     deps = PipelineDeps(
         client=get_client(happy_fixtures()),
+        history=store.history(),  # where approvals are written (review R1)
         anchor_elements=anchors,
         character_blocks=blocks,
         test_logs=logs,
@@ -345,6 +348,7 @@ def run_tour(store: PostStore, job: Job) -> None:
     rec = store.get(job.post_id)
     deps = PipelineDeps(
         client=MockClient(ex.fixtures()),
+        history=InMemoryHistory(),  # the worked example is never compared or kept
         anchor_elements={"A": ANCHOR_ELEMENTS["A"]},
         character_blocks={"A": CHARACTER_BLOCKS["A"]},
         test_logs={rec.post_id: ex.TEST_LOG},

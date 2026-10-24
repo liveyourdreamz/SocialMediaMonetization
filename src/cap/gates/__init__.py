@@ -12,7 +12,6 @@ from cap.gates.history import (
     HistoryIndex,
     HistoryStore,
     InMemoryHistory,
-    default_history,
     record_approved,
 )
 from cap.gates.originality import check_originality
@@ -31,7 +30,6 @@ __all__ = [
     "check_originality",
     "confirmed_sources",
     "decide",
-    "default_history",
     "gates_cleared",
     "record_approved",
 ]

@@ -24,7 +24,6 @@ from cap.gates import (
     check_facts,
     confirmed_sources,
     decide,
-    default_history,
     record_approved,
 )
 from cap.gates.disclosure import MFK_FACTOR_WEIGHTS
@@ -501,25 +500,23 @@ def test_the_file_history_keeps_a_90_day_window_and_survives_a_bad_line(tmp_path
     assert [s for _, s in FileHistory(path).recent("B", 90)] == ["new"]  # all channels
 
 
-def test_the_pipeline_reads_the_history_under_the_data_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
-    get_settings.cache_clear()
-    deps = PipelineDeps(client=MockClient({}))
-    assert isinstance(deps.history, FileHistory)
-    assert deps.history.path == default_history().path == tmp_path / "d" / "history.jsonl"
+def test_the_pipeline_has_no_default_history():
+    """Review R1: a defaulted history let the app read a file while approvals went to
+    Postgres. The caller must name the history."""
+    with pytest.raises(TypeError):
+        PipelineDeps(client=MockClient({}))  # type: ignore[call-arg]
 
 
 def test_an_approved_post_makes_its_duplicate_fail_originality(
-    fixtures, record, tmp_path, monkeypatch, real_backend
+    fixtures, record, tmp_path, real_backend
 ):
-    monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
-    get_settings.cache_clear()
-    first = _run(fixtures, record, tmp_path / "r1", history=default_history())
+    h = InMemoryHistory()
+    first = _run(fixtures, record, tmp_path / "r1", history=h)
     assert first.status == PostStatus.AWAITING_APPROVAL
     approved = _approve(first)
-    assert record_approved(approved)
+    assert record_approved(approved, h)
     again = PostRecord(channel_id=Channel.A, brief=record.brief)
-    out = _run(fixtures, again, tmp_path / "r2", history=default_history())
+    out = _run(fixtures, again, tmp_path / "r2", history=h)
     assert out.status == PostStatus.REJECTED
     assert out.gates.originality.nearest_post_id == approved.post_id
 

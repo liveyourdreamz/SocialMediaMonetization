@@ -205,6 +205,9 @@ class MemoryStore(PostStore):
         self._posts: dict[str, PostRecord] = {}
         self._lock = threading.Lock()
         self._opened: dict[tuple[str, str], datetime] = {}
+        from cap.gates.history import InMemoryHistory
+
+        self._history = InMemoryHistory()
 
     # Copies in and out, as a database does: code that changes a record it read must
     # save it, and nothing may rely on two readers sharing one object.
@@ -243,6 +246,4 @@ class MemoryStore(PostStore):
         return None
 
     def history(self) -> HistoryStore:
-        from cap.gates.history import default_history
-
-        return default_history()
+        return self._history

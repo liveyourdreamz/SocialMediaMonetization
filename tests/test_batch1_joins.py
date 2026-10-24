@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from cap.config import get_settings
-from cap.gates.history import FileHistory
+from cap.gates.history import FileHistory, InMemoryHistory
 from cap.schema.post_record import Channel, Claim, PostRecord, PostStatus
 from cap.store import MemoryStore
 from cap.store.files import FileStore
@@ -49,7 +49,7 @@ def test_the_file_store_keeps_its_history_beside_its_records(tmp_path: Path) -> 
     store = FileStore(tmp_path / "data")
     h = store.history()
     assert isinstance(h, FileHistory) and h.path.parent == tmp_path / "data"
-    assert MemoryStore().history().path.name == "history.jsonl"  # type: ignore[attr-defined]
+    assert isinstance(MemoryStore().history(), InMemoryHistory)  # never a shared file (R1)
 
 
 def test_every_published_source_list_uses_the_one_rule() -> None:

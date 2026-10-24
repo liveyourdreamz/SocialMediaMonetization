@@ -42,7 +42,6 @@ from cap.gates import (
     check_originality,
     confirmed_sources,
     decide,
-    default_history,
 )
 from cap.models import ModelClient, SourceDoc
 from cap.render.package import render_stage
@@ -53,8 +52,9 @@ from cap.schema.post_record import OriginalityGate, Platform, PostRecord, PostSt
 class PipelineDeps:
     client: ModelClient
     # approved posts the originality gate compares against; written at approval by
-    # cap.gates.record_approved. Default: <data_dir>/history.jsonl
-    history: HistoryIndex = field(default_factory=default_history)
+    # cap.gates.record_approved. Required, never defaulted: the caller passes the
+    # store's own history, so the gate reads where approvals are written (review R1).
+    history: HistoryIndex
     anchor_elements: dict[str, list[str]] = field(default_factory=dict)  # channel -> elements
     character_blocks: dict[str, str] = field(default_factory=dict)  # channel -> text
     render_dir: Path = field(default_factory=lambda: Path("renders"))

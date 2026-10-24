@@ -132,14 +132,7 @@ class FileHistory:
         return True
 
 
-def default_history() -> FileHistory:
-    """The app's history: <data_dir>/history.jsonl."""
-    from cap.config import get_settings
-
-    return FileHistory(Path(get_settings().data_dir) / HISTORY_FILE)
-
-
-def record_approved(record: PostRecord, store: HistoryStore | None = None) -> bool:
+def record_approved(record: PostRecord, store: HistoryStore) -> bool:
     """Call once a post is approved (the approval step's last act). Returns whether the
     post entered the history. A post that is not approved, a canary or a tour post
     never does, and neither does one drafted by the mock backend: every mock post is
@@ -151,4 +144,4 @@ def record_approved(record: PostRecord, store: HistoryStore | None = None) -> bo
         return False
     if get_settings().model_backend == ModelBackend.MOCK:
         return False
-    return (store or default_history()).add(record)
+    return store.add(record)
