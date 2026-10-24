@@ -42,6 +42,7 @@ class P4Output(Envelope):
 
 # ---- P5 Idea scoring (Pack v1.2, A18) -------------------------------------------------
 class P5Item(Strict):
+    n: int  # the number of the item judged, echoed so code never matches by position
     ethics_precheck: Literal["pass", "flag", "red"]
     red_reason: str | None = None
     evidence_check: Literal["ok", "thin", "promotional"] | None = None

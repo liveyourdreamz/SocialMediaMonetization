@@ -102,7 +102,9 @@ def _p4_message(
 
 
 def _score(client: ModelClient, channel: str, items: list[P4Item]) -> list[P5Item] | None:
-    """P5 on every candidate; None when it did not return one judgement per item."""
+    """P5 on every candidate, matched to the items by the number each judgement echoes
+    (review: a reordered reply must never attach a verdict to the wrong topic); None
+    unless every item got exactly one judgement."""
     body = json.dumps(
         [{"n": n, "topic": i.topic, "angle": i.angle, "timing": i.timing,
           "evidence_urls": i.evidence_urls, "source_gap": i.source_gap} for n, i in enumerate(items)],
@@ -115,9 +117,12 @@ def _score(client: ModelClient, channel: str, items: list[P4Item]) -> list[P5Ite
         f"</sensitive_areas>\n<items>judge every item, in order, one judgement each</items>"
     )
     res = client.run(spec("P5"), user, P5Output, sources=[SourceDoc("p4://items", body)])
-    if res.output is None or res.blocked or len(res.output.items) != len(items):
+    if res.output is None or res.blocked:
         return None
-    return res.output.items
+    by_n = {j.n: j for j in res.output.items}
+    if len(by_n) != len(res.output.items) or set(by_n) != set(range(len(items))):
+        return None
+    return [by_n[n] for n in range(len(items))]
 
 
 def _candidates(items: list[P4Item], judged: list[P5Item], scout: ScoutTools) -> list[Candidate]:
@@ -127,7 +132,8 @@ def _candidates(items: list[P4Item], judged: list[P5Item], scout: ScoutTools) ->
         out.append(Candidate(
             topic=item.topic, angle=item.angle, demand_ref=item.demand_ref, evidence_urls=tuple(urls),
             timing=item.timing, source_gap=item.source_gap or not urls,
-            injection_suspected=item.injection_suspected, ethics_precheck=j.ethics_precheck,
+            injection_suspected=item.injection_suspected, duplicate_of=item.is_duplicate_of,
+            ethics_precheck=j.ethics_precheck,
             evidence_check=j.evidence_check, constructive_fit=j.constructive_fit,
             persona_fit=j.persona_fit, anchor_fit=j.anchor_fit, risk_lane=j.risk_lane,
             explanation=j.explanation or item.explanation,
@@ -141,6 +147,10 @@ def run_week(
 ) -> WeekReport:  # fmt: skip
     monday = monday_of(today)
     report = WeekReport(channel, monday)
+    book.expire(before=monday)  # last week's leave the Digest even if this run stops
+    if book.week(channel, monday, shown_only=False):
+        report.blocked = "this week's ideas are already in the Digest"  # never a second set
+        return report
     try:
         signals = src.demand(channel, today)
     except dm.DemandUnavailableError as e:
@@ -148,7 +158,7 @@ def run_week(
         report.gaps.append(f"demand: {e}")
     stories, failed = src.feeds(channel, today)
     report.gaps += [f"feed {f}" for f in failed]
-    memory = book.recent(channel)
+    memory = book.remembered(channel)
     scout = ScoutTools(channel, stories, src.wiki_search, src.fetch_page)
     found = run_loop(client, spec("P4"), _p4_message(channel, signals, memory, seeds or []),
                      P4Output, scout.tools())  # fmt: skip
@@ -165,7 +175,6 @@ def run_week(
     ideas = build_week(channel, monday, _candidates(items, judged, scout),
                        {x.signal_id: x for x in signals}, memory,
                        s.ideas_per_channel, s.evergreen_share)  # fmt: skip
-    book.expire(before=monday)
     book.add(ideas)
     report.shown = sum(i.status == IdeaStatus.SHOWN for i in ideas)
     report.held = len(ideas) - report.shown

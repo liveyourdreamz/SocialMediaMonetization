@@ -100,3 +100,16 @@ def test_a_pick_can_become_the_canary_and_looks_like_any_pick(tmp_path, monkeypa
     page = api.get("/operator").text
     assert ideas[0].topic in page  # under "Your posts" like any brief
     assert page.lower().count("canary") == before  # the page says nothing new
+
+
+def test_a_pick_keeps_idea_scorings_high_risk_lane(tmp_path, monkeypatch):
+    """Review R11: P5 judged it sensitive, the word list did not; the higher lane wins."""
+    store, api, ideas = world(tmp_path, monkeypatch)
+    from cap.schema.ideas import Idea
+
+    idea = Idea(channel="A", week=ideas[0].week, rank=3, risk_lane="high",
+                topic="How an insulin pump doses itself")  # fmt: skip
+    store.ideas.add([idea])
+    api.form(f"/ideas/{idea.idea_id}/pick")
+    post = store.get(store.ideas.get(idea.idea_id).post_id)
+    assert post.brief.lane.value == "high"

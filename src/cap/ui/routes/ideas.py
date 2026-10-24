@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse, Response
 from cap.approval.identity import Reviewer, check_csrf, current_reviewer
 from cap.ideabook import IdeaDecidedError, IdeaNotFoundError
 from cap.schema.ideas import IdeaStatus
+from cap.schema.post_record import Lane
 from cap.store import PostStore
 from cap.ui.page import app_store, approver_only
 
@@ -41,6 +42,10 @@ def pick(
         raise HTTPException(409, f"this idea was already {idea.status.value}")
     title = (topic.strip() or idea.topic)[:140]
     record = new_brief(idea.channel, title)
+    if idea.risk_lane == "high" and record.brief.lane != Lane.HIGH:
+        # P5 judged it sensitive though the word list did not: the higher lane wins
+        record.brief.lane = Lane.HIGH
+        record.log("high-risk lane: idea scoring judged the topic sensitive")
     record.log(
         f"from this week's ideas (rank {idea.rank}); evidence: {', '.join(idea.evidence_urls)}"
     )

@@ -52,7 +52,7 @@ def client(items, judgements):
             {"tool_uses": [{"name": "fetch_allowlisted", "input": {"id": "r-001"}}]},
             {"items": items},
         ],
-        ("P5", "default"): {"items": judgements},
+        ("P5", "default"): {"items": [{"n": k, **j} for k, j in enumerate(judgements)]},
     })  # fmt: skip
 
 
@@ -109,3 +109,55 @@ def test_scoring_that_skips_an_item_stops_the_week_visibly():
     )
     assert report.blocked == "idea scoring did not return one judgement per candidate"
     assert book.week("A", MON, shown_only=False) == []
+
+
+# ---- review R11 ------------------------------------------------------------------------
+
+
+def test_judgements_are_matched_by_number_not_position():
+    """A reply in another order must not give the Red verdict to the wrong topic."""
+    items = [p4_item("Why solar panels keep getting cheaper"),
+             p4_item("Why country X is sabotaging the water")]  # fmt: skip
+    marks = [{"n": 1, **judged(ethics_precheck="red")}, {"n": 0, **judged()}]  # reordered
+    book = MemoryIdeaBook()
+    run_week("A", TODAY, client(items, marks), book, sources())  # each mark's own n wins
+    assert [i.topic for i in book.week("A", MON)] == ["Why solar panels keep getting cheaper"]
+
+
+def test_running_the_week_again_never_adds_a_second_digest():
+    book = MemoryIdeaBook()
+    one = [p4_item("Why solar panels keep getting cheaper")]
+    run_week("A", TODAY, client(one, [judged()]), book, sources())
+    again = run_week("A", TODAY, client(one, [judged()]), book, sources())
+    assert again.blocked == "this week's ideas are already in the Digest"
+    assert [i.rank for i in book.week("A", MON)] == [1]
+
+
+def test_last_weeks_ideas_leave_even_when_this_weeks_run_stops():
+    book = MemoryIdeaBook()
+    old = Idea(channel="A", week=MON - dt.timedelta(days=7), rank=1, topic="How tides work")
+    book.add([old])
+    stopped = run_week("A", TODAY, client([p4_item("One"), p4_item("Two")], [judged()]),
+                       book, sources())  # fmt: skip
+    assert stopped.blocked and book.get(old.idea_id).status == IdeaStatus.EXPIRED
+
+
+def test_a_held_idea_never_blocks_its_topic():
+    book = MemoryIdeaBook()
+    held = Idea(channel="A", week=MON - dt.timedelta(days=7), rank=0, status=IdeaStatus.HELD,
+                topic="Why solar panels keep getting cheaper", held_reason="no primary source")  # fmt: skip
+    book.add([held])
+    run_week("A", TODAY, client([p4_item("Why solar panels keep getting cheaper")], [judged()]),
+             book, sources())  # fmt: skip
+    assert [i.topic for i in book.week("A", MON)] == ["Why solar panels keep getting cheaper"]
+
+
+def test_a_repeat_p4_names_is_held_even_when_reworded():
+    book = MemoryIdeaBook()
+    items = [p4_item("Why do solar modules cost less every year",
+                     is_duplicate_of="Why solar panels keep getting cheaper")]  # fmt: skip
+    book.add([Idea(channel="A", week=MON - dt.timedelta(days=7), rank=1,
+                   topic="Why solar panels keep getting cheaper", ratio_to_baseline=3.0)])  # fmt: skip
+    run_week("A", TODAY, client(items, [judged()]), book, sources())
+    (idea,) = [i for i in book.week("A", MON, shown_only=False)]
+    assert idea.status == IdeaStatus.HELD and idea.held_reason == "shown in the last 90 days"

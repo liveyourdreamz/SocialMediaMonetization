@@ -55,6 +55,7 @@ class Candidate:
     anchor_fit: float | None
     risk_lane: str
     explanation: str
+    duplicate_of: str | None = None  # P4's own judgement that it repeats a recent topic
 
 
 _WORD = re.compile(r"\w+", re.UNICODE)
@@ -122,6 +123,18 @@ def remembered(topic: str, ratio: float, memory: list[Idea]) -> bool:
     return False
 
 
+def repeats(c: Candidate, ratio: float, memory: list[Idea]) -> bool:
+    """A repeat of a recent topic, by code's word match or by P4's own judgement (which
+    catches paraphrases). A repeat comes back only when its demand has doubled; one P4
+    names that code cannot find in the memory is held, the cautious reading."""
+    if remembered(c.topic, ratio, memory):
+        return True
+    if not c.duplicate_of:
+        return False
+    known = any(same_topic(c.duplicate_of, m.topic_edit or m.topic) for m in memory)
+    return remembered(c.duplicate_of, ratio, memory) if known else True
+
+
 def _mix(ranked: list[Idea], count: int, evergreen_share: float) -> list[Idea]:
     """The top `count`, with about `evergreen_share` evergreen; a short side is filled
     from the other, so the Digest is never shorter than it could be."""
@@ -150,9 +163,7 @@ def build_week(
     for c in candidates:
         sig = demand.get(c.demand_ref or "")
         ratio = sig.ratio_to_baseline if sig else 1.0
-        why = held_reason(c) or (
-            "shown in the last 90 days" if remembered(c.topic, ratio, memory) else ""
-        )
+        why = held_reason(c) or ("shown in the last 90 days" if repeats(c, ratio, memory) else "")
         out.append(
             Idea(
                 channel=channel, week=monday, topic=c.topic, angle=c.angle,

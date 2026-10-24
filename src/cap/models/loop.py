@@ -18,6 +18,7 @@ from typing import Any, Protocol
 from cap.config import get_settings
 from cap.domain.cost import note
 from cap.models.base import (
+    MAX_OUTPUT_TOKENS,
     MAX_TOKENS,
     Completion,
     Envelope,
@@ -131,6 +132,10 @@ def run_loop[T: Envelope](
             return _result(_blocked_output(output_model, spec, reason), last, turn)
         if last.stop_reason == "error":
             return _result(None, last, turn, last.error or "request failed")
+        if last.stop_reason == "max_tokens" and call.max_tokens < MAX_OUTPUT_TOKENS:
+            # Pack section 1, as for single calls: the same turn again with more room
+            call.max_tokens = min(call.max_tokens * 4, MAX_OUTPUT_TOKENS)
+            continue
         if step.tool_uses and turn < max_turns:
             messages.append({"role": "assistant", "content": step.assistant_content})
             messages.append(

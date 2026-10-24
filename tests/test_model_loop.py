@@ -99,3 +99,20 @@ def test_the_request_switches_tools_off_on_the_last_turn():
     req = client.build_step_request(seen[0], [], t, final=True)
     assert req["tool_choice"] == {"type": "none"} and len(req["tools"]) == 2
     assert "temperature" not in req and req["output_config"]["format"]["type"] == "json_schema"
+
+
+def test_a_reply_cut_off_at_max_tokens_is_asked_again_with_more_room():
+    """As for single calls (Pack section 1); it was parsed as the final output."""
+    limits: list[int] = []
+
+    class CutOff:
+        def _step(self, call, messages, tools, final):
+            limits.append(call.max_tokens)
+            if len(limits) == 1:
+                return Step(Completion('{"items": [', "max_tokens"))
+            return Step(Completion('{"prompt_id":"P4","prompt_version":"1.5","status":"ok","blocked_reason":null,'
+                                   '"injection_suspected":false,"explanation":"",'
+                                   '"items":[]}', "end_turn"))  # fmt: skip
+
+    out = run_loop(CutOff(), spec("P4"), "u", P4Output, [])
+    assert out.output is not None and limits[1] == limits[0] * 4

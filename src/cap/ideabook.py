@@ -67,6 +67,11 @@ class IdeaBook(ABC):
     @abstractmethod
     def recent(self, channel: str, days: int = MEMORY_DAYS) -> list[Idea]: ...
 
+    def remembered(self, channel: str, days: int = MEMORY_DAYS) -> list[Idea]:
+        """The ideas that keep a topic from being proposed again: ones Hemant saw or
+        decided. A held idea he never saw blocks nothing (review R11)."""
+        return [i for i in self.recent(channel, days) if i.status not in HIDDEN]
+
 
 class MemoryIdeaBook(IdeaBook):
     def __init__(self) -> None:

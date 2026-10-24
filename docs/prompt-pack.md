@@ -1,8 +1,8 @@
-# Content Agent Portfolio — Agent Prompt Pack (RCICE v1.4)
+# Content Agent Portfolio — Agent Prompt Pack (RCICE v1.5)
 
 Oct 17, 2026 · @Hemant Julka
 
-Production instructions for every model-backed step in the PRD, written with Gigawatt in Role / Context / Instructions / Criteria / Examples form and revised on 17 October 2026 after the R10 red-team (59 challenges, 52 accepted); v1.1.2 on 19 October 2026 carries the fourteen amendments the Foundation build raised (section 19), accepted by Hemant; v1.2 on 24 October 2026 rewrites P4 and P5 to Hemant's trend-research specification and folds in the build's edits since v1.1.2 (section 20); v1.3 the same day makes every example a complete, valid record (section 21); v1.4 adds the first examples drawn from the verified Arabic regression sets (section 21, A25). Companion to the PRD (prompts v1.4) and the Prompt Pack Challenge Register.
+Production instructions for every model-backed step in the PRD, written with Gigawatt in Role / Context / Instructions / Criteria / Examples form and revised on 17 October 2026 after the R10 red-team (59 challenges, 52 accepted); v1.1.2 on 19 October 2026 carries the fourteen amendments the Foundation build raised (section 19), accepted by Hemant; v1.2 on 24 October 2026 rewrites P4 and P5 to Hemant's trend-research specification and folds in the build's edits since v1.1.2 (section 20); v1.3 the same day makes every example a complete, valid record (section 21); v1.4 adds the first examples drawn from the verified Arabic regression sets (section 21, A25); v1.5 applies the second independent review (section 22: the canary base, P5's item number). Companion to the PRD (prompts v1.5) and the Prompt Pack Challenge Register.
 
 ## 1. How to use this pack
 
@@ -326,7 +326,7 @@ Rewritten in v1.2 to PRD 4.8 and D48. The model judges, and code computes. The m
 | --- | --- |
 | Model | Claude Haiku 5.5, effort low. No sampling parameters. |
 | Inputs | `<items>` from P4 (topic and angle tagged), `<demand>` (code: views and ratio per item, for context only), `<channel_profile>` (character and format), `<persona>`, `<red_lever_list>` (R3 Red levers), `<sensitive_areas>` (health, money, law, politics, children; D47), `<hemant_priorities>` (trusted). |
-| Output | per item: `ethics_precheck` (pass, flag, red), `red_reason`, `evidence_check` (ok, thin, promotional), `constructive_fit`, `persona_fit` and `anchor_fit` (each 0 to 1, or null), `risk_lane` (low, high), `explanation`. Code drops `red`, `thin` and `promotional`, computes demand and revenue, and returns the configured count. |
+| Output | per item: `n` (the item's number, echoed), `ethics_precheck` (pass, flag, red), `red_reason`, `evidence_check` (ok, thin, promotional), `constructive_fit`, `persona_fit` and `anchor_fit` (each 0 to 1, or null), `risk_lane` (low, high), `explanation`. Code matches each judgement to its item by `n` (A27), drops `red`, `thin` and `promotional`, computes demand and revenue, and returns the configured count. |
 
 ```xml
 <role>
@@ -363,6 +363,7 @@ Demand has already been measured by code from Wikipedia pageviews. It is shown t
 8. A controversy around a topic (a feud between founders, a political row about a technology) is not the topic. Score the underlying subject and say in the explanation that the controversy is excluded.
 9. If an item is a duplicate of a recent post or a shown idea, score it as a follow-up and say what is new. Code decides whether it is shown again.
 10. Rank nothing, do not combine the scores, and produce no number for views, demand or revenue.
+11. Every item arrives with its number n. Return exactly one judgement per item, and put the item's n in it.
 </instructions>
 
 <criteria>
@@ -374,11 +375,11 @@ Demand has already been measured by code from Wikipedia pageviews. It is shown t
 </criteria>
 
 <examples>
-<example id="standard"><input>"Why solar panels keep getting cheaper", channel A, persona 18 to 35, angle backed by an Our World in Data price series.</input><output>{"ethics_precheck":"pass","red_reason":null,"evidence_check":"ok","constructive_fit":0.9,"persona_fit":0.8,"anchor_fit":0.8,"risk_lane":"low","explanation":"real price data behind the angle; the cell and the module take apart well for Patch"}</output></example>
-<example id="promotional"><input>"StartupX's new bottle will end plastic pollution"; the only evidence is the company's press release.</input><output>{"ethics_precheck":"pass","red_reason":null,"evidence_check":"promotional","constructive_fit":0.3,"persona_fit":0.6,"anchor_fit":0.5,"risk_lane":"low","explanation":"the claim is the company's own; publicity, not evidence"}</output></example>
-<example id="flag_sensitive"><input>"How sleep trackers measure your night", channel A, evidence from a manufacturer's technical page and a peer-reviewed validation study.</input><output>{"ethics_precheck":"flag","red_reason":null,"evidence_check":"ok","constructive_fit":0.6,"persona_fit":0.8,"anchor_fit":0.9,"risk_lane":"high","explanation":"touches health; explain the sensors, give no advice on sleep"}</output></example>
-<example id="edge_feud"><input>A note-taking tool's launch; the evidence pages are mostly about a public feud between its founders.</input><output>{"ethics_precheck":"pass","red_reason":null,"evidence_check":"ok","constructive_fit":0.5,"persona_fit":0.6,"anchor_fit":0.7,"risk_lane":"low","explanation":"scored on the tool only; the founders' dispute is excluded from scope"}</output></example>
-<example id="red"><input>"Why country X is sabotaging the region's water".</input><output>{"ethics_precheck":"red","red_reason":"frames a nation as a villain","evidence_check":null,"constructive_fit":null,"persona_fit":null,"anchor_fit":null,"risk_lane":"low","explanation":"appeal depends on an out-group villain"}</output></example>
+<example id="standard"><input>Item 0: "Why solar panels keep getting cheaper", channel A, persona 18 to 35, angle backed by an Our World in Data price series.</input><output>{"n":0,"ethics_precheck":"pass","red_reason":null,"evidence_check":"ok","constructive_fit":0.9,"persona_fit":0.8,"anchor_fit":0.8,"risk_lane":"low","explanation":"real price data behind the angle; the cell and the module take apart well for Patch"}</output></example>
+<example id="promotional"><input>Item 1: "StartupX's new bottle will end plastic pollution"; the only evidence is the company's press release.</input><output>{"n":1,"ethics_precheck":"pass","red_reason":null,"evidence_check":"promotional","constructive_fit":0.3,"persona_fit":0.6,"anchor_fit":0.5,"risk_lane":"low","explanation":"the claim is the company's own; publicity, not evidence"}</output></example>
+<example id="flag_sensitive"><input>Item 2: "How sleep trackers measure your night", channel A, evidence from a manufacturer's technical page and a peer-reviewed validation study.</input><output>{"n":2,"ethics_precheck":"flag","red_reason":null,"evidence_check":"ok","constructive_fit":0.6,"persona_fit":0.8,"anchor_fit":0.9,"risk_lane":"high","explanation":"touches health; explain the sensors, give no advice on sleep"}</output></example>
+<example id="edge_feud"><input>Item 3: a note-taking tool's launch; the evidence pages are mostly about a public feud between its founders.</input><output>{"n":3,"ethics_precheck":"pass","red_reason":null,"evidence_check":"ok","constructive_fit":0.5,"persona_fit":0.6,"anchor_fit":0.7,"risk_lane":"low","explanation":"scored on the tool only; the founders' dispute is excluded from scope"}</output></example>
+<example id="red"><input>Item 4: "Why country X is sabotaging the region's water".</input><output>{"n":4,"ethics_precheck":"red","red_reason":"frames a nation as a villain","evidence_check":null,"constructive_fit":null,"persona_fit":null,"anchor_fit":null,"risk_lane":"low","explanation":"appeal depends on an out-group villain"}</output></example>
 </examples>
 ```
 
@@ -865,8 +866,9 @@ Version 1.3 changes examples only; no instruction, criterion or schema changes. 
 
 ## 22. Amendments v1.5 (24 October 2026): the second independent review
 
-Version 1.5 changes P14's description only; no prompt text, criterion or schema changes.
+Version 1.5 follows the second independent review: P14's description (A26) and P5's item number (A27, an instruction, an output field and the examples).
 
 | # | Where | Change |
 | --- | --- | --- |
 | A26 | P14 | The canary base is the next brief Hemant files or picks once a canary is due, not a second-ranked idea he left unpicked. The second independent review (24 Oct, R2) showed the old base was a tell: every real post comes from a pick or a filed brief, so a card on a topic he never chose could only be a canary, and the catch rate would measure recognition, not vigilance. After the verdict the same brief is filed again and drafted clean, so no post is lost. Canary state lives on the post record's flags, not a separate table. The decision runs under a database lock, so two briefs filed at once never both become canaries |
+| A27 | P5 | Each item reaches P5 with its number `n`, and each judgement must echo it (instruction 11, the output field, every example). The second review (R11) showed that judgements matched by position would attach a Red verdict to the wrong topic if the model reordered them; code now matches by `n` and stops the week unless every item has exactly one judgement |

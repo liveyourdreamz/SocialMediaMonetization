@@ -45,7 +45,7 @@ from cap.schema.post_record import (
 
 WORDS_PER_MINUTE = 200  # reading speed used for the per-card threshold
 MIN_READ_SECONDS = 30
-READ_SHARE = 0.8  # a reviewer who read less than 80% of the full read time is too fast
+READ_SHARE = 0.6  # PRD 4.5: under 60% of the full read time is too fast
 HIGH_LANE_FACTOR = 1.5  # a high-lane topic (health, money, law, politics, children): longer
 
 

@@ -127,8 +127,8 @@ def test_too_fast_is_per_card_not_a_fixed_twenty_seconds():
         short, Decision.REJECT, reviewer=H, time_on_card_s=25, reason_code=ReasonCode.OTHER
     )
     assert short.approval.too_fast is True
-    long = _queued(words=1500)  # 1500 words -> 360 s expected
-    assert 360 <= long.approval.expected_reading_s <= 370
+    long = _queued(words=1500)  # 1500 words -> 270 s expected (60% of 450 s, PRD 4.5)
+    assert 270 <= long.approval.expected_reading_s <= 280
     record_verdict(
         long, Decision.REJECT, reviewer=H, time_on_card_s=120, reason_code=ReasonCode.OTHER
     )
