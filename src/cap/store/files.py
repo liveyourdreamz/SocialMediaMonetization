@@ -17,7 +17,7 @@ from pathlib import Path
 from cap.gates.history import FileHistory, HistoryStore
 from cap.schema.migrate import load_record
 from cap.schema.post_record import PostRecord
-from cap.store import MemoryStore, park_if_interrupted
+from cap.store import AppState, MemoryStore, park_if_interrupted
 
 
 class FileStore(MemoryStore):
@@ -55,10 +55,10 @@ class FileStore(MemoryStore):
             except (OSError, ValueError) as e:
                 self.quarantined.append(_quarantine(state, self.root / "quarantine", e))
                 d = {}
-            self.state.paused = bool(d.get("paused"))
-            self.state.paused_reason = d.get("paused_reason", "")
-            self.state.analytics = d.get("analytics", {})
-            self.state.analytics_note = d.get("analytics_note", "")
+            self._state.paused = bool(d.get("paused"))
+            self._state.paused_reason = d.get("paused_reason", "")
+            self._state.analytics = d.get("analytics", {})
+            self._state.analytics_note = d.get("analytics_note", "")
 
     def history(self) -> HistoryStore:
         from cap.gates.history import HISTORY_FILE
@@ -74,15 +74,15 @@ class FileStore(MemoryStore):
                 self.root / "posts" / f"{record.post_id}.json", record.model_dump_json(indent=1)
             )
 
-    def save_state(self) -> None:
+    def _persist_state(self, state: AppState) -> None:
         _atomic_write(
             self.root / "state.json",
             json.dumps(
                 {
-                    "paused": self.state.paused,
-                    "paused_reason": self.state.paused_reason,
-                    "analytics": self.state.analytics,
-                    "analytics_note": self.state.analytics_note,
+                    "paused": state.paused,
+                    "paused_reason": state.paused_reason,
+                    "analytics": state.analytics,
+                    "analytics_note": state.analytics_note,
                 },
                 indent=1,
             ),

@@ -230,3 +230,26 @@ def test_postgres_skips_a_row_it_cannot_read_and_keeps_it(pg_url):
     with psycopg.connect(pg_url) as c:
         assert c.execute("SELECT count(*) FROM posts").fetchone()[0] == 2  # nothing deleted
     store.close()
+
+
+def test_one_process_never_undoes_anothers_pause(pg_url):
+    """Review R7: each process kept its own copy of the state and saved it whole."""
+    from cap.store.postgres import PostgresStore
+
+    web, worker = PostgresStore.open(pg_url), PostgresStore.open(pg_url)
+    try:
+        assert not worker.paused
+        web.pause("canary missed")
+        assert worker.paused  # read fresh, not from start-up
+        worker.update_state(lambda s: setattr(s, "canary_gap", 7))
+        assert web.paused and web.state.canary_gap == 7
+    finally:
+        web.close()
+        worker.close()
+
+
+def test_a_state_copy_is_not_the_state(make_store):
+    store = make_store()
+    copy = store.state
+    copy.paused = True  # changing a copy changes nothing
+    assert not make_store().paused and not store.paused

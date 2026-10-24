@@ -84,7 +84,7 @@ def test_run_now_queues_every_channel_and_operator_shows_the_runs(tmp_path, monk
 def test_a_pick_can_become_the_canary_and_looks_like_any_pick(tmp_path, monkeypatch, canaries):
     """Review R2: the canary is the post Hemant asked for, so nothing tells it apart."""
     store, api, ideas = world(tmp_path, monkeypatch)
-    store.state.canary_gap = 1
+    store.update_state(lambda s: setattr(s, "canary_gap", 1))
     for _ in range(2):
         from cap.schema.post_record import Channel, PostRecord, PostStatus
 

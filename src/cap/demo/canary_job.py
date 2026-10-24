@@ -69,10 +69,11 @@ def canary_due(store: PostStore, rng: random.Random | None = None) -> bool:
     if store.paused or canary_waiting(store):
         return False
     cards = closed_cards(store)
-    if not store.state.canary_gap:
-        store.state.canary_gap = draw_gap(rate(cards), rng or random.SystemRandom())
-        store.save_state()
-    return cards_since_last_canary(cards) >= store.state.canary_gap
+    gap = store.state.canary_gap
+    if not gap:
+        gap = draw_gap(rate(cards), rng or random.SystemRandom())
+        store.update_state(lambda s: setattr(s, "canary_gap", gap))
+    return cards_since_last_canary(cards) >= gap
 
 
 def file_brief(
@@ -99,8 +100,8 @@ def file_brief(
         )
         store.put(record)
         store.jobs.enqueue(JobKind.CANARY, record.post_id, payload)
-        store.state.canary_gap = 0  # the next gap is drawn when the next brief is filed
-        store.save_state()
+        # the next gap is drawn when the next brief is filed
+        store.update_state(lambda s: setattr(s, "canary_gap", 0))
     return JobKind.CANARY
 
 

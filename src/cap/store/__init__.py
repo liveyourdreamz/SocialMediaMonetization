@@ -12,6 +12,7 @@ job queue (`store.jobs`, cap.jobs) lives beside the posts in the same database.
 
 from __future__ import annotations
 
+import copy
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
@@ -96,7 +97,6 @@ class PostStore(ABC):
         self.jobs = jobs
         self.audit = audit
         self.ideas = ideas or MemoryIdeaBook()  # the week's ideas and their memory (D48)
-        self.state = AppState()
         self.unreadable: list[str] = []  # stored posts this build could not read, by id
         self._named_locks: dict[str, threading.Lock] = {}
         self._named_locks_guard = threading.Lock()
@@ -170,6 +170,20 @@ class PostStore(ABC):
 
     # ---- app state ---------------------------------------------------------------------
 
+    # Review R7: the state was read once per process and written back whole, so one
+    # process could undo another's pause. Now every read is fresh and every change is
+    # one read-modify-write that no other writer can interleave.
+
+    @property
+    @abstractmethod
+    def state(self) -> AppState:
+        """A fresh copy of the app state. Change it with `update_state`."""
+
+    @abstractmethod
+    def update_state(self, change: Callable[[AppState], None]) -> AppState:
+        """Apply `change` to the current state and save it, atomically; returns the
+        saved state."""
+
     @property
     def paused(self) -> bool:
         return self.state.paused
@@ -179,22 +193,24 @@ class PostStore(ABC):
         return self.state.paused_reason
 
     def pause(self, reason: str) -> None:
-        self.state.paused, self.state.paused_reason = True, reason
-        self.save_state()
+        def change(s: AppState) -> None:
+            s.paused, s.paused_reason = True, reason
+
+        self.update_state(change)
         self.audit.append("queue paused", detail={"reason": reason})
 
     def reopen(self) -> None:
-        self.state.paused, self.state.paused_reason = False, ""
-        self.save_state()
+        def change(s: AppState) -> None:
+            s.paused, s.paused_reason = False, ""
+
+        self.update_state(change)
         self.audit.append("queue reopened")
 
     def set_analytics(self, figures: dict[str, Any], note: str = "") -> None:
-        self.state.analytics, self.state.analytics_note = figures, note
-        self.save_state()
+        def change(s: AppState) -> None:
+            s.analytics, s.analytics_note = figures, note
 
-    @abstractmethod
-    def save_state(self) -> None:
-        """Persist `self.state`."""
+        self.update_state(change)
 
     # ---- where related records live ---------------------------------------------------
 
@@ -217,6 +233,8 @@ class MemoryStore(PostStore):
         self._posts: dict[str, PostRecord] = {}
         self._lock = threading.Lock()
         self._opened: dict[tuple[str, str], datetime] = {}
+        self._state = AppState()
+        self._state_lock = threading.Lock()
         from cap.gates.history import InMemoryHistory
 
         self._history = InMemoryHistory()
@@ -254,8 +272,22 @@ class MemoryStore(PostStore):
     def _set_card_opened_at(self, post_id: str, reviewer: str, at: datetime) -> None:
         self._opened[(post_id, reviewer)] = at
 
-    def save_state(self) -> None:
-        return None
-
     def history(self) -> HistoryStore:
         return self._history
+
+    @property
+    def state(self) -> AppState:
+        with self._state_lock:
+            return copy.deepcopy(self._state)
+
+    def update_state(self, change: Callable[[AppState], None]) -> AppState:
+        with self._state_lock:
+            changed = copy.deepcopy(self._state)
+            change(changed)
+            self._persist_state(changed)
+            self._state = changed
+            return copy.deepcopy(changed)
+
+    def _persist_state(self, state: AppState) -> None:
+        """Nothing outside memory; the file store writes its state file here."""
+        return None

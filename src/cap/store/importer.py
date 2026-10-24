@@ -14,7 +14,7 @@ from pathlib import Path
 
 from cap.gates.history import HISTORY_FILE, Entry, FileHistory
 from cap.schema.post_record import Channel, PostRecord, PostStatus
-from cap.store import PostNotFoundError, PostStore
+from cap.store import AppState, PostNotFoundError, PostStore
 from cap.store.files import FileStore
 
 _MOVED = ("posts", "state.json", HISTORY_FILE, "quarantine")
@@ -30,8 +30,13 @@ def import_files(data_dir: Path, store: PostStore) -> int:
     for rec in old.all():
         rec.revision = 0  # new to the database, whatever the file store counted
         store.put(rec)
-    store.state = old.state
-    store.save_state()
+    kept = old.state
+
+    def change(s: AppState) -> None:
+        s.paused, s.paused_reason = kept.paused, kept.paused_reason
+        s.analytics, s.analytics_note = kept.analytics, kept.analytics_note
+
+    store.update_state(change)
     history = store.history()
     for entry in FileHistory(data_dir / HISTORY_FILE).entries():
         history.add(_history_record(old, entry))

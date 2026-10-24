@@ -82,7 +82,7 @@ def file(store, topic="How a heat pump moves heat"):
 
 def test_a_brief_becomes_the_canary_once_the_gap_has_passed(canaries):
     store = MemoryStore()
-    store.state.canary_gap = 2
+    store.update_state(lambda s: setattr(s, "canary_gap", 2))
     close_cards(store, 1)
     _, kind = file(store, "How tides work")
     assert kind == JobKind.BRIEF  # one card closed, the gap is two
@@ -99,7 +99,7 @@ def test_a_brief_becomes_the_canary_once_the_gap_has_passed(canaries):
 
 def test_no_canary_while_paused(canaries):
     store = MemoryStore()
-    store.state.canary_gap = 1
+    store.update_state(lambda s: setattr(s, "canary_gap", 1))
     close_cards(store, 3)
     store.pause("a missed canary")
     assert file(store)[1] == JobKind.BRIEF
@@ -108,7 +108,7 @@ def test_no_canary_while_paused(canaries):
 def test_two_briefs_filed_at_once_make_one_canary(canaries):
     """Review R3: the check and the act run under the store's lock."""
     store = MemoryStore()
-    store.state.canary_gap = 1
+    store.update_state(lambda s: setattr(s, "canary_gap", 1))
     close_cards(store, 3)
     kinds: list[JobKind] = []
     start = threading.Barrier(8)
@@ -131,7 +131,7 @@ def test_two_processes_on_one_database_make_one_canary(canaries, pg_url):
     a, b = PostgresStore.open(pg_url), PostgresStore.open(pg_url)
     try:
         close_cards(a, 3)
-        a.state.canary_gap = b.state.canary_gap = 1
+        a.update_state(lambda s: setattr(s, "canary_gap", 1))  # one database
         results: list[JobKind] = []
         start = threading.Barrier(2)
 
@@ -155,7 +155,7 @@ def test_a_canary_reaches_the_queue_like_any_card_with_the_gates_catches_kept(
 ):
     monkeypatch.chdir(tmp_path)
     store = MemoryStore()
-    store.state.canary_gap = 1
+    store.update_state(lambda s: setattr(s, "canary_gap", 1))
     close_cards(store, 1)
     post_id, kind = file(store)
     assert kind == JobKind.CANARY
@@ -175,7 +175,7 @@ def test_a_canary_reaches_the_queue_like_any_card_with_the_gates_catches_kept(
 def test_after_the_verdict_the_brief_is_filed_again_clean_once(tmp_path, monkeypatch, canaries):
     monkeypatch.chdir(tmp_path)
     store = MemoryStore()
-    store.state.canary_gap = 1
+    store.update_state(lambda s: setattr(s, "canary_gap", 1))
     close_cards(store, 1)
     post_id, _ = file(store)
     drain(store, post_id)

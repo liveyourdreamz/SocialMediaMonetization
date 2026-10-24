@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -60,9 +60,6 @@ class PostgresStore(PostStore):
             applied = migrations.apply(conn)
             if applied:
                 _log.info("database migrated: %s", ", ".join(applied))
-            row = conn.execute("SELECT state FROM app_state WHERE id = 1").fetchone()
-        if row:
-            self.state = AppState(**{k: v for k, v in row[0].items() if k in _STATE_KEYS})
 
     @classmethod
     def open(cls, url: str) -> PostgresStore:
@@ -154,14 +151,27 @@ class PostgresStore(PostStore):
 
     # ---- app state and history --------------------------------------------------------
 
-    def save_state(self) -> None:
-        state = {k: getattr(self.state, k) for k in _STATE_KEYS}
+    @property
+    def state(self) -> AppState:
         with self._pool.connection() as conn:
+            row = conn.execute("SELECT state FROM app_state WHERE id = 1").fetchone()
+        return _state(row[0] if row else {})
+
+    def update_state(self, change: Callable[[AppState], None]) -> AppState:
+        """One transaction holding the row lock: a change made by another process in
+        between is never overwritten (review R7)."""
+        with self._pool.connection() as conn, conn.transaction():
             conn.execute(
-                "INSERT INTO app_state (id, state) VALUES (1, %s)"
-                " ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state",
-                (Jsonb(state),),
+                "INSERT INTO app_state (id, state) VALUES (1, '{}') ON CONFLICT (id) DO NOTHING"
             )
+            row = conn.execute("SELECT state FROM app_state WHERE id = 1 FOR UPDATE").fetchone()
+            state = _state(row[0] if row else {})
+            change(state)
+            conn.execute(
+                "UPDATE app_state SET state = %s WHERE id = 1",
+                (Jsonb({k: getattr(state, k) for k in _STATE_KEYS}),),
+            )
+        return state
 
     def history(self) -> HistoryStore:
         return PostgresHistory(self._pool)
@@ -178,6 +188,10 @@ class PostgresStore(PostStore):
 
 
 _STATE_KEYS = ("paused", "paused_reason", "analytics", "analytics_note", "canary_gap")
+
+
+def _state(saved: dict[str, Any]) -> AppState:
+    return AppState(**{k: v for k, v in saved.items() if k in _STATE_KEYS})
 
 
 def _save(conn: Connection, record: PostRecord) -> None:
