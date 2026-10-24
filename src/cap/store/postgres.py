@@ -165,7 +165,7 @@ class PostgresStore(PostStore):
         return PostgresHistory(self._pool)
 
 
-_STATE_KEYS = ("paused", "paused_reason", "analytics", "analytics_note")
+_STATE_KEYS = ("paused", "paused_reason", "analytics", "analytics_note", "canary_gap")
 
 
 def _save(conn: Connection, record: PostRecord) -> None:

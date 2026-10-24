@@ -749,6 +749,13 @@
           "title": "Canary Outcome",
           "type": "string"
         },
+        "canary_gates_caught": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Canary Gates Caught",
+          "type": "array"
+        },
         "gate_blind": {
           "default": true,
           "title": "Gate Blind",

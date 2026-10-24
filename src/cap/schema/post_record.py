@@ -304,6 +304,7 @@ class Flags(Strict):
     canary_fault_type: FaultType | None = None
     planted_fault: PlantedFault | None = None  # revealed on the card after the verdict
     canary_outcome: Literal["", "caught", "missed"] = ""
+    canary_gates_caught: list[str] = Field(default_factory=list)  # gates that failed it (P14)
     gate_blind: bool = True  # D33: gates hidden on the card until a verdict is recorded
     card_prepared: bool = False  # spot check and reading time set when queued (D34)
     tour: bool = False  # the guided tour's worked example; never counted, never published

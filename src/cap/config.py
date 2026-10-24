@@ -147,9 +147,9 @@ class Settings(BaseSettings):
     blind_review_point_cards: int = 200
     reject_other_share_flag: float = 0.20
 
-    # Canary schedule (P14): (one in N, for the first M cards); the last entry runs
-    # until a miss resets the schedule. Front loaded: 1 in 3 for 15 cards, 1 in 5 for
-    # the next 85, then 1 in 10.
+    # Canary schedule (P14): (one in N, until card M); M = 0 is "from then on". Front
+    # loaded: 1 in 3 until card 15, 1 in 5 until card 100, then 1 in 10. After any miss,
+    # 1 in 3 for the next 10 cards (cap.domain.canary).
     canary_schedule: list[tuple[int, int]] = Field(
         default_factory=lambda: [(3, 15), (5, 100), (10, 0)]
     )

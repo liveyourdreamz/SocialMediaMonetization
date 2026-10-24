@@ -41,7 +41,7 @@ class PostgresIdeaBook(IdeaBook):
     def week(self, channel: str, monday: dt.date, shown_only: bool = True) -> list[Idea]:
         sql = "SELECT record FROM ideas WHERE channel = %s AND week = %s"
         if shown_only:
-            sql += " AND status <> 'held'"
+            sql += " AND status NOT IN ('held', 'canary')"
         with self._pool.connection() as conn:
             rows = conn.execute(sql, (channel, monday)).fetchall()
         return sorted((_idea(r) for r in rows), key=lambda i: (i.rank == 0, i.rank))
@@ -58,6 +58,17 @@ class PostgresIdeaBook(IdeaBook):
         if cur.rowcount != 1:  # decided by someone else in between
             raise IdeaDecidedError(f"idea {idea_id} was already decided")
         return done
+
+    def take_for_canary(self, idea_id: str) -> Idea:
+        taken = self.get(idea_id).model_copy(update={"status": IdeaStatus.CANARY})
+        with self._pool.connection() as conn:
+            cur = conn.execute(
+                "UPDATE ideas SET status = 'canary', record = %s WHERE id = %s AND status = 'shown'",
+                (Jsonb(taken.model_dump(mode="json")), idea_id),
+            )
+        if cur.rowcount != 1:
+            raise IdeaDecidedError(f"idea {idea_id} is no longer shown")
+        return taken
 
     def expire(self, before: dt.date) -> int:
         with self._pool.connection() as conn:

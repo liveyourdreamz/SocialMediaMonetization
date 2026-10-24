@@ -61,8 +61,13 @@ _WORD = re.compile(r"\w+", re.UNICODE)
 _STOP = {"the", "a", "an", "of", "how", "why", "what", "is", "are", "and", "in", "to", "it"}
 
 
+def _fold(w: str) -> str:
+    """English plural to singular ("pumps", "moves" -> "pump", "move"); "glass" stays."""
+    return w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w
+
+
 def _words(text: str) -> set[str]:
-    return {w for w in _WORD.findall(text.lower()) if w not in _STOP and len(w) > 2}
+    return {_fold(w) for w in _WORD.findall(text.lower()) if w not in _STOP and len(w) > 2}
 
 
 def same_topic(a: str, b: str) -> bool:

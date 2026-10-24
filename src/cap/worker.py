@@ -24,6 +24,7 @@ from collections.abc import Callable
 
 from cap.approval import release_job
 from cap.audit import acting_as
+from cap.demo.canary_job import run_canary_job, schedule_canary
 from cap.demo.ideas_job import run_ideas_job, schedule_due
 from cap.demo.seed import run_checks_job, run_render_job, run_tour, run_write_job
 from cap.jobs import Job, JobKind
@@ -43,6 +44,7 @@ def default_handlers() -> dict[JobKind, Handler]:
         JobKind.RELEASE: release_job.run,
         JobKind.TOUR: run_tour,
         JobKind.IDEAS: run_ideas_job,
+        JobKind.CANARY: run_canary_job,
     }
 
 
@@ -104,6 +106,8 @@ class Worker:
         try:
             for key in schedule_due(self.store):
                 _log.info("queued %s", key)
+            if post_id := schedule_canary(self.store):
+                _log.info("canary seeded: %s", post_id)
         except Exception:  # noqa: BLE001 - the clock never stops the worker
             _log.exception("could not check the schedule")
 

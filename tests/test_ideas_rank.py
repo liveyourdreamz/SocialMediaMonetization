@@ -91,6 +91,7 @@ def test_the_ninety_day_memory_unless_demand_doubles():
 
 def test_same_topic_reads_meaning_words_not_filler():
     assert same_topic("How solar panels got cheap", "Why solar panels got so cheap")
+    assert same_topic("How a heat pump moves heat", "How heat pumps move heat")  # plurals fold
     assert not same_topic("How solar panels got cheap", "How tides work")
     assert same_topic("كيف تعمل الألواح الشمسية", "كيف تعمل الألواح الشمسية الجديدة")
 

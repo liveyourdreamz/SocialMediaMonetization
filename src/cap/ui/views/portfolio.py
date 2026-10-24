@@ -65,21 +65,11 @@ def canary_record(store: PostStore) -> tuple[int, int]:
 
 
 def canary_rate(store: PostStore) -> str:
-    """The schedule restarts at a miss (P14): count cards closed since the last one."""
-    closed = _finalised(store)
-    misses = [
-        p.approval.decided_at
-        for p in store.all()
-        if p.flags.canary_outcome == "missed" and p.approval.decided_at
-    ]
-    since = max(misses) if misses else None
-    reviewed = sum(1 for p in closed if since is None or (p.approval.decided_at or since) > since)
-    seen = 0
-    for n, m in get_settings().canary_schedule:
-        if m == 0 or reviewed < seen + m:
-            return f"1 in {n}"
-        seen += m
-    return f"1 in {get_settings().canary_schedule[-1][0]}"
+    """The rate the next card is seeded at (cap.domain.canary, the one rule)."""
+    from cap.demo.canary_job import closed_cards
+    from cap.domain.canary import rate
+
+    return f"1 in {rate(closed_cards(store))}"
 
 
 def portfolio(store: PostStore) -> Portfolio:
@@ -123,7 +113,9 @@ def portfolio(store: PostStore) -> Portfolio:
     )
     c, m = canary_record(store)
     can = Figure(
-        "Canaries", f"{c} caught · {m} missed", f"rate {canary_rate(store)} · resets at a miss"
+        "Canaries",
+        f"{c} caught · {m} missed",
+        f"rate {canary_rate(store)} · 1 in 3 for 10 cards after a miss",
     )
 
     # channels

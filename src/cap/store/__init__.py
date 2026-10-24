@@ -81,6 +81,7 @@ class AppState:
     paused_reason: str = ""
     analytics: dict[str, Any] = field(default_factory=dict)
     analytics_note: str = ""
+    canary_gap: int = 0  # cards to wait before the next canary; 0 = draw (cap.domain.canary)
 
 
 class PostStore(ABC):

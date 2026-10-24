@@ -59,6 +59,49 @@ def ok(**fields):  # type: ignore[no-untyped-def]
     }
 
 
+# What the mock canary writer plants, per fault type: (where, the planted text). The
+# real writer (P14) plants subtler faults; these exist so the loop runs offline.
+MOCK_FAULTS = {
+    "unsourced_number": ("script", "About 73% of people never notice this."),
+    "missing_ad_prefix": ("caption", "Thanks to today's sponsor for making this episode possible."),
+    "out_group_title": ("title", "Why THEY keep getting this wrong: "),
+    "first_person_human_claim": ("script", "When I was a boy, my father showed me this."),
+    "sponsor_verdict": ("script", "Our sponsor's version is simply the best one to buy."),
+    "kids_styled_visual": ("on_screen_text", "Bright cartoon balloons and a sing-along jingle"),
+    "reused_cold_open": ("script", "From orbit, here's what I see. A white line of salt."),
+}
+
+
+def mock_canary(call):  # type: ignore[no-untyped-def]
+    """The offline P14: plants the named fault in the base draft, one fault only."""
+    import json as _json
+    import re as _re
+
+    fault = _re.search(r"<fault_type>(\w+)</fault_type>", call.user).group(1)
+    base = _json.loads(_re.search(r"<base_draft>(.*)</base_draft>", call.user, _re.S).group(1))
+    where, text = MOCK_FAULTS[fault]
+    draft = {
+        k: base.get(k, "" if k not in ("shot_list", "on_screen_text") else [])
+        for k in ("title", "script", "shot_list", "caption", "on_screen_text", "thumbnail_text")
+    }
+    if where == "title":
+        draft["title"] = text + draft["title"]
+    elif where == "on_screen_text":
+        draft["on_screen_text"] = [*draft["on_screen_text"], text]
+    elif where == "caption":
+        draft["caption"] = text
+    else:
+        draft["script"] = draft["script"] + " " + text
+    return ok(
+        canary_draft=draft,
+        planted_fault={
+            "type": fault,
+            "span": text,
+            "why_catchable": "planted by the offline canary writer",
+        },
+    )
+
+
 def happy_fixtures() -> dict:
     web = str(SOURCES[0]["url"])
     claims: list[dict[str, object]] = [
@@ -132,6 +175,7 @@ def happy_fixtures() -> dict:
                 },
             ]
         ),
+        ("P14", "default"): mock_canary,
         ("P1", "A"): ok(verdict="pass", rule_findings=[]),
         ("P1", "B"): ok(verdict="pass", rule_findings=[]),
         ("P9", "default"): ok(

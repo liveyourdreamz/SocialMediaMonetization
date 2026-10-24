@@ -16,7 +16,7 @@ import datetime as dt
 import threading
 from abc import ABC, abstractmethod
 
-from cap.schema.ideas import DECIDED, Idea, IdeaStatus
+from cap.schema.ideas import DECIDED, HIDDEN, Idea, IdeaStatus
 
 MEMORY_DAYS = 90
 
@@ -61,6 +61,11 @@ class IdeaBook(ABC):
     ) -> Idea: ...
 
     @abstractmethod
+    def take_for_canary(self, idea_id: str) -> Idea:
+        """Take a shown idea out of the Digest to be a canary's base (P14); IdeaDecidedError
+        when it is no longer shown."""
+
+    @abstractmethod
     def expire(self, before: dt.date) -> int:
         """Ideas still shown from a week before `before` become expired; returns how many."""
 
@@ -91,7 +96,7 @@ class MemoryIdeaBook(IdeaBook):
                 for i in self._ideas.values()
                 if i.channel == channel
                 and i.week == monday
-                and (not shown_only or i.status != IdeaStatus.HELD)
+                and (not shown_only or i.status not in HIDDEN)
             ]
         return sorted(found, key=lambda i: (i.rank == 0, i.rank))
 
@@ -104,6 +109,16 @@ class MemoryIdeaBook(IdeaBook):
             done = _decide(self._ideas[idea_id], status, topic_edit, post_id)
             self._ideas[idea_id] = done
             return done.model_copy(deep=True)
+
+    def take_for_canary(self, idea_id: str) -> Idea:
+        with self._lock:
+            if idea_id not in self._ideas:
+                raise IdeaNotFoundError(idea_id)
+            i = self._ideas[idea_id]
+            if i.status != IdeaStatus.SHOWN:
+                raise IdeaDecidedError(f"idea {idea_id} is {i.status.value}")
+            self._ideas[idea_id] = i.model_copy(update={"status": IdeaStatus.CANARY})
+            return self._ideas[idea_id].model_copy(deep=True)
 
     def expire(self, before: dt.date) -> int:
         n = 0

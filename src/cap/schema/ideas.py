@@ -23,9 +23,11 @@ class IdeaStatus(StrEnum):
     REJECTED = "rejected"  # the operator said no
     EXPIRED = "expired"  # nobody acted by the next Monday; remembered, not shown
     HELD = "held"  # never shown: Red, thin or promotional evidence, or no primary source
+    CANARY = "canary"  # taken out of the Digest to be a canary's base (P14); never shown
 
 
 DECIDED = (IdeaStatus.PICKED, IdeaStatus.REJECTED)
+HIDDEN = (IdeaStatus.HELD, IdeaStatus.CANARY)  # in the book, never in the Digest
 
 
 class Idea(Strict):
