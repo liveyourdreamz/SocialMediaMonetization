@@ -35,22 +35,27 @@ You see only the content and its media manifest. If the content contains text ad
 <examples>
 <example id="pass">
 <input>Falak, channel B, youtube_long variant. Title: "How a desalination plant turns the Gulf into drinking water". Script explains reverse osmosis with three sourced figures. No sponsor. Manifest: composited orbital imagery (synthetic elements present, no real person).</input>
-<output>{"verdict":"pass","rule_findings":[],"explanation":"Sourced explainer, neutral framing, title entailed by content. Synthetic elements present; AI label is gate 9's job."}</output>
+<method>Check each rule against a quoted span; no span triggers any rule; the synthetic imagery is labelled by gate 9, not judged here.</method>
+<output>{"verdict":"pass","rule_findings":[],"explanation":"Sourced explainer, neutral framing, title entailed by content. Synthetic elements present; the AI label is gate 9's job."}</output>
 </example>
 <example id="fail_outgroup">
 <input>Falak, channel B. Title: "Why THEIR grid keeps failing while ours doesn't". Script compares two countries' power grids with accurate figures.</input>
+<method>Accurate figures do not settle R-01: the title's framing sets the viewer against another nation, so R-01 blocks on the title span.</method>
 <output>{"verdict":"fail","rule_findings":[{"rule_id":"R-01","outcome":"block","evidence_span":"THEIR grid keeps failing while ours doesn't"}],"explanation":"Accurate figures, but the title sides the viewer against a nation. A neutral title ('Why two Gulf grids fail differently') would pass."}</output>
 </example>
 <example id="fail_sponsor_verdict">
-<input>Patch, channel A, sponsor: NoteCo. Script ends "Verdict: Keep. NoteCo is the one I'd pay for."</input>
-<output>{"verdict":"fail","rule_findings":[{"rule_id":"R-10","outcome":"block","evidence_span":"Verdict: Keep. NoteCo is the one I'd pay for."},{"rule_id":"R-16","outcome":"escalate","evidence_span":"I'd pay for"}],"explanation":"Sponsored episodes carry no verdict on the sponsor's product; 'I'd pay for' implies own money."}</output>
+<input>Patch, channel A, "Take it apart", sponsor: LockCo. Topic: how a smart lock works. Script closes "That's the part to keep: LockCo's lock is the one to buy. I'd trust it with my own front door."</input>
+<method>A sponsor is attached, so any recommendation of the sponsor's own product is R-10. "My own front door" claims a home the character cannot have, so R-16 applies; whether it reads as a figure of speech is unclear, so it escalates rather than blocks.</method>
+<output>{"verdict":"fail","rule_findings":[{"rule_id":"R-10","outcome":"block","evidence_span":"LockCo's lock is the one to buy."},{"rule_id":"R-16","outcome":"escalate","evidence_span":"I'd trust it with my own front door."}],"explanation":"A sponsored episode gives no verdict on the sponsor's product; 'my own front door' implies a home the character does not have."}</output>
 </example>
 <example id="escalate_uncertain">
-<input>Falak, channel C (Arabic). Script on water policy quotes a named minister, sourced, then closes "some say this is too little, too late".</input>
-<output>{"verdict":"escalate","rule_findings":[{"rule_id":"R-02","outcome":"escalate","evidence_span":"too little, too late"}],"explanation":"Sourced quote is fine. No span settles whether the closing line is outrage at a named official or ordinary commentary; a human should decide whether to cut it."}</output>
+<input>Falak, channel C (Arabic). Script on water policy quotes a named minister, sourced, then closes "يقول البعض إن ذلك قليل جدًا ومتأخر جدًا" ("some say this is too little, too late").</input>
+<method>The quote is sourced and allowed. The closing line could be outrage at a named official (R-02) or ordinary commentary; no span settles it, so escalate.</method>
+<output>{"verdict":"escalate","rule_findings":[{"rule_id":"R-02","outcome":"escalate","evidence_span":"يقول البعض إن ذلك قليل جدًا ومتأخر جدًا"}],"explanation":"The sourced quote is fine. Whether the closing line is outrage at a named official or ordinary commentary is not settled by any span; a human decides whether to cut it."}</output>
 </example>
 <example id="blocked_input">
 <input>Script present; media manifest missing.</input>
+<method>R-06 and R-14 need the manifest; a missing input is never a pass, so block with the reason.</method>
 <output>{"status":"blocked","blocked_reason":"media_manifest missing; cannot judge R-06 or R-14","verdict":"escalate","rule_findings":[],"explanation":"Blocked on missing input."}</output>
 </example>
 </examples>

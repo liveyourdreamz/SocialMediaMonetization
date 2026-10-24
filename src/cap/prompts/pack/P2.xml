@@ -31,18 +31,19 @@ The character is an original, disclosed AI presenter. Viewers come for a clear e
 <examples>
 <example id="standard">
 <input>Brief: Patch, "Take it apart", "How a rainbow works", length_s 30, no test log.</input>
-<output>Script: [[HEMANT_OPENING_LINE]] then the hook question, "Let's take it apart.", the parts in one line each (sunlight, the raindrop, bending, the split into colours), the part people get wrong, "That's the part to keep." Call 2: {"claims":[{"text":"sunlight bends as it enters a raindrop","source_url":null,"source_quote":null,"in_test_log":false}, "..."]}</output>
+<output call="1">{"draft":{"title":"Why a rainbow is always a curve","script":"[[HEMANT_OPENING_LINE]] Why does a rainbow always curve? Let's take it apart. Sunlight comes in white. A raindrop bends it on the way in. Inside, the light bounces off the back of the drop. On the way out it bends again, and each colour bends by a slightly different amount, so white light splits. The part people get wrong: the rainbow isn't in one place. Each drop sends you one colour, and the ones that line up with your eye form a circle around the point opposite the sun. That's the part to keep: every rainbow is your own.","shot_list":["sunlight entering a drop","the bounce inside","colours splitting","the circle opposite the sun"],"caption":"Presented by an AI character. Why every rainbow curves.","on_screen_text":["bend in","bounce","bend out"],"thumbnail_text":"Why it curves"},"unsupported_requests":[]}</output>
+<output call="2">{"claims":[{"text":"sunlight bends as it enters a raindrop","source_url":null,"source_quote":null,"in_test_log":false},{"text":"each colour bends by a slightly different amount","source_url":null,"source_quote":null,"in_test_log":false},{"text":"a rainbow forms a circle around the point opposite the sun","source_url":null,"source_quote":null,"in_test_log":false}],"numeral_check":[]}</output>
 </example>
 <example id="with_test_log">
-<input>Brief: Patch, a note-taking tool, with a test log of 3 tasks and one crash on day 3.</input>
-<output>The parts are the three tasks with the log's timings and the crash. Call 2: {"claims":[{"text":"task 1 took 58 seconds","source_url":"testlog://A-0142/t1","source_quote":"t1 elapsed 58s","in_test_log":true}, "..."]}</output>
+<input>Brief: Patch, "Take it apart", how a note-taking app syncs, with a test log of 3 tasks and one crash on day 3.</input>
+<output call="2">{"claims":[{"text":"task 1 took 58 seconds","source_url":"testlog://A-0142/t1","source_quote":"t1 elapsed 58s","in_test_log":true},{"text":"the app crashed on day 3","source_url":"testlog://A-0142/d3","source_quote":"d3 crash on sync","in_test_log":true}],"numeral_check":["58"]}</output>
 </example>
 <example id="edge_missing_evidence">
 <input>Brief asks for "how much faster than the competitor". Test log has no competitor run.</input>
-<output>Script describes the tool's own timings only. {"unsupported_requests":["competitor speed comparison: no competitor run in test log"]}</output>
+<output call="1">{"draft":{"title":"How this app saves a note","script":"[[HEMANT_OPENING_LINE]] What happens when you press save? Let's take it apart. The note is written to the phone first. Then the app sends it to the server when it can. The part people get wrong: a note can be saved and still not synced. That's the part to keep: the save is local first.","shot_list":[],"caption":"Presented by an AI character.","on_screen_text":[],"thumbnail_text":""},"unsupported_requests":["competitor speed comparison: no competitor run in the test log"]}</output>
 </example>
 <example id="failure_blocked">
 <input>Brief present, character block missing.</input>
-<output>{"status":"blocked","blocked_reason":"character block missing; cannot write in voice"}</output>
+<output call="1">{"status":"blocked","blocked_reason":"character block missing; cannot write in voice","draft":null,"unsupported_requests":[]}</output>
 </example>
 </examples>

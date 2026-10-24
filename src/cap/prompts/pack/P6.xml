@@ -21,7 +21,7 @@ The brief is the contract the writer works to. A brief that names a format the c
 </criteria>
 
 <examples>
-<example id="standard"><input>Falak idea: monsoon formation, 6 sourced facts, no sponsor.</input><output>{"format_id":"from_orbit","anchor_elements":["orbital opening","logbook entry","sign-off"],"claims_allowed":["monsoon mechanism","rainfall figures cited"],"length_s":600}</output></example>
-<example id="edge_health_adjacent"><input>Patch idea: how sleep trackers work.</input><output>{"format_id":"tested_7_days","claims_allowed":["sensor mechanism","app features tested"],"explanation":"excluded sleep quality or health outcomes; code sets lane high"}</output></example>
+<example id="standard"><input>Falak idea: monsoon formation, 6 sourced facts, no sponsor.</input><output>{"format_id":"from_orbit","anchor_elements":["from orbit","logbook"],"claims_allowed":["monsoon mechanism","rainfall figures cited"],"length_s":600}</output></example>
+<example id="edge_health_adjacent"><input>Patch idea: how sleep trackers work.</input><output>{"format_id":"take_it_apart","anchor_elements":["take it apart","Patch"],"claims_allowed":["sensor mechanism","what the app measures"],"length_s":300,"explanation":"excluded sleep quality and health outcomes; code sets the lane high"}</output></example>
 <example id="blocked"><input>Idea has no evidence and seeds only.</input><output>{"status":"blocked","blocked_reason":"no evidence to scope claims"}</output></example>
 </examples>

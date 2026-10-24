@@ -24,7 +24,7 @@ The writer will revise once from your notes and then the draft goes to four auto
 </criteria>
 
 <examples>
-<example id="standard"><input>Patch draft; verdict segment says Keep but no test evidence is cited in that beat.</input><output>{"verdict":"revise","issues":[{"rubric_item":"sourcing","severity":"blocker","span":"Verdict: Keep.","instruction":"state the two log results the verdict rests on in the sentence before it"}]}</output></example>
+<example id="standard"><input>Patch draft "Why a rainbow is always a curve"; the part-people-get-wrong beat says "the circle is always 42 degrees wide", but the claims list has no 42.</input><output>{"verdict":"revise","issues":[{"rubric_item":"sourcing","severity":"blocker","span":"the circle is always 42 degrees wide","instruction":"list the 42-degree figure as a claim, or cut it; it is also the cone's half-angle, not the circle's width"}],"estimated_length_s":30}</output></example>
 <example id="edge_length"><input>Falak draft estimated at 14 minutes against a 10-minute brief.</input><output>{"verdict":"revise","issues":[{"rubric_item":"pacing","severity":"major","span":"beats 4 and 5","instruction":"merge the two orbital passes into one; cut the second analogy"}],"estimated_length_s":840}</output></example>
-<example id="accept"><input>Draft meets all rubric items; one sentence has a term unexplained.</input><output>{"verdict":"accept","issues":[{"rubric_item":"clarity","severity":"minor","span":"brine reject","instruction":"add 'the salty water left over' after it"}]}</output></example>
+<example id="accept"><input>Draft meets all rubric items; one sentence has a term unexplained.</input><output>{"verdict":"accept","issues":[{"rubric_item":"clarity","severity":"minor","span":"brine reject","instruction":"add 'the salty water left over' after it"}],"estimated_length_s":540}</output></example>
 </examples>

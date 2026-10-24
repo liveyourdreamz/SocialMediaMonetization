@@ -24,7 +24,7 @@ The operator reads this on a phone in two minutes. He wants to know: is any chan
 </criteria>
 
 <examples>
-<example id="standard"><input>Table shows channel A median views 1,200, RPM and cost per post, revenue estimated.</input><output>{"digest_markdown":"No freezes. Channel A: 4 posts approved, median 1,200 views...","numbers_used":[{"value":1200,"cell":"A.median_views","entity":"channel A"}]}</output></example>
-<example id="spike"><input>Revenue per post doubled; table attributes 80% of views to one Short.</input><output>{"digest_markdown":"Revenue per post rose to X (estimated), driven by one Short (post 7b2e) with Y views; the other posts were in line with last week."}</output></example>
-<example id="delayed"><input>Reporting data missing for 2 days.</input><output>{"digest_markdown":"YouTube data is delayed; figures use data to Friday 10 October."}</output></example>
+<example id="standard"><input>Table shows channel A: 4 posts approved, median 1,200 views, revenue estimated $14.40.</input><output>{"digest_markdown":"No freezes. Channel A: 4 posts approved, median 1,200 views, revenue $14.40 (estimated).","numbers_used":[{"value":4,"cell":"A.approved","entity":"channel A"},{"value":1200,"cell":"A.median_views","entity":"channel A"},{"value":14.4,"cell":"A.revenue_usd","entity":"channel A"}],"flags":[]}</output></example>
+<example id="spike"><input>Revenue per post rose from $3.10 to $6.40; the table attributes 80% of views to one Short (post 7b2e, 41,000 views).</input><output>{"digest_markdown":"Revenue per post rose to $6.40 (estimated), driven by one Short (post 7b2e) with 41,000 views; the other posts were in line with last week.","numbers_used":[{"value":6.4,"cell":"all.revenue_per_post","entity":"portfolio"},{"value":41000,"cell":"7b2e.views","entity":"post 7b2e"}],"flags":["one post carries 80% of the week's views"]}</output></example>
+<example id="delayed"><input>Reporting data missing for 2 days; the last complete day is Friday 10 October.</input><output>{"digest_markdown":"YouTube data is delayed; figures use data to Friday 10 October.","numbers_used":[],"flags":["data delayed 2 days"]}</output></example>
 </examples>
