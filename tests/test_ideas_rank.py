@@ -104,3 +104,17 @@ def test_demand_scores_on_a_capped_log_scale(ratio, score):
 def test_revenue_is_a_band_from_the_assumption():
     assert revenue_band("A") == (10.0, 100.0)
     assert revenue_band("C") == (2.0, 20.0)
+
+
+def test_a_held_idea_remembers_nothing():
+    """Review R11: an idea Hemant never saw must not block its topic."""
+    import datetime as dt
+
+    from cap.ideas.rank import remembered
+    from cap.schema.ideas import Idea, IdeaStatus
+
+    held = Idea(channel="A", week=dt.date(2026, 10, 19), rank=0, topic="How tides work",
+                status=IdeaStatus.HELD, held_reason="no primary source")  # fmt: skip
+    assert not remembered("How tides work", 1.0, [held])
+    shown = held.model_copy(update={"status": IdeaStatus.EXPIRED})
+    assert remembered("How tides work", 1.0, [shown])

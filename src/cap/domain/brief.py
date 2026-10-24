@@ -26,44 +26,66 @@ from cap.schema.post_record import Brief, Lane, Sponsor
 
 FORMATS: dict[str, str] = {"A": "take_it_apart", "B": "from_orbit", "C": "from_orbit"}
 
-# The sensitive areas (P5's flag list) and words that put a topic in one. Matching is
-# on whole words, case-insensitive, with an English plural ("-s", "-es") and the Arabic
-# article ("ال") allowed; a miss leaves the lane low, and the ethics judges still read
-# every script.
+# The sensitive areas (P5's flag list) and words that put a topic in one. English
+# matches whole words, case-insensitive, with a plural ("-s", "-es"); a word ending
+# in "*" matches any ending ("financ*": finance, financial, financing). Arabic allows
+# the proclitics (و ف ب ك, ل, ال, لل) and the common endings (ة ات ية ي and pronouns),
+# and lists broken plurals as words of their own. Recall matters more than precision:
+# a false positive only lengthens the card and keeps the writer from advice, a miss
+# sends a sensitive topic down the low lane (review 24 Oct). Phrases that only look
+# sensitive (a physical law, a tennis court, a laptop's sleep mode) are set aside
+# first. The ethics judges still read every script.
 SENSITIVE: dict[str, tuple[str, ...]] = {
     "health": (
-        "health", "medical", "medicine", "disease", "drug",
-        "vaccine", "diet", "nutrition", "supplement",
-        "cancer", "sleep", "mental", "symptom", "doctor",
-        "hospital", "virus", "pregnancy", "weight loss", "calories",
-        "صحة", "دواء", "مرض", "لقاح", "نوم",
+        "health*", "medic*", "pharma*", "disease", "drug", "vaccin*", "diet", "nutrition",
+        "supplement", "cancer", "sleep", "mental", "symptom", "doctor", "hospital",
+        "virus", "pregnan*", "weight loss", "calories", "insulin", "therapy",
+        "صحة", "صحي", "طبي", "دواء", "أدوية", "مرض", "أمراض", "لقاح", "نوم", "مستشفى",
     ),
     "money": (
-        "money", "invest", "investing", "investment", "stock", "shares",
-        "crypto", "bitcoin", "loan", "mortgage", "tax", "bank",
-        "insurance", "salary", "pension", "retirement", "trading", "inflation",
-        "مال", "استثمار", "بنك", "ضريبة",
+        "money", "invest*", "stock market", "stocks", "shares", "crypto*", "bitcoin",
+        "loan", "mortgage", "tax", "taxes", "bank*", "financ*", "insurance", "salary",
+        "pension", "retirement", "trading", "inflation", "debt",
+        "مال", "أموال", "استثمار", "بنك", "بنوك", "مصرف", "ضريبة", "ضرائب",
     ),
     "law": (
-        "law", "legal", "court", "lawsuit", "visa", "contract",
-        "police", "crime", "قانون", "محكمة",
+        "law", "legal", "court", "lawsuit", "visa", "contract", "police", "crime",
+        "قانون", "قوانين", "محكمة", "محاكم",
     ),
     "politics": (
-        "election", "government", "politics", "political", "war",
-        "vote", "voting", "president", "minister", "sanctions", "protest", "انتخابات",
-        "حكومة", "حرب",
+        "election", "government", "politics", "political", "war", "vote", "voting",
+        "president", "minister", "sanctions", "protest",
+        "انتخابات", "حكومة", "حرب", "حروب",
     ),
     "children": (
-        "child", "children", "kid", "baby", "babies", "toddler", "teen",
-        "teenager", "school", "طفل", "أطفال",
+        "child", "children", "kid", "baby", "babies", "toddler", "teen", "teenager", "school",
+        "طفل", "أطفال", "رضيع", "مدرسة",
     ),
 }  # fmt: skip
-_AREA_RE = {
-    area: re.compile(
-        r"(?<!\w)(?:ال)?(" + "|".join(re.escape(w) for w in words) + r")(?:e?s)?(?!\w)", re.I
-    )
-    for area, words in SENSITIVE.items()
-}
+_ARABIC = re.compile(r"[\u0600-\u06FF]")
+_LOOKS_SENSITIVE = re.compile(
+    r"\b\w+'s laws?\b|\blaws? of\b|\b(?:tennis|basketball|squash|badminton|volleyball|food) "
+    r"courts?\b|\bsleep mode\b",
+    re.I,
+)
+
+
+def _english(word: str) -> str:
+    return re.escape(word[:-1]) + r"\w*" if word.endswith("*") else re.escape(word) + r"(?:e?s)?"
+
+
+def _area_pattern(words: tuple[str, ...]) -> re.Pattern[str]:
+    en = [_english(w) for w in words if not _ARABIC.search(w)]
+    ar = [re.escape(w) for w in words if _ARABIC.search(w)]
+    parts = [r"(?<!\w)(?:" + "|".join(en) + r")(?!\w)"]
+    if ar:
+        parts.append(
+            r"(?<!\w)[وفبك]?(?:ال|لل|ل)?(?:" + "|".join(ar) + r")(?:ة|ات|ية|ي|ه|ها|هم)?(?!\w)"
+        )
+    return re.compile("|".join(parts), re.I)
+
+
+_AREA_RE = {area: _area_pattern(words) for area, words in SENSITIVE.items()}
 
 BASE_SCOPE = [
     "the mechanism as well-established sources describe it",
@@ -78,7 +100,8 @@ class BriefRefusedError(ValueError):
 
 def sensitive_areas(topic: str) -> list[str]:
     """The sensitive areas a topic touches, in a fixed order."""
-    return [area for area, rx in _AREA_RE.items() if rx.search(topic)]
+    text = _LOOKS_SENSITIVE.sub(" ", topic)
+    return [area for area, rx in _AREA_RE.items() if rx.search(text)]
 
 
 def claims_scope(areas: list[str]) -> list[str]:

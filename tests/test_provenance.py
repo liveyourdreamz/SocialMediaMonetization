@@ -65,7 +65,7 @@ def test_an_edited_file_no_longer_validates(tmp_path):
 def test_the_signing_key_is_made_once_and_kept_owner_only():
     provenance._credentials()
     folder = provenance.credentials_dir()
-    key = folder / provenance.KEY
+    _, key = provenance.credential_files(folder)
     first = key.read_bytes()
     provenance._credentials()
     assert key.read_bytes() == first
@@ -113,3 +113,34 @@ def test_a_signing_failure_fails_the_release_with_a_retry(tmp_path, monkeypatch)
     out = store.get(rec.post_id)
     assert out.release.status == ReleaseStatus.FAILED and "sign" in out.release.error
     assert not out.approval.token and release_job.can_start(out)
+
+
+def test_two_first_time_signers_never_mix_a_key_with_another_certificate(tmp_path, monkeypatch):
+    """Review 24 Oct: the key and the certificate were written separately, so two
+    first-time jobs could pair one's key with the other's certificate."""
+    import threading
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
+
+    from cap.config import get_settings
+
+    monkeypatch.setenv("CAP_C2PA_DIR", str(tmp_path / "fresh"))
+    get_settings.cache_clear()
+    pairs: list[tuple[bytes, bytes]] = []
+    start = threading.Barrier(6)
+
+    def sign() -> None:
+        start.wait()
+        pairs.append(provenance._credentials())
+
+    threads = [threading.Thread(target=sign) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    for chain, key in pairs:
+        leaf = x509.load_pem_x509_certificates(chain)[0]
+        private = serialization.load_pem_private_key(key, password=None)
+        assert leaf.public_key().public_numbers() == private.public_key().public_numbers()
+    assert len(set(pairs)) == 1  # one pair made, everyone uses it

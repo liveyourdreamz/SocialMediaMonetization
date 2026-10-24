@@ -27,7 +27,7 @@ import re
 from dataclasses import dataclass
 
 from cap.ideas.demand import DemandSignal
-from cap.schema.ideas import Idea, IdeaStatus
+from cap.schema.ideas import HIDDEN, Idea, IdeaStatus
 
 WEIGHTS = {"demand": 0.35, "constructive": 0.25, "persona": 0.20, "anchor": 0.20}
 RATIO_CAP = 10.0  # a 10x rise or more scores full demand
@@ -116,8 +116,11 @@ def held_reason(c: Candidate) -> str:
 
 
 def remembered(topic: str, ratio: float, memory: list[Idea]) -> bool:
-    """Shown or posted in the memory window, and demand has not at least doubled."""
+    """Shown or posted in the memory window, and demand has not at least doubled. A
+    held idea was never shown, so it remembers nothing (review R11)."""
     for past in memory:
+        if past.status in HIDDEN:
+            continue
         if same_topic(topic, past.topic_edit or past.topic):
             return not (past.ratio_to_baseline and ratio >= 2 * past.ratio_to_baseline)
     return False

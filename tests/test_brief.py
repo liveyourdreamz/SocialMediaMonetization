@@ -34,7 +34,18 @@ def test_every_brief_names_a_format_and_an_anchor():
         ("كيف يعمل اللقاح", ["health"]),
         ("How monsoons form", []),
         ("Why bread goes stale", []),
-        ("How banking apps encrypt data", []),  # whole words only: "banking" is not "bank"
+        ("How banking apps encrypt data", ["money"]),  # recall first (review 24 Oct)
+        ("ألعاب للأطفال", ["children"]),  # li- with the article assimilated
+        ("كيف تعمل الرعاية الصحية", ["health"]),  # an adjective with -ية
+        ("والصحة النفسية", ["health"]),  # wa- conjunction
+        ("أشهر الأمراض المعدية", ["health"]),  # a broken plural
+        ("How cryptocurrency mining works", ["money"]),
+        ("Why financial markets crash", ["money"]),
+        ("How medication reaches the brain", ["health"]),
+        ("Newton's laws of motion", []),  # looks like law, is physics
+        ("How Kepler's laws predict orbits", []),
+        ("How a tennis court is built", []),
+        ("How sleep mode saves a laptop's battery", []),
     ],
 )
 def test_sensitive_topics_go_to_the_high_lane(topic, areas):

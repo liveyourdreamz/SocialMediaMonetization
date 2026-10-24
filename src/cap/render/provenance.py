@@ -21,6 +21,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +32,8 @@ from cap.version import build_id
 
 AI_GENERATED = "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"
 MIME = {".mp4": "video/mp4", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
-CHAIN, KEY = "signer-chain.pem", "signer.key"
+CHAIN, KEY = "signer-chain.pem", "signer.key"  # the pair from before CURRENT existed
+CURRENT = "current"  # names the pair in use: "<id>", for <id>-signer-chain.pem and <id>-signer.key
 LEAF_DAYS = 730
 
 
@@ -45,7 +48,11 @@ def credentials_dir() -> Path:
 
 def _new_credentials(folder: Path) -> None:
     """A local root and one signing certificate under it (C2PA needs a chain, not a
-    lone self-signed leaf). Written owner-only; the root's key is discarded."""
+    lone self-signed leaf). Written owner-only; the root's key is discarded.
+
+    The pair is written under a fresh id, then CURRENT is switched to it in one atomic
+    rename, so a signer can never read one job's key with another's certificate
+    (review 24 Oct: two first-time jobs at once did). Old pairs stay; they are tiny."""
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
@@ -99,14 +106,18 @@ def _new_credentials(folder: Path) -> None:
         .sign(root_key, hashes.SHA256())
     )
     folder.mkdir(parents=True, exist_ok=True)
-    restrict_to_owner(folder)
+    restrict_to_owner(folder)  # the folder first: nothing inside is ever readable by others
     pem = serialization.Encoding.PEM
-    (folder / CHAIN).write_bytes(leaf.public_bytes(pem) + root.public_bytes(pem))
-    key_file = folder / KEY
+    pair = uuid.uuid4().hex[:12]
+    key_file = folder / f"{pair}-{KEY}"
     key_file.write_bytes(
         key.private_bytes(pem, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
     )
     restrict_to_owner(key_file)
+    (folder / f"{pair}-{CHAIN}").write_bytes(leaf.public_bytes(pem) + root.public_bytes(pem))
+    pointer = folder / f"{CURRENT}.{pair}.tmp"
+    pointer.write_text(pair, encoding="utf-8")
+    os.replace(pointer, folder / CURRENT)  # atomic: readers see the old pair or the new
 
 
 def _expired(chain: Path) -> bool:
@@ -116,11 +127,29 @@ def _expired(chain: Path) -> bool:
     return leaf.not_valid_after_utc <= dt.datetime.now(dt.UTC) + dt.timedelta(days=7)
 
 
+_MAKING = threading.Lock()  # one new pair at a time in this process
+
+
+def credential_files(folder: Path) -> tuple[Path, Path] | None:
+    """The (chain, key) pair CURRENT names, or the pre-CURRENT pair; None when none."""
+    current = folder / CURRENT
+    if current.is_file():
+        pair = current.read_text(encoding="utf-8").strip()
+        return folder / f"{pair}-{CHAIN}", folder / f"{pair}-{KEY}"
+    if (folder / CHAIN).is_file() and (folder / KEY).is_file():
+        return folder / CHAIN, folder / KEY
+    return None
+
+
 def _credentials() -> tuple[bytes, bytes]:
     folder = credentials_dir()
-    chain, key = folder / CHAIN, folder / KEY
-    if not (chain.is_file() and key.is_file()) or _expired(chain):
-        _new_credentials(folder)
+    with _MAKING:
+        files = credential_files(folder)
+        if files is None or _expired(files[0]):
+            _new_credentials(folder)
+            files = credential_files(folder)
+    assert files is not None
+    chain, key = files
     return chain.read_bytes(), key.read_bytes()
 
 
