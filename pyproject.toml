@@ -101,7 +101,7 @@ layers = [
     "cap.store",
     "cap.jobs | cap.audit",
     "cap.render",
-    "cap.harness | cap.research",
+    "cap.harness | cap.research | cap.ideas",
     "cap.gates",
     "cap.agents",
     "cap.post_context",
