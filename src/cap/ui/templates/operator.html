@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Operator · Content Agent Portfolio{% endblock %}
+{% block body %}
+{% if running %}<meta http-equiv="refresh" content="8">{% endif %}
+<main class="screen">
+  <header class="stack-sm">
+    <h1 style="font-size: 28px; line-height: 32px; font-weight: 600; margin: 0">New post</h1>
+    <p class="meta">A topic is enough. Research, script, checks and video run on their own; you review the result.</p>
+  </header>
+
+  {% if error %}<div class="error" role="alert"><strong>Not run.</strong> {{ error }}</div>{% endif %}
+  {% if audit_check and not audit_check.ok %}<div class="error" role="alert"><strong>The audit log has been altered.</strong> {{ audit_check.why }}. Someone or something changed the database outside the app; the app carries on, and this is recorded.</div>{% endif %}
+  <form id="brief" method="post" action="/operator/brief" class="card stack" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <fieldset class="field" style="border: 0; padding: 0; margin: 0">
+      <legend class="eyebrow" style="margin-bottom: 8px">Channel</legend>
+      <p class="meta" style="margin: 0 0 8px">Auto picks Falak for what is best seen from above (earth, weather, space) and Patch for things taken apart up close.</p>
+      <div class="chips">
+        <label class="chip"><input type="radio" name="channel" value="auto" checked><span>Auto</span></label>
+        {% for ch in settings.channels %}<label class="chip"><input type="radio" name="channel" value="{{ ch }}"><span>{{ ch }} · {{ settings.channel_characters.get(ch, '') }}{% if settings.channel_languages.get(ch) == 'ar' %} · عربي{% endif %}</span></label>{% endfor %}
+      </div>
+    </fieldset>
+    <div class="field">
+      <label for="topic" class="eyebrow">Topic</label>
+      <input class="input" id="topic" name="topic" placeholder="e.g. How cocoons work" required maxlength="140" autocomplete="off">
+    </div>
+    <details>
+      <summary style="cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center">More: test log, pinned pages, screenshots</summary>
+      <div class="stack" style="margin-top: 8px">
+        <div class="field">
+          <label for="test_log">Your test log (Patch: the first-hand results the episode reports)</label>
+          <textarea class="input" id="test_log" name="test_log" rows="3" placeholder="Day 3: sync failed twice at 08:12 and 08:40"></textarea>
+        </div>
+        <div class="field">
+          <label for="urls">Pin a page (optional, one URL per line)</label>
+          <textarea class="input" id="urls" name="urls" rows="2" placeholder="https://…"></textarea>
+        </div>
+        <div class="field">
+          <label for="media">Screenshots (optional, shown in order)</label>
+          <input class="input" id="media" name="media" type="file" accept=".png,.jpg,.jpeg,.webp" multiple>
+        </div>
+      </div>
+    </details>
+    <button class="btn primary" type="submit">Create the post</button>
+    {% if settings.model_backend.value == 'mock' %}<p class="meta">No API key yet: the draft will be the sample episode.</p>{% endif %}
+  </form>
+
+  <section class="stack">
+    <div class="row"><h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em; margin: 0">Your posts</h2><a href="/tour" class="linkbtn" style="font-size: 14px">Guided tour</a></div>
+    <div class="stack-sm">
+      {% for p in recent %}
+      {% set flow = workflow(p) %}
+      <a class="card tight link" href="/posts/{{ p.post_id }}{% if p.status.value in ('approved', 'published') %}/preview{% endif %}" style="gap: 6px">
+        <span class="read" style="font-size: 16px; line-height: 22px">{{ p.draft.title or p.brief.topic }}</span>
+        <span class="row" style="justify-content: flex-start; gap: 10px">{% set flow_compact = true %}{% include "_flow.html" %}{% set flow_compact = false %}<span class="meta{% if flow.stopped %} word-signal{% endif %}">{{ flow.number }}/{{ flow.total }} · {{ flow.headline }}</span></span>
+        <span class="meta">{{ p.channel_id.value }} · {{ settings.channel_characters.get(p.channel_id.value, '') }}{% if flow.stopped and flow.reason %} · {{ flow.reason[:110] }}{% endif %}</span>
+      </a>
+      {% else %}
+      <p class="meta">No posts yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Outbox: approved, waiting to publish</h2>
+    <div class="stack-sm">
+      {% if outbox %}
+      {% for p in outbox %}
+      <a class="card tight link" href="/posts/{{ p.post_id }}/preview" style="gap: 4px">
+        <div class="row"><span class="tag">{{ p.channel_id.value }}</span><span class="meta">approved {{ p.approval.decided_at | day(False, True) if p.approval.decided_at else '' }}</span></div>
+        <span class="read" style="font-size: 16px">{{ p.draft.title }}</span>
+        <span class="meta">{% if p.release.status.value == 'preparing' %}Preparing the final video{% elif p.release.status.value == 'ready' %}See what goes out, then publish{% else %}The final video is not made yet: open it to see why{% endif %}</span>
+      </a>
+      {% endfor %}
+      {% else %}<div class="card tight muted">Nothing waiting. An approval puts the post here with its token; it leaves when you (today) or the scheduler (later) press Publish.</div>{% endif %}
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Published</h2>
+    <div class="stack-sm">
+      {% if published %}
+      {% for p in published %}
+      <div class="card tight stack-sm" style="gap: 4px">
+        <div class="row"><span class="tag">{{ p.channel_id.value }}</span><span class="meta">{{ p.publish.published_at | day(False, True) if p.publish.published_at else '' }}</span></div>
+        <span class="read" style="font-size: 16px">{{ p.draft.title }}</span>
+        <span class="meta" style="font-family: var(--font-mono)">{% for k, v in p.publish.platform_post_ids.items() %}{{ k }}: {{ v }}{% endfor %}</span>
+      </div>
+      {% endfor %}
+      {% else %}<div class="card tight muted">Nothing published yet. An approval makes the final video and issues the token; the publisher verifies it against the release manifest and writes the post to the local folder (the YouTube adapter replaces that step).</div>{% endif %}
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="hr" style="margin: var(--space-6) 0 var(--space-4)"></div>
+    <h2 style="font-size: 22px; line-height: 28px; font-weight: 600; margin: 0 0 4px">Settings</h2>
+    <p class="meta" style="margin: 0 0 var(--space-4)">Rarely needed. Keys live in .env and on Connections; nothing secret is shown here.</p>
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Queue state</h2>
+    <p class="meta">Running build: <span style="font-family: var(--font-mono)">{{ build }}</span> · restart the app (run install.bat again) to pick up a newer one</p>
+    {% if phone_urls is defined and phone_urls %}<p class="meta">On your phone (same Wi-Fi): {% for u in phone_urls %}<a href="{{ u }}" style="font-family: var(--font-mono)">{{ u }}</a>{% if not loop.last %} · {% endif %}{% endfor %} · the sign-in secret is printed in the laptop's app window</p>{% endif %}
+    <div class="card tight stack-sm">
+      {% if paused %}
+      <span class="word-signal">Paused: {{ queue_state.paused_reason }}</span>
+      <form method="post" action="/paused/reopen"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn secondary sm" type="submit">Reopen the queue</button></form>
+      {% else %}<span class="word-pass"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px"><path d="M20 6 9 17l-5-5"/></svg> Open</span>{% endif %}
+      <span class="meta">Environment {{ settings.env }} · region {{ settings.gcp_region }} · model backend {{ settings.model_backend.value }} · sign-in {{ 'Google' if settings.google_enabled else 'local stand-in' }} · records in {{ settings.data_dir }}/</span>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">People</h2>
+    <div class="card tight kv">
+      <span>Approvers</span><span>{{ settings.approvers | join(', ') }}</span>
+      <span>Arabic reviewers</span><span>{{ settings.arabic_reviewers | join(', ') if settings.arabic_reviewers else 'none yet (channel C cannot approve until one is named)' }}</span>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Channels and cadence</h2>
+    <a href="/connections" class="card tight link" style="text-decoration: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px"><span class="stack-sm" style="gap: 2px"><span class="eyebrow">Connections</span><span style="font-size: 15px">YouTube, Facebook Page and Instagram, TikTok: credentials and account connections{% if connections_summary %} · {{ connections_summary }}{% endif %}</span></span><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></a>
+    <div class="card tight kv">
+      {% for ch in settings.channels %}<span>{{ ch }} · {{ settings.channel_characters.get(ch, '') }}</span><span>{{ settings.channel_languages.get(ch, 'en') }} · {{ settings.longform_per_channel_per_month }} long-form, {{ settings.shorts_cap_per_channel_per_month }} Shorts a month</span>{% endfor %}
+      <span>Idle pause</span><span>{{ settings.queue_idle_pause_hours }} hours</span>
+      <span>Video length</span><span>{{ settings.video_length_s }} seconds · change CAP_VIDEO_LENGTH_S in .env, then restart</span>
+      <span>Claims per post</span><span>at most {{ settings.max_claims }} · change CAP_MAX_CLAIMS in .env, then restart · unconfirmed claims are {{ 'flagged on the card' if settings.fact_mode == 'flag' else 'a rejection' }}</span>
+      <span>Pilot start</span><span>{{ settings.pilot_start or 'not set' }}</span>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Reviewer protections</h2>
+    <div class="card tight kv">
+      <span>Blind-first (D33)</span><span>{{ 'on' if settings.blind_first_enabled else 'off' }} · review at {{ settings.blind_review_point_cards }} cards</span>
+      <span>Canary schedule (P14)</span><span>{% for n, m in settings.canary_schedule %}1 in {{ n }}{% if m %} for {{ m }} cards{% else %} after{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+      <span>"Other" flag (D34)</span><span>above {{ (settings.reject_other_share_flag * 100) | round | int }}% of rejections</span>
+      <span>Approval token TTL</span><span>7 days, bound to the release manifest (every file, text and flag); re-issue on the Outbox</span>
+    </div>
+  </section>
+
+  <section class="stack" id="ideas">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Trend research</h2>
+    <div class="card tight stack-sm">
+      <span class="meta">Runs by itself every Monday at 08:00 Dubai time and fills the Digest with each channel's ideas. Run it now to see this week's ideas earlier; a week that already has ideas keeps them.</span>
+      {% for line in idea_runs %}<span class="meta tabular">{{ line }}</span>{% else %}<span class="muted">No runs yet.</span>{% endfor %}
+      <form method="post" action="/operator/ideas"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" type="submit">Run trend research now</button></form>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Parked posts</h2>
+    <div class="stack-sm">
+      {% if parked %}
+      {% for p, reason in parked %}
+      <div class="card tight stack-sm">
+        <span class="tag">{{ p.channel_id.value }}</span>
+        <span class="read" style="font-size: 17px">{{ p.draft.title or p.brief.topic }}</span>
+        <span class="muted" style="font-size: 13px">{{ reason }}</span>
+        <span class="meta">Deciding a parked post re-runs its gates; that control arrives with the gate re-run loop (week 2).</span>
+      </div>
+      {% endfor %}
+      {% else %}<div class="card tight muted">Nothing parked.</div>{% endif %}
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Audit log</h2>
+    <div class="card tight muted" style="font-size: 13px">Every record carries its own append-only history; the cross-record audit log and retention period are open items (PRD 6).</div>
+  </section>
+</main>
+{% endblock %}

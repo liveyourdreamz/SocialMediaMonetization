@@ -1,0 +1,5 @@
+# Batch files are stored with CRLF bytes and never converted. install.bat is downloaded
+# raw from GitHub (no git on the laptop yet to convert it), and cmd misreads a batch file
+# with LF line endings (labels and goto jump to the wrong place).
+*.bat -text
+*.ps1 text eol=crlf

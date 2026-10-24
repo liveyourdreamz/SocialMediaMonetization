@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Connections · Content Agent Portfolio{% endblock %}
+{% block body %}
+<main class="screen">
+  <div class="row" style="font-size: 14px">
+    <a href="/operator" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 500"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Operator</a>
+  </div>
+  <header class="stack-sm">
+    <h1 style="font-size: 28px; line-height: 32px; font-weight: 600">Connections</h1>
+    <p class="muted" style="font-size: 14px; line-height: 20px">The channels an approved post can go to. Each has two steps: the developer-app credentials you create in that platform's console (typed here, kept only in <code>cap-data/connections</code> on this laptop, never shown back in full), then <strong>Connect</strong>, which sends you to the platform to sign in and grant the app access to your account. The local folder is always a destination: it is the record of exactly what went out.</p>
+  </header>
+
+  {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+  {% if connected %}<div class="banner verdict"><span class="eyebrow">Connected</span><span class="head">{{ connected }} is connected</span></div>{% endif %}
+  {% if saved %}<p class="meta"><span class="word-pass">Saved</span> credentials for {{ saved }}.</p>{% endif %}
+
+  {% for p in platforms %}
+  <section class="card stack" id="{{ p.key }}">
+    <div class="row" style="align-items: flex-start">
+      <span class="stack-sm" style="gap: 2px">
+        <span style="font-size: 18px; font-weight: 600">{{ p.label }}</span>
+        <span class="meta">carries: {% for d in p.destinations %}{{ d | replace('_', ' ') }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+      </span>
+      {% if p.connected %}<span class="tag word-pass">connected</span>{% elif p.credentials_complete %}<span class="tag">credentials saved</span>{% else %}<span class="tag muted">not set up</span>{% endif %}
+    </div>
+
+    {% if p.credentials_complete and not p.connected %}
+    <div class="stack-sm">
+      <a class="btn primary" href="/connections/{{ p.key }}/connect">Connect {{ p.label.split(' ')[0] }}</a>
+      <span class="muted" style="font-size: 13px; line-height: 18px">Opens {{ p.label.split(' ')[0] }}'s sign-in in this browser; choose the account that owns the channel and allow the app. You come back here with the account name shown.</span>
+    </div>
+    {% endif %}
+    {% if p.connected %}
+    <div class="kv" style="font-size: 14px">
+      <span>Account</span><span><strong>{{ p.account.name }}</strong>{% if p.account.instagram %} · Instagram @{{ p.account.instagram }}{% elif p.key == 'meta' %} · no Instagram account linked to the Page{% endif %}</span>
+      <span>Since</span><span>{{ p.connected_at[:16] | replace('T', ' ') }}</span>
+    </div>
+    <form method="post" action="/connections/{{ p.key }}/disconnect" class="row" style="gap: 8px"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn secondary sm" type="submit">Disconnect</button>
+      <a class="btn quiet sm" href="/connections/{{ p.key }}/connect">Reconnect</a>
+    </form>
+    {% endif %}
+
+    <details {% if not p.credentials_complete %}open{% endif %}>
+      <summary style="cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center">Credentials{% if p.from_env %} (from .env){% elif p.credentials %} (saved){% endif %}</summary>
+      <form method="post" action="/connections/{{ p.key }}/credentials" class="stack-sm" style="margin-top: 8px" autocomplete="off"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <p class="muted" style="font-size: 13px; line-height: 18px">{{ p.console_note }} <a href="{{ p.console }}" target="_blank" rel="noopener">Open the console</a>. Register this redirect URI on the app: <code style="word-break: break-all">{{ redirect_uris[p.key] }}</code>{% if p.key == 'youtube' %} (and, for sign-in, <code style="word-break: break-all">{{ signin_uri }}</code>){% endif %}.</p>
+        {% for field, label in p.fields %}
+        <div class="field">
+          <label for="{{ p.key }}-{{ field }}">{{ label }}{% if p.credentials.get(field) %} <span class="muted">· saved {{ p.credentials.get(field) }}; leave blank to keep</span>{% endif %}</label>
+          <input class="input" id="{{ p.key }}-{{ field }}" name="{{ field }}" type="{{ 'password' if 'secret' in field else 'text' }}" autocomplete="off" spellcheck="false" placeholder="{{ 'unchanged' if p.credentials.get(field) else '' }}">
+        </div>
+        {% endfor %}
+        <div class="row" style="gap: 8px; flex-wrap: wrap">
+          <button class="btn secondary sm" type="submit">Save credentials</button>
+          {% if p.credentials %}<button class="btn quiet sm" type="submit" formaction="/connections/{{ p.key }}/disconnect" name="forget" value="1">Forget everything for {{ p.label.split(' ')[0] }}</button>{% endif %}
+        </div>
+      </form>
+    </details>
+    {% if p.last_error %}<p class="meta word-signal">Last attempt: {{ p.last_error }}</p>{% endif %}
+    {% if not p.verified %}<p class="meta">Not yet run against a live {{ p.label.split(' ')[0] }} account by us: the first publish is the test, and its result shows on the Outbox per destination.</p>{% endif %}
+  </section>
+  {% endfor %}
+
+  <p class="muted" style="font-size: 13px; line-height: 18px">Nothing publishes from this screen. Destinations are chosen on each post's Outbox page, and only after your approval has issued the token.</p>
+</main>
+{% endblock %}

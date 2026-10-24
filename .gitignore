@@ -12,3 +12,11 @@ dist/
 secrets/
 *.key
 *.pem
+renders/
+*.sqlite
+*.db
+.coverage
+cap-data/
+published/
+cap-data-smoke/
+postgres/

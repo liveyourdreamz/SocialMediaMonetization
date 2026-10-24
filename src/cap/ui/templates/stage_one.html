@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}المراجعة الأولى · {{ card.title }}{% endblock %}
+{% set done = record.approval.stage_one is not none %}
+{% block body %}
+<main class="screen no-tabs">
+  <div class="row" style="font-size: 14px">
+    <a href="/queue" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 500"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="transform: scaleX(-1)"><path d="m15 18-6-6 6-6"/></svg>القائمة</a>
+    <span class="muted">{% if not done %}على البطاقة <span class="tabular" data-clock="{{ on_card }}" dir="ltr">{{ on_card_text }}</span>{% else %}سُجّلت مراجعتك{% endif %}</span>
+  </div>
+
+  {% if error %}<div class="error" role="alert"><strong>لم يُسجَّل.</strong> {{ error }}</div>{% endif %}
+
+  <div class="stack-sm">
+    <h2 style="font-size: 20px; font-weight: 600">المراجعة الأولى، القناة C</h2>
+    <p class="muted" style="font-size: 15px; line-height: 24px">اقرئي النص واللغة والسياق الثقافي ودقة المحتوى. لا تُنشر أي حلقة دون موافقتك، ولا تُنشر بموافقتك وحدها: يراجعها هيمانت بعدك.</p>
+  </div>
+
+  {% include "_content.html" %}
+
+  {% if done %}
+  <div class="banner verdict"><span class="eyebrow">قرارك</span><span class="head">{{ stage_one_word }}</span><span class="facts">{{ record.approval.stage_one.notes }}</span></div>
+  {% else %}
+  <form method="post" action="/posts/{{ card.post_id }}/stage-one" class="stack"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field">
+      <label for="notes">ملاحظات لهيمانت (اختياري)</label>
+      <textarea class="input" id="notes" name="notes" rows="3" style="font-family: var(--font-ui-ar); font-size: 16px"></textarea>
+    </div>
+    <div style="display: flex; gap: 10px">
+      <button class="btn secondary grow" type="submit" name="decision" value="reject">رفض</button>
+      <button class="btn quiet" type="submit" name="decision" value="escalate">تصعيد</button>
+      <button class="btn primary grow" type="submit" name="decision" value="approve">موافقة</button>
+    </div>
+  </form>
+  {% endif %}
+</main>
+{% endblock %}
