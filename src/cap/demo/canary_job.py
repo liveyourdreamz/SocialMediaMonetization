@@ -1,21 +1,27 @@
-"""Seeding canaries into the queue (agent 16, Prompt Pack P14, D23, D34).
+"""Seeding canaries (agent 16, Prompt Pack P14, D23, D34; redesigned after review R2).
 
-The worker's clock asks `schedule_canary` every minute. A canary is seeded when the
-reviewer has closed as many cards since the last canary as the drawn gap
-(cap.domain.canary), no canary is already waiting, and the queue is not paused.
+Every brief reaches the queue the same way: Hemant files it on Operator or picks an idea
+in the Digest, and `file_brief` saves it and queues its first job. When a canary is due
+(cap.domain.canary: the drawn gap since the last canary has passed, none is waiting, the
+queue is not paused), that brief becomes the canary instead: the same topic, drafted,
+with one fault planted by P14, gated, rendered and queued looking exactly like the card
+Hemant expects from what he filed. Nothing marks it before the verdict, because there
+is nothing to mark: it is the post he asked for.
 
-The base is an idea from this week's Digest that the reviewer has not picked: rank 2
-or lower, on a topic not posted or picked in the last 90 days. It is taken out of the
-Digest, so the reviewer never sees the same topic as both an idea and a card. The
-CANARY job then drafts it like any brief, has P14 plant one fault, runs every gate
-with the canary flag set (what the gates caught is recorded, nothing stops the card),
-renders it, and queues it looking exactly like a clean post. The publisher refuses
-every canary (D23); the card scores it on the blind verdict.
+Once the verdict is recorded (caught or missed), `refile_clean` files the brief again,
+unchanged, so the clean post still gets made. The publisher refuses every canary (D23);
+the card scores it on the blind verdict.
+
+The decision runs under the store's named lock, so two briefs filed at the same moment,
+by two threads or two processes, cannot both become canaries (review R3).
 """
 
 from __future__ import annotations
 
 import random
+import shutil
+from pathlib import Path
+from typing import Any
 
 from cap import pipeline
 from cap.config import get_settings
@@ -27,17 +33,14 @@ from cap.domain.canary import (
     next_fault,
     rate,
 )
-from cap.ideabook import IdeaDecidedError
-from cap.ideas.rank import same_topic
-from cap.ideas.week import monday_of
+from cap.domain.cost import charge, metering
 from cap.jobs import Job, JobKind
 from cap.schema.enums import FaultType
-from cap.schema.ideas import Idea, IdeaStatus
-from cap.schema.post_record import Platform, PostRecord, PostStatus
+from cap.schema.post_record import CanaryRefile, Platform, PostRecord, PostStatus
 from cap.store import PostStore
 
-MEMORY_DAYS = 90
-WAITING = (PostStatus.DRAFTING, PostStatus.GATED, PostStatus.RENDERING,
+LOCK = "canary"
+WAITING = (PostStatus.BRIEFED, PostStatus.DRAFTING, PostStatus.GATED, PostStatus.RENDERING,
            PostStatus.AWAITING_APPROVAL)  # fmt: skip
 GATE_NAMES = ("originality", "ethics", "disclosure", "facts")
 
@@ -60,70 +63,76 @@ def canary_waiting(store: PostStore) -> bool:
     return any(p.flags.canary and p.status in WAITING for p in store.all())
 
 
-def _recent_topics(store: PostStore, channel: str) -> list[str]:
-    import datetime as dt
-
-    since = dt.datetime.now(dt.UTC) - dt.timedelta(days=MEMORY_DAYS)
-    posts = [
-        p.brief.topic
-        for p in store.all()
-        if p.channel_id.value == channel and p.created_at >= since
-    ]
-    picked = [i.topic_edit or i.topic for i in store.ideas.recent(channel)
-              if i.status == IdeaStatus.PICKED]  # fmt: skip
-    return posts + picked
-
-
-def pick_base(store: PostStore, today=None) -> Idea | None:  # type: ignore[no-untyped-def]
-    """An unpicked idea from this week's Digest, rank 2 or lower, on a fresh topic. The
-    channel with the fewest canaries goes first."""
-    import datetime as dt
-
-    monday = monday_of(today or dt.datetime.now(dt.UTC).date())
-    made = {ch: 0 for ch in get_settings().channels}
-    for p in store.all():
-        if p.flags.canary and p.channel_id.value in made:
-            made[p.channel_id.value] += 1
-    for ch in sorted(made, key=lambda c: made[c]):
-        recent = _recent_topics(store, ch)
-        for idea in store.ideas.week(ch, monday):
-            if idea.status != IdeaStatus.SHOWN or idea.rank < 2:
-                continue
-            if any(same_topic(idea.topic, t) for t in recent):
-                continue
-            return idea
-    return None
-
-
-def schedule_canary(store: PostStore, rng: random.Random | None = None) -> str | None:
-    """Seed a canary if one is due; the new post's id, or None."""
+def canary_due(store: PostStore, rng: random.Random | None = None) -> bool:
+    """Whether the next brief filed should be a canary. Draws the gap when none is set.
+    Call under `store.exclusive(LOCK)`."""
     if store.paused or canary_waiting(store):
-        return None
+        return False
     cards = closed_cards(store)
     if not store.state.canary_gap:
         store.state.canary_gap = draw_gap(rate(cards), rng or random.SystemRandom())
         store.save_state()
-    if cards_since_last_canary(cards) < store.state.canary_gap:
-        return None
-    base = pick_base(store)
-    if base is None:
-        return None  # no idea to build on yet; the next tick tries again
-    try:
-        store.ideas.take_for_canary(base.idea_id)
-    except IdeaDecidedError:
+    return cards_since_last_canary(cards) >= store.state.canary_gap
+
+
+def file_brief(
+    store: PostStore,
+    record: PostRecord,
+    payload: dict[str, Any],
+    *,
+    idea_id: str = "",
+    rng: random.Random | None = None,
+) -> JobKind:
+    """Save a brief Hemant filed or picked and queue its first job: BRIEF for a clean
+    post, CANARY when one is due. Returns the job kind queued."""
+    with store.exclusive(LOCK):
+        if record.flags.tour or not canary_due(store, rng):
+            store.put(record)
+            store.jobs.enqueue(JobKind.BRIEF, record.post_id, payload)
+            return JobKind.BRIEF
+        record.flags.canary = True  # set by code, never by a model (D23)
+        record.flags.canary_fault_type = next_fault(past_canaries(store))
+        record.flags.canary_refile = CanaryRefile(
+            urls=[str(u) for u in payload.get("urls", [])],
+            test_log=str(payload.get("test_log", "")),
+            idea_id=idea_id,
+        )
+        store.put(record)
+        store.jobs.enqueue(JobKind.CANARY, record.post_id, payload)
+        store.state.canary_gap = 0  # the next gap is drawn when the next brief is filed
+        store.save_state()
+    return JobKind.CANARY
+
+
+def refile_clean(store: PostStore, canary: PostRecord) -> PostRecord | None:
+    """After a canary's verdict: file the brief it replaced again, clean. Returns the
+    new post, or None when the record was not a canary that replaced a brief or its
+    brief was already filed again. `canary` must be the saved record; it is saved again
+    with the refile cleared before the clean brief is filed, so it happens once."""
+    refile = canary.flags.canary_refile
+    if not canary.flags.canary or refile is None or not canary.approval.decided_at:
         return None
     from cap.demo.seed import new_brief
 
-    record = new_brief(base.channel, base.topic)
-    record.flags.canary = True  # set by code, never by a model (D23)
-    record.flags.canary_fault_type = next_fault(past_canaries(store))
-    store.put(record)
-    store.jobs.enqueue(JobKind.CANARY, record.post_id, {"idea": base.idea_id})
-    store.state.canary_gap = 0  # the next gap is drawn after this one is closed
-    store.save_state()
-    store.audit.append("canary seeded", post_id=record.post_id,
-                       detail={"fault": record.flags.canary_fault_type.value})  # fmt: skip
-    return record.post_id
+    canary.flags.canary_refile = None
+    store.put(canary)  # PostConflictError if another request got here first
+
+    clean = new_brief(canary.channel_id, canary.brief.topic)
+    clean.brief = canary.brief.model_copy(deep=True)
+    media = Path(get_settings().data_dir) / "media"
+    if (media / canary.post_id).is_dir():  # screenshots attached to the brief
+        shutil.copytree(media / canary.post_id, media / clean.post_id, dirs_exist_ok=True)
+    clean.log("filed again after the check post on this topic; drafted from the start")
+    store.put(clean)
+    store.jobs.enqueue(
+        JobKind.BRIEF, clean.post_id, {"urls": list(refile.urls), "test_log": refile.test_log}
+    )
+    store.audit.append(
+        "brief filed again after a canary",
+        post_id=clean.post_id,
+        detail={"canary": canary.post_id, "idea": refile.idea_id},
+    )
+    return clean
 
 
 def _gates_caught(record: PostRecord) -> list[str]:
@@ -138,30 +147,33 @@ def _gates_caught(record: PostRecord) -> list[str]:
 
 
 def run_canary_job(store: PostStore, job: Job) -> None:
-    """The worker's handler for a CANARY job: draft, plant, gate, render, queue."""
+    """The worker's handler for a CANARY job: draft from what Hemant filed, plant one
+    fault, gate, render, queue. Every model call is charged to the post (D44)."""
     from cap.agents import adapt, write_canary
     from cap.demo.seed import _setup
 
     record = store.get(job.post_id)
-    deps, sources = _setup(store, record, "")
-    docs = pipeline.as_sources(sources)
-    record = pipeline.write(record, docs, deps)
-    if pipeline.stopped(record):
-        raise RuntimeError(f"the base draft stopped: {record.flags.stop_reason}")
-    base = record.draft.model_dump(include={"title", "script", "caption", "on_screen_text",
-                                            "thumbnail_text", "shot_list"})  # fmt: skip
-    fault = record.flags.canary_fault_type or FaultType.UNSOURCED_NUMBER
-    record = write_canary(record, deps.client, fault, base,
-                          deps.character_blocks.get(record.channel_id.value, ""))  # fmt: skip
-    # the platform cuts are made again from the canary's own script, as for any post
-    record = adapt(record, deps.client, [Platform.YOUTUBE_LONG, Platform.YOUTUBE_SHORT])
+    test_log = str(job.payload.get("test_log", ""))
+    with metering() as spent:
+        deps, sources = _setup(store, record, test_log, urls=list(job.payload.get("urls", [])))
+        docs = pipeline.as_sources(sources)
+        record = pipeline.write(record, docs, deps)
+        if pipeline.stopped(record):
+            raise RuntimeError(f"the base draft stopped: {record.flags.stop_reason}")
+        base = record.draft.model_dump(include={"title", "script", "caption", "on_screen_text",
+                                                "thumbnail_text", "shot_list"})  # fmt: skip
+        fault = record.flags.canary_fault_type or FaultType.UNSOURCED_NUMBER
+        record = write_canary(record, deps.client, fault, base,
+                              deps.character_blocks.get(record.channel_id.value, ""))  # fmt: skip
+        # the platform cuts are made again from the canary's own script, as for any post
+        record = adapt(record, deps.client, [Platform.YOUTUBE_LONG, Platform.YOUTUBE_SHORT])
+    charge(record, spent, get_settings().post_budget_usd)  # P14 and the second adapt
     record = pipeline.checks(record, docs, deps)
     record.flags.canary_gates_caught = _gates_caught(record)
     if pipeline.stopped(record):  # a gate caught it: recorded, and the card goes on (P14)
         record.status = PostStatus.GATED
         record.flags.stopped_at, record.flags.stop_reason = "", ""
-    record.log(
-        f"canary gates caught: {', '.join(record.flags.canary_gates_caught) or 'none (gate-blind)'}"
-    )
+    caught = ", ".join(record.flags.canary_gates_caught) or "none (gate-blind)"
+    record.log(f"canary gates caught: {caught}")
     out = pipeline.render(record, deps)
     store.put(out)

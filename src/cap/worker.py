@@ -24,7 +24,7 @@ from collections.abc import Callable
 
 from cap.approval import release_job
 from cap.audit import acting_as
-from cap.demo.canary_job import run_canary_job, schedule_canary
+from cap.demo.canary_job import run_canary_job
 from cap.demo.ideas_job import run_ideas_job, schedule_due
 from cap.demo.seed import run_checks_job, run_render_job, run_tour, run_write_job
 from cap.jobs import Job, JobKind
@@ -89,7 +89,10 @@ class Worker:
     def start(self) -> Worker:
         self.recover()
         for i in range(self.threads):
-            t = threading.Thread(target=self._loop, name=f"cap-worker-{i}", daemon=True)
+            # the clock runs in the first thread only (review R3: one tick per minute)
+            t = threading.Thread(
+                target=self._loop, args=(i == 0,), name=f"cap-worker-{i}", daemon=True
+            )
             t.start()
             self._running.append(t)
         return self
@@ -106,15 +109,13 @@ class Worker:
         try:
             for key in schedule_due(self.store):
                 _log.info("queued %s", key)
-            if post_id := schedule_canary(self.store):
-                _log.info("canary seeded: %s", post_id)
         except Exception:  # noqa: BLE001 - the clock never stops the worker
             _log.exception("could not check the schedule")
 
-    def _loop(self) -> None:
+    def _loop(self, clock: bool = True) -> None:
         last_tick = 0.0
         while not self._stop.is_set():
-            if time.monotonic() - last_tick >= TICK_S:
+            if clock and time.monotonic() - last_tick >= TICK_S:
                 last_tick = time.monotonic()
                 self.tick()
             try:

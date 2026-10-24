@@ -12,7 +12,6 @@ from fastapi.responses import RedirectResponse, Response
 
 from cap.approval.identity import Reviewer, check_csrf, current_reviewer
 from cap.ideabook import IdeaDecidedError, IdeaNotFoundError
-from cap.jobs import JobKind
 from cap.schema.ideas import IdeaStatus
 from cap.store import PostStore
 from cap.ui.page import app_store, approver_only
@@ -49,8 +48,10 @@ def pick(
         store.ideas.decide(idea_id, IdeaStatus.PICKED, topic_edit=topic, post_id=record.post_id)
     except IdeaDecidedError:
         raise HTTPException(409, "this idea was already decided") from None
-    store.put(record)
-    store.jobs.enqueue(JobKind.BRIEF, record.post_id, {"urls": idea.evidence_urls, "test_log": ""})
+    from cap.demo.canary_job import file_brief
+
+    payload = {"urls": idea.evidence_urls, "test_log": ""}
+    file_brief(store, record, payload, idea_id=idea_id)
     store.audit.append("idea picked", post_id=record.post_id, detail={"idea": idea_id})
     return RedirectResponse("/operator", status_code=303)
 

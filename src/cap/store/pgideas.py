@@ -59,17 +59,6 @@ class PostgresIdeaBook(IdeaBook):
             raise IdeaDecidedError(f"idea {idea_id} was already decided")
         return done
 
-    def take_for_canary(self, idea_id: str) -> Idea:
-        taken = self.get(idea_id).model_copy(update={"status": IdeaStatus.CANARY})
-        with self._pool.connection() as conn:
-            cur = conn.execute(
-                "UPDATE ideas SET status = 'canary', record = %s WHERE id = %s AND status = 'shown'",
-                (Jsonb(taken.model_dump(mode="json")), idea_id),
-            )
-        if cur.rowcount != 1:
-            raise IdeaDecidedError(f"idea {idea_id} is no longer shown")
-        return taken
-
     def expire(self, before: dt.date) -> int:
         with self._pool.connection() as conn:
             cur = conn.execute(

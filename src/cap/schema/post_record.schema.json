@@ -239,6 +239,31 @@
       "title": "Brief",
       "type": "object"
     },
+    "CanaryRefile": {
+      "additionalProperties": false,
+      "description": "What the brief a canary replaced needs to be filed again, clean, once the\nreviewer has recorded the canary's verdict (P14 as amended, review R2).",
+      "properties": {
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Urls",
+          "type": "array"
+        },
+        "test_log": {
+          "default": "",
+          "title": "Test Log",
+          "type": "string"
+        },
+        "idea_id": {
+          "default": "",
+          "title": "Idea Id",
+          "type": "string"
+        }
+      },
+      "title": "CanaryRefile",
+      "type": "object"
+    },
     "Channel": {
       "enum": [
         "A",
@@ -755,6 +780,17 @@
           },
           "title": "Canary Gates Caught",
           "type": "array"
+        },
+        "canary_refile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanaryRefile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "gate_blind": {
           "default": true,

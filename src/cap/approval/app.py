@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from cap.approval import release_job
 from cap.approval.identity import Reviewer
+from cap.demo.canary_job import refile_clean
 from cap.domain.card import (
     CanaryMissedError,
     CardView,
@@ -64,8 +65,12 @@ def finalise_and_issue(store: PostStore, record: PostRecord, reviewer: str, **kw
     except CanaryMissedError:
         store.pause(f"canary missed on {record.post_id} by {reviewer}")
         store.put(record)
+        refile_clean(store, record)
         return False
     store.put(record)
+    if record.flags.canary:  # caught: the brief it replaced is drafted clean now
+        refile_clean(store, record)
+        return False
     if record.status != PostStatus.APPROVED:
         return False
     # the originality gate compares new posts with approved ones (review C7)

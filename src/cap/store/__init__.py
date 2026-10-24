@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -97,6 +98,17 @@ class PostStore(ABC):
         self.ideas = ideas or MemoryIdeaBook()  # the week's ideas and their memory (D48)
         self.state = AppState()
         self.unreadable: list[str] = []  # stored posts this build could not read, by id
+        self._named_locks: dict[str, threading.Lock] = {}
+        self._named_locks_guard = threading.Lock()
+
+    @contextmanager
+    def exclusive(self, name: str) -> Iterator[None]:
+        """Run a check-then-act block alone: no other thread (here) or process (the
+        Postgres adapter) holding the same name runs at the same time."""
+        with self._named_locks_guard:
+            lock = self._named_locks.setdefault(name, threading.Lock())
+        with lock:
+            yield
 
     # ---- posts ------------------------------------------------------------------------
 

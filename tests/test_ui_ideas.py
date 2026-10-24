@@ -79,3 +79,24 @@ def test_run_now_queues_every_channel_and_operator_shows_the_runs(tmp_path, monk
         "ideas run", detail={"report": "channel A, week of 26 Oct: 15 ideas, 4 held"}
     )
     assert "15 ideas, 4 held" in api.get("/operator").text
+
+
+def test_a_pick_can_become_the_canary_and_looks_like_any_pick(tmp_path, monkeypatch, canaries):
+    """Review R2: the canary is the post Hemant asked for, so nothing tells it apart."""
+    store, api, ideas = world(tmp_path, monkeypatch)
+    store.state.canary_gap = 1
+    for _ in range(2):
+        from cap.schema.post_record import Channel, PostRecord, PostStatus
+
+        p = PostRecord(channel_id=Channel.B, status=PostStatus.APPROVED)
+        p.approval.decided_at = dt.datetime.now(dt.UTC)
+        store.put(p)
+    before = api.get("/operator").text.lower().count("canary")
+    api.form(f"/ideas/{ideas[0].idea_id}/pick")
+    picked = store.ideas.get(ideas[0].idea_id)
+    assert picked.status == IdeaStatus.PICKED  # stays a pick; nothing leaves the Digest
+    post = store.get(picked.post_id)
+    assert post.flags.canary and store.jobs.active(post.post_id, JobKind.CANARY)
+    page = api.get("/operator").text
+    assert ideas[0].topic in page  # under "Your posts" like any brief
+    assert page.lower().count("canary") == before  # the page says nothing new

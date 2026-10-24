@@ -297,6 +297,15 @@ class PlantedFault(Strict):
     why_catchable: str = ""
 
 
+class CanaryRefile(Strict):
+    """What the brief a canary replaced needs to be filed again, clean, once the
+    reviewer has recorded the canary's verdict (P14 as amended, review R2)."""
+
+    urls: list[str] = Field(default_factory=list)
+    test_log: str = ""
+    idea_id: str = ""
+
+
 class Flags(Strict):
     injection_suspected: bool = False
     injection_spans: list[str] = Field(default_factory=list)
@@ -305,6 +314,7 @@ class Flags(Strict):
     planted_fault: PlantedFault | None = None  # revealed on the card after the verdict
     canary_outcome: Literal["", "caught", "missed"] = ""
     canary_gates_caught: list[str] = Field(default_factory=list)  # gates that failed it (P14)
+    canary_refile: CanaryRefile | None = None  # the clean brief to file after the verdict
     gate_blind: bool = True  # D33: gates hidden on the card until a verdict is recorded
     card_prepared: bool = False  # spot check and reading time set when queued (D34)
     tour: bool = False  # the guided tour's worked example; never counted, never published

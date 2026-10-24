@@ -133,3 +133,20 @@ def pg_url():
     finally:
         with psycopg.connect(base, autocommit=True) as admin:
             admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+
+
+# ---- canaries (P14, review R2) ---------------------------------------------------------
+# Any brief filed can become a canary once enough cards are closed, at a random gap. So
+# that a test filing briefs is never surprised, canaries are off unless a test asks for
+# the `canaries` fixture (tests/test_canary.py does).
+
+
+@pytest.fixture(autouse=True)
+def _no_surprise_canaries(request, monkeypatch):
+    if "canaries" not in request.fixturenames:
+        monkeypatch.setattr("cap.demo.canary_job.canary_due", lambda store, rng=None: False)
+
+
+@pytest.fixture
+def canaries():
+    """Opt in: briefs filed in this test become canaries when one is due."""

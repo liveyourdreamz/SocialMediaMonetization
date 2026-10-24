@@ -1,19 +1,19 @@
-"""Seeding canaries (agent 16, P14, D23, D34): when, which fault, on what base, and
-that a canary reaches the queue looking like any card while the gates' catches are kept."""
+"""Seeding canaries (agent 16, P14, D23, D34; redesigned after review R2): a brief Hemant
+files becomes the canary when one is due, reaches the queue looking like the card he
+expects, and is filed again clean after his verdict; two briefs filed at once never
+both become canaries."""
 
 from __future__ import annotations
 
 import datetime as dt
 import random
+import threading
 
 import pytest
 
-from cap.demo.canary_job import (
-    canary_waiting,
-    closed_cards,
-    pick_base,
-    schedule_canary,
-)
+from cap.approval.app import finalise_and_issue
+from cap.demo.canary_job import canary_waiting, closed_cards, file_brief, refile_clean
+from cap.demo.seed import new_brief
 from cap.domain.canary import (
     ClosedCard,
     PastCanary,
@@ -22,10 +22,8 @@ from cap.domain.canary import (
     next_fault,
     rate,
 )
-from cap.ideas.week import monday_of
 from cap.jobs import JobKind
 from cap.schema.enums import FaultType
-from cap.schema.ideas import Idea, IdeaStatus
 from cap.schema.post_record import Channel, PostRecord, PostStatus
 from cap.store import MemoryStore
 from cap.worker import drain
@@ -68,17 +66,6 @@ def test_every_fault_type_comes_round_and_gate_blind_ones_sooner():
     assert next_fault(past) == a  # oldest, and the gates missed it
 
 
-def world(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    store = MemoryStore()
-    monday = monday_of(dt.datetime.now(dt.UTC).date())
-    ideas = [Idea(channel="A", week=monday, rank=r, topic=t) for r, t in
-             [(1, "Why solar panels keep getting cheaper"), (2, "How a heat pump moves heat"),
-              (3, "How tides work")]]  # fmt: skip
-    store.ideas.add(ideas)
-    return store, ideas
-
-
 def close_cards(store, n):
     for k in range(n):
         p = PostRecord(channel_id=Channel.B, status=PostStatus.APPROVED)
@@ -86,50 +73,92 @@ def close_cards(store, n):
         store.put(p)
 
 
-def test_the_base_is_an_unpicked_lower_ranked_idea_on_a_fresh_topic(tmp_path, monkeypatch):
-    store, ideas = world(tmp_path, monkeypatch)
-    assert pick_base(store).topic == "How a heat pump moves heat"  # never rank 1
-    store.put(PostRecord(channel_id=Channel.A, status=PostStatus.APPROVED,
-                         brief={"topic": "How heat pumps move heat"}))  # fmt: skip
-    assert pick_base(store).topic == "How tides work"  # topic posted recently: skipped
+def file(store, topic="How a heat pump moves heat"):
+    rec = new_brief("A", topic)
+    kind = file_brief(store, rec, {"urls": ["https://example.org/hp"], "test_log": ""},
+                      idea_id="idea-1")  # fmt: skip
+    return rec.post_id, kind
 
 
-def test_seeding_waits_for_the_gap_then_takes_the_idea_out_of_the_digest(tmp_path, monkeypatch):
-    store, ideas = world(tmp_path, monkeypatch)
+def test_a_brief_becomes_the_canary_once_the_gap_has_passed(canaries):
+    store = MemoryStore()
     store.state.canary_gap = 2
     close_cards(store, 1)
-    assert schedule_canary(store) is None  # one card closed, gap is two
+    _, kind = file(store, "How tides work")
+    assert kind == JobKind.BRIEF  # one card closed, the gap is two
     close_cards(store, 1)
-    post_id = schedule_canary(store)
-    assert post_id and store.jobs.active(post_id, JobKind.CANARY)
+    post_id, kind = file(store)
+    assert kind == JobKind.CANARY and store.jobs.active(post_id, JobKind.CANARY)
     rec = store.get(post_id)
     assert rec.flags.canary and rec.flags.canary_fault_type == FaultType.UNSOURCED_NUMBER
-    assert store.ideas.get(ideas[1].idea_id).status == IdeaStatus.CANARY
-    assert ideas[1].idea_id not in {i.idea_id for i in store.ideas.week("A", ideas[1].week)}
+    assert rec.brief.topic == "How a heat pump moves heat"  # the topic Hemant filed
+    assert rec.flags.canary_refile.urls == ["https://example.org/hp"]
     assert store.state.canary_gap == 0 and canary_waiting(store)
-    assert schedule_canary(store) is None  # one waiting: no second
+    assert file(store, "Why the sky is blue")[1] == JobKind.BRIEF  # one waiting: no second
 
 
-def test_no_canary_while_paused_or_without_a_base(tmp_path, monkeypatch):
-    store, _ = world(tmp_path, monkeypatch)
+def test_no_canary_while_paused(canaries):
+    store = MemoryStore()
     store.state.canary_gap = 1
     close_cards(store, 3)
     store.pause("a missed canary")
-    assert schedule_canary(store) is None
-    store.reopen()
-    empty = MemoryStore()
-    empty.state.canary_gap = 1
-    close_cards(empty, 3)
-    assert schedule_canary(empty) is None  # no ideas this week: nothing to build on
+    assert file(store)[1] == JobKind.BRIEF
+
+
+def test_two_briefs_filed_at_once_make_one_canary(canaries):
+    """Review R3: the check and the act run under the store's lock."""
+    store = MemoryStore()
+    store.state.canary_gap = 1
+    close_cards(store, 3)
+    kinds: list[JobKind] = []
+    start = threading.Barrier(8)
+
+    def go(i: int) -> None:
+        start.wait()
+        kinds.append(file(store, f"topic {i}")[1])
+
+    threads = [threading.Thread(target=go, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert kinds.count(JobKind.CANARY) == 1
+
+
+def test_two_processes_on_one_database_make_one_canary(canaries, pg_url):
+    from cap.store.postgres import PostgresStore
+
+    a, b = PostgresStore.open(pg_url), PostgresStore.open(pg_url)
+    try:
+        close_cards(a, 3)
+        a.state.canary_gap = b.state.canary_gap = 1
+        results: list[JobKind] = []
+        start = threading.Barrier(2)
+
+        def go(store, topic):  # type: ignore[no-untyped-def]
+            start.wait()
+            results.append(file(store, topic)[1])
+
+        ts = [threading.Thread(target=go, args=(s, t)) for s, t in ((a, "one"), (b, "two"))]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+        assert results.count(JobKind.CANARY) == 1
+    finally:
+        a.close()
+        b.close()
 
 
 def test_a_canary_reaches_the_queue_like_any_card_with_the_gates_catches_kept(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, canaries
 ):
-    store, _ = world(tmp_path, monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    store = MemoryStore()
     store.state.canary_gap = 1
     close_cards(store, 1)
-    post_id = schedule_canary(store)
+    post_id, kind = file(store)
+    assert kind == JobKind.CANARY
     drain(store, post_id)
     rec = store.get(post_id)
     assert rec.status == PostStatus.AWAITING_APPROVAL
@@ -141,6 +170,29 @@ def test_a_canary_reaches_the_queue_like_any_card_with_the_gates_catches_kept(
     assert isinstance(rec.flags.canary_gates_caught, list)
     assert any("canary gates caught" in line for line in rec.history)
     assert rec in store.queue()
+
+
+def test_after_the_verdict_the_brief_is_filed_again_clean_once(tmp_path, monkeypatch, canaries):
+    monkeypatch.chdir(tmp_path)
+    store = MemoryStore()
+    store.state.canary_gap = 1
+    close_cards(store, 1)
+    post_id, _ = file(store)
+    drain(store, post_id)
+    canary = store.get(post_id)
+    from cap.domain.card import record_verdict
+    from cap.schema.enums import Decision, ReasonCode
+
+    record_verdict(canary, Decision.REJECT, reviewer="hemant", time_on_card_s=600,
+                   reason_code=ReasonCode.UNSOURCED_NUMBER)  # fmt: skip
+    store.put(canary)
+    finalise_and_issue(store, canary, "hemant")
+    done = store.get(post_id)
+    assert done.flags.canary_outcome == "caught" and done.flags.canary_refile is None
+    clean = [p for p in store.all() if not p.flags.canary and p.brief.topic == canary.brief.topic]
+    assert len(clean) == 1 and store.jobs.active(clean[0].post_id, JobKind.BRIEF)
+    assert refile_clean(store, done) is None  # never twice
+    assert not store.paused
 
 
 def test_closed_cards_are_in_decision_order_and_skip_the_tour():

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -163,6 +165,16 @@ class PostgresStore(PostStore):
 
     def history(self) -> HistoryStore:
         return PostgresHistory(self._pool)
+
+    @contextmanager
+    def exclusive(self, name: str) -> Iterator[None]:
+        """A session advisory lock: one holder across every process on this database."""
+        with self._pool.connection() as conn:
+            conn.execute("SELECT pg_advisory_lock(hashtext(%s))", (name,))
+            try:
+                yield
+            finally:
+                conn.execute("SELECT pg_advisory_unlock(hashtext(%s))", (name,))
 
 
 _STATE_KEYS = ("paused", "paused_reason", "analytics", "analytics_note", "canary_gap")

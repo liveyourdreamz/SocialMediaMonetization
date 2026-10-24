@@ -13,7 +13,6 @@ from cap.approval.identity import (
     current_reviewer,
 )
 from cap.config import get_settings
-from cap.jobs import JobKind
 from cap.store import PostStore
 from cap.ui import views
 from cap.ui.page import app_store, approver_only, render
@@ -80,9 +79,10 @@ def file_brief(
     if saved:
         record.log(f"{saved} screenshot(s) attached; they take the screen panel in order")
         record.media_manifest.real_place_or_event_depicted = False
-    store.put(record)
+    from cap.demo.canary_job import file_brief
+
     url_list = [u.strip() for u in urls.replace(",", "\n").splitlines() if u.strip()]
-    store.jobs.enqueue(JobKind.BRIEF, record.post_id, {"urls": url_list, "test_log": test_log})
+    file_brief(store, record, {"urls": url_list, "test_log": test_log})
     return RedirectResponse("/operator", status_code=303)
 
 

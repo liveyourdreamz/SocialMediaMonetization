@@ -155,3 +155,20 @@ def test_on_postgres_a_restart_resumes_the_brief(pg_url, tmp_path, monkeypatch):
         got = again.get(rec.post_id)
         assert got.status == PostStatus.AWAITING_APPROVAL, got.history[-3:]
         assert any("resumed after a restart" in h for h in got.history)
+
+
+def test_the_clock_runs_in_one_thread_only(monkeypatch):
+    """Review R3: each thread ran its own clock, so scheduled work was checked twice."""
+    import threading
+    import time
+
+    import cap.worker as w
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        w, "schedule_due", lambda s: calls.append(threading.current_thread().name) or []
+    )
+    wk = w.Worker(MemoryStore(), threads=3).start()
+    time.sleep(0.5)
+    wk.stop()
+    assert calls == ["cap-worker-0"]

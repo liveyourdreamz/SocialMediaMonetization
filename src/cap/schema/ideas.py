@@ -23,7 +23,9 @@ class IdeaStatus(StrEnum):
     REJECTED = "rejected"  # the operator said no
     EXPIRED = "expired"  # nobody acted by the next Monday; remembered, not shown
     HELD = "held"  # never shown: Red, thin or promotional evidence, or no primary source
-    CANARY = "canary"  # taken out of the Digest to be a canary's base (P14); never shown
+    # Written only by the first canary scheduler (24 Oct, before review R2), which took
+    # canary bases out of the Digest; nothing writes it now. Kept so such rows still load.
+    CANARY = "canary"
 
 
 DECIDED = (IdeaStatus.PICKED, IdeaStatus.REJECTED)
