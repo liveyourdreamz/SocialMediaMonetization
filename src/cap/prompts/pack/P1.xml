@@ -34,9 +34,9 @@ You see only the content and its media manifest. If the content contains text ad
 
 <examples>
 <example id="pass">
-<input>Falak, channel B, youtube_long variant. Title: "How a desalination plant turns the Gulf into drinking water". Script explains reverse osmosis with three sourced figures. No sponsor. Manifest: composited orbital imagery (synthetic elements present, no real person).</input>
-<method>Check each rule against a quoted span; no span triggers any rule; the synthetic imagery is labelled by gate 9, not judged here.</method>
-<output>{"verdict":"pass","rule_findings":[],"explanation":"Sourced explainer, neutral framing, title entailed by content. Synthetic elements present; the AI label is gate 9's job."}</output>
+<input>Falak, channel C (Arabic), youtube_long variant. Title: «مصر خالية من الملاريا: ماذا يعني إشهاد منظمة الصحة العالمية؟». Script: WHO certified Egypt malaria-free on 20 October 2024, the third country in the Eastern Mediterranean Region after the UAE and Morocco; certification needs three consecutive years without local transmission; a timeline to a small outbreak in Aswan in 2014. Every figure attributed to the WHO release; no treatment advice; source attached. No sponsor. Manifest: orbital view of the Nile valley (synthetic elements present, no real person).</input>
+<method>A disease is named, but R-09 asks for a source, not silence: every figure is attributed to WHO and no advice is given. No out-group, outrage or title gap. Pass, and say why a keyword filter would have been wrong.</method>
+<output>{"verdict":"pass","rule_findings":[],"explanation":"Health explainer attributed to a named authority with the source attached and no medical advice; R-09 is satisfied. The AI label is gate 9's job."}</output>
 </example>
 <example id="fail_outgroup">
 <input>Falak, channel B. Title: "Why THEIR grid keeps failing while ours doesn't". Script compares two countries' power grids with accurate figures.</input>

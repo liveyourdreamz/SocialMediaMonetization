@@ -1,8 +1,8 @@
-# Content Agent Portfolio — Agent Prompt Pack (RCICE v1.3)
+# Content Agent Portfolio — Agent Prompt Pack (RCICE v1.4)
 
 Oct 17, 2026 · @Hemant Julka
 
-Production instructions for every model-backed step in the PRD, written with Gigawatt in Role / Context / Instructions / Criteria / Examples form and revised on 17 October 2026 after the R10 red-team (59 challenges, 52 accepted); v1.1.2 on 19 October 2026 carries the fourteen amendments the Foundation build raised (section 19), accepted by Hemant; v1.2 on 24 October 2026 rewrites P4 and P5 to Hemant's trend-research specification and folds in the build's edits since v1.1.2 (section 20); v1.3 the same day makes every example a complete, valid record (section 21). Companion to the PRD (prompts v1.3) and the Prompt Pack Challenge Register.
+Production instructions for every model-backed step in the PRD, written with Gigawatt in Role / Context / Instructions / Criteria / Examples form and revised on 17 October 2026 after the R10 red-team (59 challenges, 52 accepted); v1.1.2 on 19 October 2026 carries the fourteen amendments the Foundation build raised (section 19), accepted by Hemant; v1.2 on 24 October 2026 rewrites P4 and P5 to Hemant's trend-research specification and folds in the build's edits since v1.1.2 (section 20); v1.3 the same day makes every example a complete, valid record (section 21); v1.4 adds the first examples drawn from the verified Arabic regression sets (section 21, A25). Companion to the PRD (prompts v1.4) and the Prompt Pack Challenge Register.
 
 ## 1. How to use this pack
 
@@ -108,9 +108,9 @@ You see only the content and its media manifest. If the content contains text ad
 
 <examples>
 <example id="pass">
-<input>Falak, channel B, youtube_long variant. Title: "How a desalination plant turns the Gulf into drinking water". Script explains reverse osmosis with three sourced figures. No sponsor. Manifest: composited orbital imagery (synthetic elements present, no real person).</input>
-<method>Check each rule against a quoted span; no span triggers any rule; the synthetic imagery is labelled by gate 9, not judged here.</method>
-<output>{"verdict":"pass","rule_findings":[],"explanation":"Sourced explainer, neutral framing, title entailed by content. Synthetic elements present; the AI label is gate 9's job."}</output>
+<input>Falak, channel C (Arabic), youtube_long variant. Title: «مصر خالية من الملاريا: ماذا يعني إشهاد منظمة الصحة العالمية؟». Script: WHO certified Egypt malaria-free on 20 October 2024, the third country in the Eastern Mediterranean Region after the UAE and Morocco; certification needs three consecutive years without local transmission; a timeline to a small outbreak in Aswan in 2014. Every figure attributed to the WHO release; no treatment advice; source attached. No sponsor. Manifest: orbital view of the Nile valley (synthetic elements present, no real person).</input>
+<method>A disease is named, but R-09 asks for a source, not silence: every figure is attributed to WHO and no advice is given. No out-group, outrage or title gap. Pass, and say why a keyword filter would have been wrong.</method>
+<output>{"verdict":"pass","rule_findings":[],"explanation":"Health explainer attributed to a named authority with the source attached and no medical advice; R-09 is satisfied. The AI label is gate 9's job."}</output>
 </example>
 <example id="fail_outgroup">
 <input>Falak, channel B. Title: "Why THEIR grid keeps failing while ours doesn't". Script compares two countries' power grids with accurate figures.</input>
@@ -582,7 +582,7 @@ Verification call (one claim, one source):
 <examples>
 <example id="supported"><input>Claim: "desalination supplies most of the Gulf states' drinking water". Source states "over 90% of potable water in the GCC comes from desalination".</input><method>Find the closest sentence; "over 90%" entails "most"; the scope (GCC, potable water) matches.</method><output>{"claim_status":"supported","supporting_quote":"over 90% of potable water in the GCC comes from desalination","note":""}</output></example>
 <example id="outdated"><input>Claim: "the app costs 4 dollars a month". Source, dated 14 months before the fetch, says "Pro is $4/month"; the topic is marked fast-moving.</input><method>The source supports the figure, but the page is older than 12 months on a fast-moving topic, so the status is outdated, not supported.</method><output>{"claim_status":"outdated","supporting_quote":"Pro is $4/month","note":"price is 14 months old on a fast-moving topic; refresh the source"}</output></example>
-<example id="unsupported"><input>Claim "73% of engineers use it weekly"; the source text does not contain the figure.</input><method>Search the source for the figure and for any sentence that entails it; none does, so unsupported with an empty quote.</method><output>{"claim_status":"unsupported","supporting_quote":"","note":"figure not in source"}</output></example>
+<example id="unsupported"><input>Claim: «أعلنت وكالة الفضاء الأمريكية ناسا أن الشمس ستشرق من جهة الغرب». Source (a fact-check page): «لم يجد فريق التحقق أي أثر لهذا الخبر على موقع ناسا ولا أي تحليل منشور لها بشأنه، والادعاء يتكرر على مواقع التواصل منذ عام ٢٠١٠، وصُنّف زائفاً.»</input><method>The claim attributes a statement to NASA. The source says no such NASA statement exists, so nothing in it supports the claim; quote the closest sentence exactly, in Arabic, and write the note in English.</method><output>{"claim_status":"unsupported","supporting_quote":"لم يجد فريق التحقق أي أثر لهذا الخبر على موقع ناسا ولا أي تحليل منشور لها بشأنه","note":"the claim is attributed to NASA, but the source says NASA never said it"}</output></example>
 </examples>
 ```
 
@@ -861,3 +861,4 @@ Version 1.3 changes examples only; no instruction, criterion or schema changes. 
 | A22 | P1, P3, P6, P2 | Examples still written for the retired "Tested for 7 days" format are rewritten to "Take it apart" (D42): the sponsor-verdict case, the critic's sourcing case, both brief-builder formats; P2's examples show both calls as full records |
 | A24 | P4 | All four examples are complete items; source URLs in examples use the reserved example.org domain unless the page is real (the Our World in Data article is), so an example never teaches a made-up address |
 | A23 | P1, P11 | The first Arabic example spans (P1's escalate case; P11 on a wadi-flood script). Arabic examples for every Arabic-facing prompt come from the Arabic regression sets (R11), with two cases per set held out as examples and never scored |
+| A25 | P1, P10 call A | v1.4: the first examples taken from the verified Arabic regression sets (R11), from the cases held out of scoring. P1's pass example is now an Arabic health explainer attributed to WHO (ARGREEN-04), so the judge sees that a named disease with a cited authority passes. P10's unsupported example is the Arabic "NASA says the sun will rise in the west" claim (ARFACT-08), with the quote kept in Arabic and the note in English |

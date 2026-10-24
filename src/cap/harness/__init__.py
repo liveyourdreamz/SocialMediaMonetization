@@ -8,6 +8,9 @@ Sets and what they measure:
 * fact   (P10): status must match; needs fetched source bodies, so skipped until the
   fetcher exists (week 2).
 * inject (P4): injection flag must be raised; P4 is not wired yet, reported as skipped.
+* ar-red, ar-green, ar-fact (R11, Arabic, channel C): as red, green and fact. Items marked
+  `use: example` are prompt examples (Pack v1.4 A25) and are never scored; an item's
+  `also_acceptable` labels count as exact where the rulebook allows either reading.
 
 Per set the report carries three counts, never one percentage that can hide a
 non-run: `exact` (the labelled verdict), `non_miss` (Red only: fail where escalate was
@@ -88,7 +91,7 @@ class SetReport:
         if self.skipped:
             return f"{self.name}: skipped ({self.skip_reason})"
         parts = [f"{self.name}: exact {self.exact}/{self.total}"]
-        if self.name == "red":
+        if self.name.endswith("red"):
             parts.append(f"non-miss {self.non_miss}/{self.total}")
         if self.blocked:
             parts.append(
@@ -102,9 +105,12 @@ class SetReport:
         return ", ".join(parts)
 
 
-def load_set(name: str, directory: Path = DEFAULT_DIR) -> list[dict]:
+def load_set(name: str, directory: Path = DEFAULT_DIR, scored_only: bool = True) -> list[dict]:
+    """A set's items; by default without the held-out examples, which the prompts
+    show the model and so must never be scored."""
     data = json.loads((directory / f"{name}-set-v1.0.json").read_text(encoding="utf-8"))
-    return data["items"] if isinstance(data, dict) else data
+    items = data["items"] if isinstance(data, dict) else data
+    return [i for i in items if not scored_only or i.get("use", "test") != "example"]
 
 
 def _record_from_item(item: dict) -> PostRecord:
@@ -113,7 +119,8 @@ def _record_from_item(item: dict) -> PostRecord:
     caption carries the standard disclosure unless the item is a Red case for R-07
     (a Green R-07 item tests that a present disclosure passes)."""
     text = item.get("test_input", "")
-    r = PostRecord(channel_id=Channel.A, brief=Brief(topic=item.get("case_title", "")))
+    channel = Channel.C if item.get("language") == "ar" else Channel.A
+    r = PostRecord(channel_id=channel, brief=Brief(topic=item.get("case_title", "")))
     r.draft.title = text.split(". ")[0][:120]
     r.draft.script = text
     tests_r07 = "R-07" in item.get("rule_ids", []) and item.get("expected") != "pass"
@@ -139,9 +146,10 @@ def run_ethics_set(
             blocked = blocked or any(j.status != "ok" for j in gate.judges)
             got_rules |= set(gate.rule_ids)
         got = got_runs[0]
-        exact = got == expected
-        non_miss = got != "pass" if name == "red" else exact
-        covered = set(item.get("rule_ids", [])) <= got_rules if name == "red" else None
+        exact = got == expected or got in item.get("also_acceptable", [])
+        red = name.endswith("red")
+        non_miss = got != "pass" if red else exact
+        covered = set(item.get("rule_ids", [])) <= got_rules if red else None
         results.append(
             ItemResult(item["id"], expected, got, exact, non_miss, blocked, covered, got_runs)
         )
@@ -174,6 +182,9 @@ def run_all(client: ModelClient, runs: int = 1, directory: Path = DEFAULT_DIR) -
         run_mfk_set(client, runs, directory),
         SetReport("fact", [], skipped=True, skip_reason="needs fetched source bodies; week 2"),
         SetReport("inject", [], skipped=True, skip_reason="P4 not wired; week 2"),
+        run_ethics_set("ar-red", client, runs, directory),
+        run_ethics_set("ar-green", client, runs, directory),
+        SetReport("ar-fact", [], skipped=True, skip_reason="needs fetched source bodies"),
     ]
 
 

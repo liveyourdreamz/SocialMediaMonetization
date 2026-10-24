@@ -1,0 +1,260 @@
+[
+ {
+  "id": "ARFACT-01",
+  "set": "SET_AR_FACT",
+  "language": "ar",
+  "region": "Maghreb",
+  "case_title": "UN Derna flood toll of 11,300 revised to 3,958 after the Libyan Red Crescent denied issuing it",
+  "case_date": "2023-09-17",
+  "source_url": "https://www.alquds.co.uk/%d8%a7%d9%84%d8%a3%d9%85%d9%85-%d8%a7%d9%84%d9%85%d8%aa%d8%ad%d8%af%d8%a9-%d8%a7%d8%b1%d8%aa%d9%81%d8%a7%d8%b9-%d8%ad%d8%b5%d9%8a%d9%84%d8%a9-%d8%b6%d8%ad%d8%a7%d9%8a%d8%a7-%d8%a7%d9%84%d9%81%d9%8a/",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "عنوان الحلقة: «درنة بعد العاصفة دانيال». يقول فلك في النص: «وفق الأمم المتحدة، أودت الفيضانات في مدينة درنة الليبية بحياة ١١٣٠٠ شخص، وما زال أكثر من عشرة آلاف في عداد المفقودين». يظهر الرقم ١١٣٠٠ بخط كبير على صورة فضائية للوادي. المقتطف المرجعي: نشر مكتب الأمم المتحدة لتنسيق الشؤون الإنسانية الرقم يوم السبت ١٦ سبتمبر ٢٠٢٣ نقلاً عن الهلال الأحمر الليبي، فنفى الهلال الأحمر في اليوم التالي أنه أصدره، وعدّل المكتب في ١٧ سبتمبر الحصيلة إلى ٣٩٥٨ وفاة على الأقل في ليبيا استناداً إلى أرقام تحققت منها منظمة الصحة العالمية.",
+  "test_input_en": "Episode title: 'Derna after Storm Daniel'. Falak says in the script: 'According to the United Nations, the floods in the Libyan city of Derna killed 11,300 people, and more than ten thousand are still missing.' The figure 11,300 appears in large type over a satellite image of the valley. Reference excerpt: OCHA published the figure on Saturday 16 September 2023, citing the Libyan Red Crescent; the Red Crescent denied issuing it the next day, and on 17 September OCHA revised the toll to at least 3,958 deaths across Libya, using WHO-verified figures.",
+  "expected": "outdated",
+  "rule_ids": [
+   "R-12"
+  ],
+  "reason": "The UN withdrew the 11,300 figure on 17 September 2023 and replaced it with a WHO-verified 3,958 after the Libyan Red Crescent denied issuing it (the AP report at abc17news.com/?p=1218273 confirms the revision), so the script repeats a superseded figure.",
+  "variant_hints": [
+   "تقول الأمم المتحدة إن عدد قتلى فيضانات درنة بلغ أحد عشر ألفاً وثلاثمئة.",
+   "حصيلة كارثة درنة بحسب الأمم المتحدة: ١١٬٣٠٠ قتيل."
+  ],
+  "use": "example",
+  "confidence": "high",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARFACT-02",
+  "set": "SET_AR_FACT",
+  "language": "ar",
+  "region": "GCC",
+  "case_title": "Saudi 2021 population estimate revised down after the 2022 census",
+  "case_date": "2023-07-24",
+  "source_url": "https://agsi.org/analysis/a-smaller-saudi-population-puts-key-economic-indicators-in-a-more-favorable-light/",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "حلقة بعنوان «السعودية بالأرقام». يقول النص: «تشير تقديرات الهيئة العامة للإحصاء إلى أن عدد سكان المملكة في عام ٢٠٢١ بلغ ٣٤٫١ مليون نسمة، منهم ٢١٫٧ مليون مواطن سعودي». ويظهر رسم بياني يحمل الرقمين. المقتطف المرجعي: أظهر تعداد السعودية ٢٠٢٢، الذي أعلنت الهيئة نتائجه في ٣١ مايو ٢٠٢٣، أن عدد السكان ٣٢٫٢ مليون نسمة، وبعد التعداد عدّلت الهيئة تقدير عام ٢٠٢١ إلى ٣٠٫٨ مليون، وخفّضت عدد المواطنين في ذلك العام من ٢١٫٧ إلى ١٨٫٤ مليون.",
+  "test_input_en": "Episode titled 'Saudi Arabia in numbers'. The script says: 'General Authority for Statistics estimates put the Kingdom's population in 2021 at 34.1 million, of whom 21.7 million are Saudi nationals.' A chart shows both figures. Reference excerpt: the Saudi Census 2022, whose results GASTAT announced on 31 May 2023, counted 32.2 million people. After the census GASTAT revised the 2021 estimate to 30.8 million and cut the number of nationals that year from 21.7 to 18.4 million.",
+  "expected": "outdated",
+  "rule_ids": [
+   "R-12"
+  ],
+  "reason": "Both figures come from GASTAT's pre-census estimate, which GASTAT revised after the 2022 census (34.1 million to 30.8 million in total, 21.7 million to 18.4 million nationals), so quoting them now is outdated; the census total is confirmed by Al Arabiya, 31 May 2023.",
+  "variant_hints": [
+   "كان عدد سكان السعودية ٣٤ مليوناً ومئة ألف في ٢٠٢١ بحسب الإحصاء الرسمي.",
+   "المواطنون السعوديون نحو ٢١٫٧ مليون من أصل ٣٤٫١ مليون نسمة عام ٢٠٢١."
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARFACT-03",
+  "set": "SET_AR_FACT",
+  "language": "ar",
+  "region": "GCC",
+  "case_title": "GASTAT comprehensive GDP update raises 2023 nominal GDP and 2024 real growth",
+  "case_date": "2025-06-02",
+  "source_url": "https://enterpriseam.com/ksa/2025/06/02/gastat-is-revising-our-gdp-figures/",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "حلقة اقتصادية بعنوان «حجم الاقتصاد السعودي». يقول فلك: «بلغ الناتج المحلي الإجمالي الاسمي للمملكة في عام ٢٠٢٣ نحو ٣٫٩٤ تريليون ريال، ونما الاقتصاد الحقيقي في ٢٠٢٤ بنسبة ١٫٣٪ فقط». وتظهر الأرقام على خريطة للمملكة من المدار. المقتطف المرجعي: في مشروع التحديث الشامل لبيانات الناتج المحلي (٢٠١١–٢٠٢٤)، الذي اعتمد سنة أساس جديدة هي ٢٠٢٣ وطريقة الربط المتسلسل، رفعت الهيئة العامة للإحصاء تقدير الناتج الاسمي لعام ٢٠٢٣ بنسبة ١٤٫١٪ إلى ٤٫٥ تريليون ريال، وعدّلت نمو ٢٠٢٤ الحقيقي من ١٫٣٪ إلى ١٫٨٪.",
+  "test_input_en": "Economics episode titled 'The size of the Saudi economy'. Falak says: 'The Kingdom's nominal GDP in 2023 was about SAR 3.94 trillion, and the real economy grew by only 1.3% in 2024.' The figures appear over a map of the Kingdom seen from orbit. Reference excerpt: in its comprehensive update of GDP data for 2011 to 2024, which rebased to 2023 and adopted chain-linking, GASTAT raised the 2023 nominal GDP estimate by 14.1% to SAR 4.5 trillion and revised 2024 real growth from 1.3% to 1.8%.",
+  "expected": "outdated",
+  "rule_ids": [
+   "R-09",
+   "R-12"
+  ],
+  "reason": "Both numbers are GASTAT's own figures from before the revision; its 2025 GDP revision replaced them with SAR 4.5 trillion and 1.8%, so the claim is outdated rather than invented.",
+  "variant_hints": [
+   "حجم اقتصاد السعودية ٣٫٩٤ تريليون ريال لعام ٢٠٢٣ حسب الأرقام الرسمية.",
+   "نما الاقتصاد السعودي ١٫٣ بالمئة في ٢٠٢٤ وفق الهيئة العامة للإحصاء."
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARFACT-04",
+  "set": "SET_AR_FACT",
+  "language": "ar",
+  "region": "UAE",
+  "case_title": "Dubai population 4.580 million at end-2025, written with Eastern Arabic digits and separators",
+  "case_date": "2026-07-30",
+  "source_url": "https://www.albayan.ae/news/uae/1543305",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "حلقة بعنوان «دبي من الفضاء». يقول فلك: «بحسب مؤسسة دبي للبيانات والإحصاء، بلغ عدد سكان الإمارة في نهاية ٢٠٢٥ نحو ٤٬٥٨٠٬٠٠٠ نسمة بنمو ٧٫٥٪، ويرتفع عدد المتواجدين خلال ساعات النهار إلى ٦٫٣٩٢ مليون شخص». تظهر الأرقام بالأرقام العربية المشرقية مع الفاصلة العشرية العربية (٫) وفاصل الآلاف (٬). المقتطف المرجعي، بأرقام لاتينية: «عدد سكان دبي بلغ 4.580 مليون نسمة بنهاية 2025 بنسبة نمو 7.5%»، و«متوسط عدد المتواجدين خلال ساعات النهار 6.392 مليون شخص».",
+  "test_input_en": "Episode titled 'Dubai from space'. Falak says: 'According to the Dubai Data and Statistics Establishment, the emirate's population at the end of 2025 was about 4,580,000, up 7.5%, and the daytime population rises to 6.392 million.' The figures appear in Eastern Arabic digits with the Arabic decimal mark (٫) and thousands separator (٬). Reference excerpt, in Latin digits: 'Dubai's population reached 4.580 million at the end of 2025, a growth rate of 7.5%', and 'the average daytime population is 6.392 million people'.",
+  "expected": "supported",
+  "rule_ids": [],
+  "reason": "Once the digits are normalised, ٤٬٥٨٠٬٠٠٠ equals the source's 4.580 million (where the point is a decimal mark, not a thousands separator) and ٦٫٣٩٢ million and ٧٫٥٪ match exactly, so a checker that misreads 4.580 as 4,580 million would wrongly flag a correct claim.",
+  "variant_hints": [
+   "سكان دبي أربعة ملايين وخمسمئة وثمانون ألفاً في نهاية ٢٠٢٥.",
+   "بلغ عدد سكان دبي ٤٫٥٨ مليون نسمة نهاية العام الماضي بزيادة ٧٫٥ بالمئة."
+  ],
+  "use": "test",
+  "confidence": "high",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARFACT-05",
+  "set": "SET_AR_FACT",
+  "language": "ar",
+  "region": "GCC",
+  "case_title": "Kuwait heat, July 2021: 53.5 C in the shade versus 65 to 70 C in the sun",
+  "case_date": "2021-07-02",
+  "source_url": "https://al-sharq.com/article/02/07/2021/حرارة-الكويت-تقترب-من-الغليان-70-درجة-تحت-الشمس-و535-في-الظل",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "مقطع قصير بعنوان «أسخن مكان على الأرض؟». يقول فلك: «في مطلع يوليو ٢٠٢١ سجّلت الكويت ٧٠ درجة مئوية في الظل، بحسب إدارة الأرصاد الجوية». ويظهر على الشاشة الرقم «٧٠°م في الظل» فوق صورة حرارية للخليج. المقتطف المرجعي: نقلت الصحف عن أحد متنبئي إدارة الأرصاد الجوية الكويتية أن الحرارة في الظل بلغت 53.5 درجة مئوية في بعض مناطق البلاد، وأنها تراوحت تحت أشعة الشمس بين 65 و70 درجة. (في عنوان الخبر كُتب الرقم في الرابط الإلكتروني «535» بعد حذف الفاصلة العشرية.)",
+  "test_input_en": "Short clip titled 'The hottest place on Earth?'. Falak says: 'In early July 2021 Kuwait recorded 70 C in the shade, according to the Meteorological Department.' The screen shows '70 C in the shade' over a thermal image of the Gulf. Reference excerpt: newspapers quoted a Kuwaiti Meteorological Department forecaster as saying the shade temperature reached 53.5 C in some areas, and that under direct sun it ranged between 65 and 70 C. (In the article's web address the figure appears as '535', with the decimal mark dropped.)",
+  "expected": "unsupported",
+  "rule_ids": [],
+  "reason": "The script takes the top of the 65 to 70 C under-sun range and labels it a shade reading, when the source's shade reading is 53.5 C; this is a range trap, and the URL form '535' adds a separator trap (the source relays the forecaster via Kuwait's Al-Rai, so it is not the primary bulletin).",
+  "variant_hints": [
+   "الكويت تسجل سبعين درجة مئوية في الظل صيف ٢٠٢١.",
+   "بلغت درجة الحرارة في الظل بالكويت ٧٠°م وفق الأرصاد الجوية."
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": [
+   "misattributed"
+  ]
+ },
+ {
+  "id": "ARFACT-06",
+  "set": "SET_AR_FACT",
+  "language": "ar",
+  "region": "UAE",
+  "case_title": "Ramadan 1447 AH: Tuesday 17 February 2026 is the sighting day, not the first day of the fast",
+  "case_date": "2026-02-01",
+  "source_url": "https://www.almamlakatv.com/news/189474-الفلك-الدولي-استحالة-رؤية-هلال-رمضان-الثلاثاء-17-شباط",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "حلقة بعنوان «هلال رمضان من المدار». يقول فلك: «أعلن مركز الفلك الدولي في أبوظبي أن الثلاثاء ١٧ فبراير ٢٠٢٦ هو أول أيام شهر رمضان ١٤٤٧هـ في معظم الدول العربية». وتظهر على الشاشة عبارة «١ رمضان ١٤٤٧ = ١٧/٢/٢٠٢٦». المقتطف المرجعي: قال المركز إن رؤية الهلال مساء الثلاثاء ١٧ فبراير، وهو يوم التحري في معظم الدول، غير ممكنة في العالمين العربي والإسلامي بالعين المجردة أو بالتلسكوب. وتوقّع أن يكون الخميس ١٩ فبراير أول أيام رمضان في الدول التي تشترط الرؤية الفعلية، وقد يكون الأربعاء ١٨ فبراير في دول تعتمد معايير أخرى.",
+  "test_input_en": "Episode titled 'The Ramadan crescent from orbit'. Falak says: 'The International Astronomical Center in Abu Dhabi announced that Tuesday 17 February 2026 is the first day of Ramadan 1447 AH in most Arab countries.' The screen shows '1 Ramadan 1447 = 17/2/2026'. Reference excerpt: the Center said that sighting the crescent on the evening of Tuesday 17 February, the sighting day in most countries, was impossible across the Arab and Islamic world, by naked eye or telescope. It expected Thursday 19 February to be the first day of Ramadan where an actual sighting is required, and possibly Wednesday 18 February in countries that use other criteria.",
+  "expected": "unsupported",
+  "rule_ids": [],
+  "reason": "This is a Hijri-to-Gregorian date trap: the script treats the sighting day (17 February) as 1 Ramadan, which the cited Center did not say (it forecast 19 February, or 18 February under other criteria); the region is UAE because the Center is in Abu Dhabi, although the source is Jordan's Al Mamlaka TV.",
+  "variant_hints": [
+   "يبدأ صيام رمضان ١٤٤٧ يوم الثلاثاء السابع عشر من فبراير بحسب مركز الفلك الدولي.",
+   "مركز الفلك الدولي: غرة رمضان توافق ١٧ فبراير ٢٠٢٦."
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARFACT-07",
+  "set": "SET_AR_FACT",
+  "language": "ar",
+  "region": "Egypt",
+  "case_title": "December 2020 CAPMAS figure (EGP 3,219 a month for a family of four) recirculated as new",
+  "case_date": "2026-03-03",
+  "source_url": "https://www.annahar.com/factcheck/282734/جهاز-حكومي-مصري-الأسرة-المكونة-من-4-أفراد-تحتاج-شهريا-لـ3219-جنيها-factcheck",
+  "source_type": "factcheck",
+  "original_source_url": null,
+  "test_input": "مقطع بعنوان «كم تحتاج الأسرة المصرية اليوم؟». يقول النص: «أعلن الجهاز المركزي للتعبئة العامة والإحصاء هذا الشهر أن الأسرة المكونة من أربعة أفراد تحتاج إلى ٣٢١٩ جنيهاً شهرياً لتغطية احتياجاتها الأساسية». ويظهر الرقم مع شعار «إحصاء جديد». المقتطف المرجعي: يعود الرقم إلى مؤتمر صحفي عُقد في ديسمبر ٢٠٢٠ لإعلان نتائج بحث الدخل والإنفاق ٢٠١٩/٢٠٢٠، ولم يصدر الجهاز بياناً جديداً بهذا المعنى، ونفى في أغسطس ٢٠٢٥ أنه نشر أرقاماً مماثلة مؤخراً. وقدّر البحث نفسه متوسط دخل الأسرة بـ ٥٧٥٤٫٩ جنيه شهرياً.",
+  "test_input_en": "Clip titled 'How much does an Egyptian family need today?'. The script says: 'CAPMAS announced this month that a family of four needs EGP 3,219 a month to cover its basic needs.' The figure appears with a 'new statistic' badge. Reference excerpt: the figure dates from a December 2020 press conference announcing the 2019/2020 Income and Expenditure Survey; CAPMAS has issued no new statement to that effect, and in August 2025 it denied publishing such figures recently. The same survey put average household income at EGP 5,754.9 a month.",
+  "expected": "outdated",
+  "rule_ids": [
+   "R-09"
+  ],
+  "reason": "The date changes the claim: CAPMAS did give the figure, but in December 2020 for the 2019/2020 survey, and presenting it as a new release is outdated (Annahar rated it misleading).",
+  "variant_hints": [
+   "بحسب أحدث بيانات الإحصاء، تحتاج أسرة من أربعة أفراد ٣٬٢١٩ جنيهاً في الشهر.",
+   "رقم جديد من جهاز الإحصاء: ثلاثة آلاف ومئتان وتسعة عشر جنيهاً شهرياً لأسرة من أربعة."
+  ],
+  "use": "test",
+  "confidence": "high",
+  "todo": null,
+  "also_acceptable": [
+   "misattributed"
+  ]
+ },
+ {
+  "id": "ARFACT-08",
+  "set": "SET_AR_FACT",
+  "language": "ar",
+  "region": "UAE",
+  "case_title": "'NASA announces the sun will rise from the west', a claim NASA never made",
+  "case_date": "2020-06-05",
+  "source_url": "https://www.misbar.com/factcheck/2020/06/05/%D8%A7%D9%84%D8%B4%D9%85%D8%B3-%D8%B3%D8%AA%D8%B4%D8%B1%D9%82-%D9%85%D9%86-%D8%A7%D9%84%D8%BA%D8%B1%D8%A8-%D8%A7%D8%AF%D8%B9%D8%A7%D8%A1-%D8%B2%D8%A7%D8%A6%D9%81",
+  "source_type": "factcheck",
+  "original_source_url": null,
+  "test_input": "حلقة بعنوان «هل ستشرق الشمس من الغرب؟». يقول فلك: «أعلنت وكالة الفضاء الأمريكية ناسا أن الشمس ستشرق من جهة الغرب لأول مرة في التاريخ، وأكد علماؤها أن ذلك سيحدث قريباً بسبب تغيّر في دوران الأرض». ترافق ذلك صورة لشروق الشمس مع شعار ناسا في زاوية الشاشة. المقتطف المرجعي: لم يجد فريق التحقق أي أثر لهذا الخبر على موقع ناسا ولا أي تحليل منشور لها بشأنه، والادعاء يتكرر على مواقع التواصل منذ عام ٢٠١٠، وصُنّف زائفاً.",
+  "test_input_en": "Episode titled 'Will the sun rise in the west?'. Falak says: 'The US space agency NASA announced that the sun will rise in the west for the first time in history, and its scientists confirmed this will happen soon because of a change in Earth's rotation.' A sunrise image runs with the NASA logo in the corner of the screen. Reference excerpt: the fact-checkers found no trace of the story on NASA's website and no NASA analysis of it; the claim has recirculated on social media since 2010 and was rated false.",
+  "expected": "misattributed",
+  "rule_ids": [],
+  "reason": "NASA never made this claim (Misbar found no NASA source and rated it false), and the logo makes the misattribution worse; the region is UAE because Misbar names a Dubai TV broadcast as the first to report it, although the claim spread across the Arab world.",
+  "variant_hints": [
+   "وكالة ناسا تؤكد: شروق الشمس من الغرب بات وشيكاً.",
+   "علماء ناسا أعلنوا أن الشمس ستطلع من المغرب لأول مرة."
+  ],
+  "use": "example",
+  "confidence": "high",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARFACT-09",
+  "set": "SET_AR_FACT",
+  "language": "ar",
+  "region": "Levant",
+  "case_title": "WHO misquoted on COVID-19 transmission in a dubbed Arabic clip",
+  "case_date": "2020-08-16",
+  "source_url": "https://fatabyyano.net/%D9%85%D9%86%D8%B8%D9%85%D8%A9_%D8%A7%D9%84%D8%B5%D8%AD%D8%A9_%D8%A7%D9%84%D8%B9%D8%A7%D9%84%D9%85%D9%8A%D8%A9_%D9%83%D9%88%D8%B1%D9%88%D9%86%D8%A7_%D9%81%D9%8A%D8%B1%D9%88%D8%B3/",
+  "source_type": "factcheck",
+  "original_source_url": null,
+  "test_input": "مقطع صحي بعنوان «منظمة الصحة العالمية تعترف». يقول النص: «أعلنت منظمة الصحة العالمية أن فيروس كورونا لا ينتقل باللمس، وأن المصاب لا ينقل العدوى إلى غيره، وأن الحياة ستعود إلى طبيعتها». يُعرض مقطع مدبلج من مؤتمر صحفي للمنظمة. المقتطف المرجعي: قالت مسؤولة في المنظمة في مؤتمر صحفي يوم ٨ يونيو ٢٠٢٠ إن انتقال العدوى من شخص بلا أعراض إلى غيره «يبدو نادراً» وفق البيانات المتاحة آنذاك، وأوضحت المنظمة في ٩ يونيو أن ذلك لا يعني أن عديمي الأعراض غير معدين، ولا يغيّر توصياتها.",
+  "test_input_en": "Health clip titled 'The WHO admits it'. The script says: 'The WHO announced that the coronavirus does not spread by touch, that an infected person does not pass the infection to others, and that life will return to normal.' A dubbed excerpt of a WHO press conference is shown. Reference excerpt: at a press conference on 8 June 2020 a WHO official said transmission from an asymptomatic person 'appears rare' on the data then available; on 9 June the WHO clarified that this did not mean asymptomatic people are not infectious and did not change its guidance.",
+  "expected": "misattributed",
+  "rule_ids": [
+   "R-09"
+  ],
+  "reason": "The WHO never said this: the clip turns a hedged remark about asymptomatic cases into an absolute 'infected people do not transmit', which the WHO corrected the next day (Fatabyyano rated it false); the region is Levant because Fatabyyano is based in Jordan and the claim circulated across the Arab world.",
+  "variant_hints": [
+   "الصحة العالمية: مريض كورونا لا يعدي أحداً والفيروس لا ينتقل باللمس.",
+   "اعترفت منظمة الصحة العالمية بأن المصابين لا ينقلون العدوى."
+  ],
+  "use": "test",
+  "confidence": "high",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARFACT-10",
+  "set": "SET_AR_FACT",
+  "language": "ar",
+  "region": "UAE",
+  "case_title": "Red yeast rice supplement promoted as an artery cleaner; UAE health ministry says it is unregistered",
+  "case_date": "2019-04-10",
+  "source_url": "https://www.arnnewscentre.ae/ar/news/أخبار-محلية/الصحة-تحذر-من-مكمل-غذائي-غير-مسجل-يدعي/",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "حلقة برعاية متجر إلكتروني بعنوان «سر الشرايين النظيفة». يقول النص: «مكمل الأرز الأحمر الطبيعي، المعتمد من وزارة الصحة ووقاية المجتمع، ينظف الشرايين ويخفض الكوليسترول وضغط الدم خلال شهر واحد». يظهر شعار يشبه شعار الوزارة بجانب العبوة مع عبارة «موصى به رسمياً». المقتطف المرجعي: حذّرت وزارة الصحة ووقاية المجتمع في الإمارات من هذا المكمل، وأوضحت أنه غير مسجل لديها وأن مواصفاته مجهولة، وأن المعلومات المتداولة عنه مضللة وغير علمية، وأنه يشكّل خطراً على مرضى الكوليسترول والضغط.",
+  "test_input_en": "Episode sponsored by an online store, titled 'The secret of clean arteries'. The script says: 'Natural red yeast rice supplement, approved by the Ministry of Health and Prevention, cleans arteries and lowers cholesterol and blood pressure within one month.' A logo resembling the ministry's sits beside the pack with the words 'officially recommended'. Reference excerpt: the UAE Ministry of Health and Prevention warned against this supplement, saying it is not registered with the ministry, its specifications are unknown, the information circulating about it is misleading and unscientific, and it poses a risk to people with cholesterol or blood-pressure conditions.",
+  "expected": "endorsement_wording",
+  "rule_ids": [
+   "R-09",
+   "R-10"
+  ],
+  "reason": "The words 'approved by' and 'officially recommended' and the look-alike logo imply a ministry endorsement the ministry explicitly denied (the product is unregistered), which is an endorsement-wording failure on top of an unsourced health claim.",
+  "variant_hints": [
+   "مكمل مسجّل لدى وزارة الصحة الإماراتية يطهّر الشرايين في ثلاثين يوماً.",
+   "بموافقة الجهات الصحية في الدولة: الأرز الأحمر يخفض الكوليسترول والضغط."
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ }
+]
