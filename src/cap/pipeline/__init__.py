@@ -32,7 +32,7 @@ from typing import Any
 from cap.agents import AgentBlockedError, adapt, critique, critique_text, draft
 from cap.config import get_settings
 from cap.domain.card import prepare_card
-from cap.domain.cost import charge, metering
+from cap.domain.cost import charge, keep_on, metering
 from cap.gates import (
     HistoryIndex,
     Outcome,
@@ -80,12 +80,17 @@ def _progress(deps: PipelineDeps, record: PostRecord) -> None:
 
 
 def _metered[**P](step: Callable[P, PostRecord]) -> Callable[P, PostRecord]:
-    """Charge the model calls a step made to the record it returns."""
+    """Charge the model calls a step made to the record it returns; when the step
+    raises, the calls travel on the error to the worker, which charges them (R9)."""
 
     @functools.wraps(step)
     def run(*args: P.args, **kwargs: P.kwargs) -> PostRecord:
         with metering() as spent:
-            out = step(*args, **kwargs)
+            try:
+                out = step(*args, **kwargs)
+            except Exception as e:
+                keep_on(e, spent)
+                raise
         charge(out, spent, get_settings().post_budget_usd)
         return out
 

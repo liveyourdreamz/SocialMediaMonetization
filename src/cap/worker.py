@@ -24,9 +24,11 @@ from collections.abc import Callable
 
 from cap.approval import release_job
 from cap.audit import acting_as
+from cap.config import get_settings
 from cap.demo.canary_job import run_canary_job
 from cap.demo.ideas_job import run_ideas_job, schedule_due
 from cap.demo.seed import run_checks_job, run_render_job, run_tour, run_write_job
+from cap.domain.cost import Spend, carried_by, charge, metering, total
 from cap.jobs import Job, JobKind
 from cap.schema.post_record import PostRecord, PostStatus, ReleaseStatus
 from cap.store import IN_FLIGHT, PostStore, park_if_interrupted
@@ -144,19 +146,39 @@ class Worker:
         return True
 
     def _run(self, job: Job) -> None:
+        """Run the handler, metered: calls a pipeline step charged to its post stay
+        there; any other call the job made (the canary writer, trend research), and
+        every call of a step that raised, is charged here, so nothing paid for goes
+        unrecorded (D44, review R9)."""
         handler = self.handlers.get(job.kind)
+        with metering() as spent:
+            try:
+                if handler is None:
+                    raise LookupError(f"no handler for {job.kind.value} jobs")
+                with acting_as("worker"):
+                    handler(self.store, job)
+            except Exception as e:  # noqa: BLE001 - recorded on the job and the post (D43)
+                why = f"{type(e).__name__}: {str(e)[:300]}"
+                _log.exception("job %s (%s) failed", job.id, job.kind.value)
+                self.store.jobs.fail(job.id, why)
+                self._failed(job, why)
+                self._charge(job, [*spent, *carried_by(e)])
+                return
+        self.store.jobs.finish(job.id)
+        self._charge(job, list(spent))
+
+    def _charge(self, job: Job, spent: list[Spend]) -> None:
+        if not spent:
+            return
         try:
-            if handler is None:
-                raise LookupError(f"no handler for {job.kind.value} jobs")
-            with acting_as("worker"):
-                handler(self.store, job)
-        except Exception as e:  # noqa: BLE001 - recorded on the job and the post (D43)
-            why = f"{type(e).__name__}: {str(e)[:300]}"
-            _log.exception("job %s (%s) failed", job.id, job.kind.value)
-            self.store.jobs.fail(job.id, why)
-            self._failed(job, why)
-        else:
-            self.store.jobs.finish(job.id)
+            if job.kind == JobKind.IDEAS:  # no post behind it: the audit log keeps it
+                detail = {"job": job.post_id, "usd": total(spent), "calls": len(spent)}
+                self.store.audit.append("ideas run cost", detail=detail)
+                return
+            budget = get_settings().post_budget_usd
+            self.store.update(job.post_id, lambda r: charge(r, spent, budget))
+        except Exception:  # noqa: BLE001 - a charge never stops the worker; logged
+            _log.exception("could not charge job %s's model calls", job.id)
 
     # ---- what a failure means for the post ------------------------------------------------
 

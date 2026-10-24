@@ -33,7 +33,6 @@ from cap.domain.canary import (
     next_fault,
     rate,
 )
-from cap.domain.cost import charge, metering
 from cap.jobs import Job, JobKind
 from cap.schema.enums import FaultType
 from cap.schema.post_record import CanaryRefile, Platform, PostRecord, PostStatus
@@ -144,26 +143,25 @@ def _gates_caught(record: PostRecord) -> list[str]:
 
 def run_canary_job(store: PostStore, job: Job) -> None:
     """The worker's handler for a CANARY job: draft from what Hemant filed, plant one
-    fault, gate, render, queue. Every model call is charged to the post (D44)."""
+    fault, gate, render, queue. The worker charges P14 and the second adapter call to
+    the post (D44); the pipeline steps charge their own."""
     from cap.agents import adapt, write_canary
     from cap.demo.seed import _setup
 
     record = store.get(job.post_id)
     test_log = str(job.payload.get("test_log", ""))
-    with metering() as spent:
-        deps, sources = _setup(store, record, test_log, urls=list(job.payload.get("urls", [])))
-        docs = pipeline.as_sources(sources)
-        record = pipeline.write(record, docs, deps)
-        if pipeline.stopped(record):
-            raise RuntimeError(f"the base draft stopped: {record.flags.stop_reason}")
-        base = record.draft.model_dump(include={"title", "script", "caption", "on_screen_text",
-                                                "thumbnail_text", "shot_list"})  # fmt: skip
-        fault = record.flags.canary_fault_type or FaultType.UNSOURCED_NUMBER
-        record = write_canary(record, deps.client, fault, base,
-                              deps.character_blocks.get(record.channel_id.value, ""))  # fmt: skip
-        # the platform cuts are made again from the canary's own script, as for any post
-        record = adapt(record, deps.client, [Platform.YOUTUBE_LONG, Platform.YOUTUBE_SHORT])
-    charge(record, spent, get_settings().post_budget_usd)  # P14 and the second adapt
+    deps, sources = _setup(store, record, test_log, urls=list(job.payload.get("urls", [])))
+    docs = pipeline.as_sources(sources)
+    record = pipeline.write(record, docs, deps)
+    if pipeline.stopped(record):
+        raise RuntimeError(f"the base draft stopped: {record.flags.stop_reason}")
+    base = record.draft.model_dump(include={"title", "script", "caption", "on_screen_text",
+                                            "thumbnail_text", "shot_list"})  # fmt: skip
+    fault = record.flags.canary_fault_type or FaultType.UNSOURCED_NUMBER
+    record = write_canary(record, deps.client, fault, base,
+                          deps.character_blocks.get(record.channel_id.value, ""))  # fmt: skip
+    # the platform cuts are made again from the canary's own script, as for any post
+    record = adapt(record, deps.client, [Platform.YOUTUBE_LONG, Platform.YOUTUBE_SHORT])
     record = pipeline.checks(record, docs, deps)
     record.flags.canary_gates_caught = _gates_caught(record)
     if pipeline.stopped(record):  # a gate caught it: recorded, and the card goes on (P14)
