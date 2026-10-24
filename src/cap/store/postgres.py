@@ -21,6 +21,7 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from cap.gates.history import HistoryStore, eligible
+from cap.jobs import JobKind
 from cap.schema.migrate import load_record
 from cap.schema.post_record import PostRecord, PostStatus
 from cap.store import (
@@ -34,7 +35,7 @@ from cap.store import (
 from cap.store.pgaudit import PostgresAuditLog
 from cap.store.pgaudit import append as audit_append
 from cap.store.pgideas import PostgresIdeaBook
-from cap.store.pgjobs import PostgresJobQueue
+from cap.store.pgjobs import PostgresJobQueue, insert_job
 
 _log = logging.getLogger("cap.store")
 
@@ -88,16 +89,12 @@ class PostgresStore(PostStore):
 
     def put(self, record: PostRecord) -> None:
         with self._pool.connection() as conn, conn.transaction():
-            # the save and its audit entry commit together, or neither does
-            row = conn.execute(
-                "SELECT jsonb_array_length(record->'history') FROM posts"
-                " WHERE post_id = %s FOR UPDATE",
-                (record.post_id,),
-            ).fetchone()
-            _save(conn, record)
-            audit_append(
-                conn, "post saved", record.post_id, saved_detail(record, row[0] if row else 0)
-            )
+            _put(conn, record)
+
+    def file(self, record: PostRecord, kind: JobKind, payload: dict[str, Any]) -> int:
+        with self._pool.connection() as conn, conn.transaction():
+            _put(conn, record)
+            return insert_job(conn, kind, record.post_id, payload)
 
     def all(self) -> list[PostRecord]:
         return self._select("SELECT post_id, record FROM posts")
@@ -192,6 +189,16 @@ _STATE_KEYS = ("paused", "paused_reason", "analytics", "analytics_note", "canary
 
 def _state(saved: dict[str, Any]) -> AppState:
     return AppState(**{k: v for k, v in saved.items() if k in _STATE_KEYS})
+
+
+def _put(conn: Connection, record: PostRecord) -> None:
+    """The save and its audit entry, in the caller's transaction: both or neither."""
+    row = conn.execute(
+        "SELECT jsonb_array_length(record->'history') FROM posts WHERE post_id = %s FOR UPDATE",
+        (record.post_id,),
+    ).fetchone()
+    _save(conn, record)
+    audit_append(conn, "post saved", record.post_id, saved_detail(record, row[0] if row else 0))
 
 
 def _save(conn: Connection, record: PostRecord) -> None:

@@ -1,18 +1,53 @@
 """The job queue in Postgres (cap.jobs has the rules; the indexes in 0002_jobs.sql
 enforce them). Claiming uses FOR UPDATE SKIP LOCKED, so two workers never take the
-same job; the one-running-per-post index stops two jobs writing one post at once."""
+same job; the one-running-per-post index stops two jobs writing one post at once.
+
+A held job carries a session advisory lock (JOB_LOCKS, job id), taken in the claim's
+own transaction and kept on that connection until the job ends. The database drops it
+when the holding process dies, so `recover` can tell a dead worker's job from a live
+one by trying the lock (review R6)."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
-from psycopg import errors
+from psycopg import Connection, errors
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from cap.jobs import MAX_ATTEMPTS, Job, JobKind, JobQueue, JobStatus
 
 _COLUMNS = "id, kind, post_id, payload, status, attempts, error, created_at"
+JOB_LOCKS = 7031  # the advisory-lock namespace for held jobs (two-key form)
+_CLAIM = (
+    "UPDATE jobs SET status = 'running', attempts = attempts + 1,"
+    " started_at = now() WHERE id = ("
+    "  SELECT j.id FROM jobs j WHERE j.status = 'queued' AND NOT EXISTS ("
+    "   SELECT 1 FROM jobs r WHERE r.post_id = j.post_id AND r.status = 'running')"
+    "  ORDER BY j.id FOR UPDATE SKIP LOCKED LIMIT 1)"
+    f" RETURNING {_COLUMNS}"
+)
+
+
+def insert_job(conn: Connection, kind: JobKind, post_id: str, payload: dict[str, Any]) -> int:
+    """Queue work on this connection (inside the caller's transaction when it has one);
+    the id of the job already queued or running for that post and kind, if any."""
+    row = conn.execute(
+        "INSERT INTO jobs (kind, post_id, payload) VALUES (%s, %s, %s)"
+        " ON CONFLICT (post_id, kind) WHERE status IN ('queued', 'running')"
+        " DO NOTHING RETURNING id",
+        (kind.value, post_id, Jsonb(payload)),
+    ).fetchone()
+    if row is None:  # the same work is already queued or running
+        row = conn.execute(
+            "SELECT id FROM jobs WHERE post_id = %s AND kind = %s"
+            " AND status IN ('queued', 'running')",
+            (post_id, kind.value),
+        ).fetchone()
+    assert row is not None
+    return int(row[0])
 
 
 def _job(row: tuple[Any, ...]) -> Job:
@@ -34,35 +69,34 @@ class PostgresJobQueue(JobQueue):
 
     def enqueue(self, kind: JobKind, post_id: str, payload: dict[str, Any] | None = None) -> int:
         with self._pool.connection() as conn:
-            row = conn.execute(
-                "INSERT INTO jobs (kind, post_id, payload) VALUES (%s, %s, %s)"
-                " ON CONFLICT (post_id, kind) WHERE status IN ('queued', 'running')"
-                " DO NOTHING RETURNING id",
-                (kind.value, post_id, Jsonb(payload or {})),
-            ).fetchone()
-            if row is None:  # the same work is already queued or running
-                row = conn.execute(
-                    "SELECT id FROM jobs WHERE post_id = %s AND kind = %s"
-                    " AND status IN ('queued', 'running')",
-                    (post_id, kind.value),
-                ).fetchone()
-        assert row is not None
-        return int(row[0])
+            return insert_job(conn, kind, post_id, payload or {})
 
     def claim(self) -> Job | None:
         with self._pool.connection() as conn:
             try:
-                row = conn.execute(
-                    "UPDATE jobs SET status = 'running', attempts = attempts + 1,"
-                    " started_at = now() WHERE id = ("
-                    "  SELECT j.id FROM jobs j WHERE j.status = 'queued' AND NOT EXISTS ("
-                    "   SELECT 1 FROM jobs r WHERE r.post_id = j.post_id AND r.status = 'running')"
-                    "  ORDER BY j.id FOR UPDATE SKIP LOCKED LIMIT 1)"
-                    f" RETURNING {_COLUMNS}"
-                ).fetchone()
+                row = conn.execute(_CLAIM).fetchone()
             except errors.UniqueViolation:  # another worker just started this post
                 return None
         return _job(row) if row else None
+
+    @contextmanager
+    def held(self) -> Iterator[Job | None]:
+        # one connection for the whole job: its advisory lock is the proof of life
+        with self._pool.connection() as conn:
+            try:
+                with conn.transaction():
+                    row = conn.execute(_CLAIM).fetchone()
+                    if row is not None:  # locked before the claim is visible to anyone
+                        conn.execute("SELECT pg_advisory_lock(%s, %s)", (JOB_LOCKS, row[0]))
+            except errors.UniqueViolation:  # another worker just started this post
+                row = None
+            if row is None:
+                yield None
+                return
+            try:
+                yield _job(row)
+            finally:
+                conn.execute("SELECT pg_advisory_unlock(%s, %s)", (JOB_LOCKS, row[0]))
 
     def finish(self, job_id: int) -> None:
         self._close(job_id, JobStatus.DONE, "")
@@ -87,18 +121,26 @@ class PostgresJobQueue(JobQueue):
             return conn.execute(sql + " LIMIT 1", params).fetchone() is not None  # type: ignore[arg-type]
 
     def recover(self) -> tuple[list[Job], list[Job]]:
-        with self._pool.connection() as conn, conn.transaction():
-            given_up = conn.execute(
-                "UPDATE jobs SET status = 'failed', error = 'interrupted too many times',"
-                f" finished_at = now() WHERE status = 'running' AND attempts >= %s"
-                f" RETURNING {_COLUMNS}",
-                (MAX_ATTEMPTS,),
+        resumed: list[Job] = []
+        given_up: list[Job] = []
+        with self._pool.connection() as conn:
+            running = conn.execute(
+                f"SELECT {_COLUMNS} FROM jobs WHERE status = 'running' ORDER BY id"
             ).fetchall()
-            resumed = conn.execute(
-                "UPDATE jobs SET status = 'queued', started_at = NULL"
-                f" WHERE status = 'running' RETURNING {_COLUMNS}"
-            ).fetchall()
-        return [_job(r) for r in resumed], [_job(r) for r in given_up]
+            for r in running:
+                job = _job(r)
+                taken = conn.execute(
+                    "SELECT pg_try_advisory_lock(%s, %s)", (JOB_LOCKS, job.id)
+                ).fetchone()
+                if not (taken and taken[0]):
+                    continue  # a live worker holds it
+                try:
+                    row = _release(conn, job)
+                finally:
+                    conn.execute("SELECT pg_advisory_unlock(%s, %s)", (JOB_LOCKS, job.id))
+                if row is not None:
+                    (given_up if row.status == JobStatus.FAILED else resumed).append(row)
+        return resumed, given_up
 
     def jobs_for(self, post_id: str) -> list[Job]:
         with self._pool.connection() as conn:
@@ -106,3 +148,19 @@ class PostgresJobQueue(JobQueue):
                 f"SELECT {_COLUMNS} FROM jobs WHERE post_id = %s ORDER BY id", (post_id,)
             ).fetchall()
         return [_job(r) for r in rows]
+
+
+def _release(conn: Connection, job: Job) -> Job | None:
+    """Put an abandoned running job back in the queue, or give it up after
+    MAX_ATTEMPTS; None when it was no longer running."""
+    if job.attempts >= MAX_ATTEMPTS:
+        sql = (
+            "UPDATE jobs SET status = 'failed', error = 'interrupted too many times',"
+            " finished_at = now()"
+        )
+    else:
+        sql = "UPDATE jobs SET status = 'queued', started_at = NULL"
+    row = conn.execute(
+        f"{sql} WHERE id = %s AND status = 'running' RETURNING {_COLUMNS}", (job.id,)
+    ).fetchone()
+    return _job(row) if row else None

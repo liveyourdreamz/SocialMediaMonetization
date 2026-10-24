@@ -51,8 +51,7 @@ def begin(store: PostStore, record: PostRecord) -> None:
     record.release = Release(status=ReleaseStatus.PREPARING, attempts=record.release.attempts + 1)
     record.approval.token = ""  # nothing publishable until the new release is sealed
     record.log("preparing the final video with your opening line")
-    store.put(record)
-    store.jobs.enqueue(JobKind.RELEASE, record.post_id)
+    store.file(record, JobKind.RELEASE, {})
 
 
 def run(store: PostStore, job: Job) -> None:

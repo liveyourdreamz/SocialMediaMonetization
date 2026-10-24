@@ -5,6 +5,12 @@ a worker inside the app (cap.worker) claims and runs them. Because jobs are rows
 restart loses nothing: a job that was running when the app stopped is put back in the
 queue and runs again (`recover`), a few times at most.
 
+A worker runs a job inside `held()`, which marks it as held by a live process for as
+long as it runs (on Postgres, a session advisory lock: it ends when the process dies,
+however it dies). `recover` takes back only running jobs nobody holds, so another
+process starting, or the clock checking every minute, never takes a live job (review
+R6), and a dead process's job comes back without waiting for a restart.
+
 Rules every queue keeps (tests/test_jobs.py runs them against each adapter):
 
 * one active job per post and kind: enqueueing the same work again returns the one
@@ -18,6 +24,8 @@ from __future__ import annotations
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -66,7 +74,13 @@ class JobQueue(ABC):
 
     @abstractmethod
     def claim(self) -> Job | None:
-        """The oldest queued job whose post has nothing running, now marked running."""
+        """The oldest queued job whose post has nothing running, now marked running.
+        Not held: `recover` treats it as abandoned. Workers use `held`."""
+
+    @abstractmethod
+    def held(self) -> AbstractContextManager[Job | None]:
+        """Claim the next job and hold it while the block runs (None: nothing to do).
+        Finish or fail it inside the block."""
 
     @abstractmethod
     def finish(self, job_id: int) -> None: ...
@@ -80,8 +94,8 @@ class JobQueue(ABC):
 
     @abstractmethod
     def recover(self) -> tuple[list[Job], list[Job]]:
-        """At start-up: jobs left running by a stopped app go back in the queue.
-        Returns (resumed, given_up); a job past MAX_ATTEMPTS is failed, not resumed."""
+        """Running jobs no live worker holds go back in the queue: at start-up, and on
+        the clock. Returns (resumed, given_up); a job past MAX_ATTEMPTS is failed."""
 
     @abstractmethod
     def jobs_for(self, post_id: str) -> list[Job]:
@@ -104,6 +118,7 @@ class MemoryJobQueue(JobQueue):
     def __init__(self) -> None:
         self._jobs: list[Job] = []
         self._lock = threading.Lock()
+        self._held: set[int] = set()  # ids a worker in this process is running
 
     def enqueue(self, kind: JobKind, post_id: str, payload: dict[str, Any] | None = None) -> int:
         with self._lock:
@@ -123,6 +138,20 @@ class MemoryJobQueue(JobQueue):
                     j.attempts += 1
                     return Job(**{**j.__dict__, "payload": dict(j.payload)})
             return None
+
+    @contextmanager
+    def held(self) -> Iterator[Job | None]:
+        job = self.claim()
+        if job is None:
+            yield None
+            return
+        with self._lock:
+            self._held.add(job.id)
+        try:
+            yield job
+        finally:
+            with self._lock:
+                self._held.discard(job.id)
 
     def _set(self, job_id: int, status: JobStatus, error: str = "") -> None:
         with self._lock:
@@ -146,7 +175,7 @@ class MemoryJobQueue(JobQueue):
         resumed, given_up = [], []
         with self._lock:
             for j in self._jobs:
-                if j.status != JobStatus.RUNNING:
+                if j.status != JobStatus.RUNNING or j.id in self._held:
                     continue
                 if j.attempts >= MAX_ATTEMPTS:
                     j.status, j.error = JobStatus.FAILED, "interrupted too many times"

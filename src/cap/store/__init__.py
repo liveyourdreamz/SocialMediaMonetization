@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 from cap.audit import AuditLog, MemoryAuditLog
 from cap.ideabook import IdeaBook, MemoryIdeaBook
-from cap.jobs import JobQueue, MemoryJobQueue
+from cap.jobs import JobKind, JobQueue, MemoryJobQueue
 from cap.schema.post_record import PostRecord, PostStatus
 
 if TYPE_CHECKING:
@@ -128,6 +128,12 @@ class PostStore(ABC):
 
     def count(self) -> int:
         return len(self.all())
+
+    def file(self, record: PostRecord, kind: JobKind, payload: dict[str, Any]) -> int:
+        """Save a post and queue its next job as one act, so no restart in between finds
+        a post with no work queued and parks it (review R6). Returns the job id."""
+        self.put(record)
+        return self.jobs.enqueue(kind, record.post_id, payload)
 
     def update(self, post_id: str, change: Callable[[PostRecord], object]) -> PostRecord:
         """Read the post, apply `change`, save; on a conflict read again and re-apply.

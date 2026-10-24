@@ -65,7 +65,9 @@ class Worker:
 
     # ---- start-up ---------------------------------------------------------------------
 
-    def recover(self) -> None:
+    def reclaim(self) -> None:
+        """Jobs a dead worker left running go back in the queue (start-up and the clock;
+        a live worker's job is never taken, cap.jobs)."""
         resumed, given_up = self.store.jobs.recover()
         for job in resumed:
             self._note(
@@ -74,6 +76,10 @@ class Worker:
             )
         for job in given_up:
             self._failed(job, "interrupted by restarts too many times; file it again")
+
+    def recover(self) -> None:
+        """At start-up: reclaim, then settle posts no job will finish."""
+        self.reclaim()
         for rec in self.store.all():
             if self.store.jobs.active(rec.post_id):
                 continue
@@ -105,8 +111,10 @@ class Worker:
     # ---- the loop ---------------------------------------------------------------------
 
     def tick(self) -> None:
-        """The clock: queue work that is due by the time of day (the weekly ideas run)."""
+        """The clock: take back jobs a dead process left, and queue work that is due by
+        the time of day (the weekly ideas run)."""
         try:
+            self.reclaim()
             for key in schedule_due(self.store):
                 _log.info("queued %s", key)
         except Exception:  # noqa: BLE001 - the clock never stops the worker
@@ -127,10 +135,15 @@ class Worker:
                 self._stop.wait(self.poll_s)
 
     def run_once(self) -> bool:
-        """Claim and run one job; False when there was nothing to do."""
-        job = self.store.jobs.claim()
-        if job is None:
-            return False
+        """Claim and run one job, held for as long as it runs; False when there was
+        nothing to do."""
+        with self.store.jobs.held() as job:
+            if job is None:
+                return False
+            self._run(job)
+        return True
+
+    def _run(self, job: Job) -> None:
         handler = self.handlers.get(job.kind)
         try:
             if handler is None:
@@ -144,7 +157,6 @@ class Worker:
             self._failed(job, why)
         else:
             self.store.jobs.finish(job.id)
-        return True
 
     # ---- what a failure means for the post ------------------------------------------------
 

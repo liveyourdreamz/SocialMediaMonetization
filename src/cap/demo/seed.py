@@ -316,8 +316,7 @@ def _next(store: PostStore, rec: PostRecord, kind: JobKind, payload: dict[str, A
     if pipeline.stopped(rec):
         store.put(_finish(rec))
         return
-    store.put(rec)
-    store.jobs.enqueue(kind, rec.post_id, payload)
+    store.file(rec, kind, payload)
 
 
 def begin_tour(store: PostStore) -> PostRecord:
@@ -334,8 +333,7 @@ def begin_tour(store: PostStore) -> PostRecord:
     rec.status = PostStatus.DRAFTING
     rec.flags.tour = True
     rec.log(f"guided tour started: the worked example, Patch tests {ex.TOOL} for 7 days")
-    store.put(rec)
-    store.jobs.enqueue(JobKind.TOUR, rec.post_id)
+    store.file(rec, JobKind.TOUR, {})
     return rec
 
 

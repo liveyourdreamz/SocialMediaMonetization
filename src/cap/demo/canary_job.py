@@ -88,8 +88,7 @@ def file_brief(
     post, CANARY when one is due. Returns the job kind queued."""
     with store.exclusive(LOCK):
         if record.flags.tour or not canary_due(store, rng):
-            store.put(record)
-            store.jobs.enqueue(JobKind.BRIEF, record.post_id, payload)
+            store.file(record, JobKind.BRIEF, payload)
             return JobKind.BRIEF
         record.flags.canary = True  # set by code, never by a model (D23)
         record.flags.canary_fault_type = next_fault(past_canaries(store))
@@ -98,8 +97,7 @@ def file_brief(
             test_log=str(payload.get("test_log", "")),
             idea_id=idea_id,
         )
-        store.put(record)
-        store.jobs.enqueue(JobKind.CANARY, record.post_id, payload)
+        store.file(record, JobKind.CANARY, payload)
         # the next gap is drawn when the next brief is filed
         store.update_state(lambda s: setattr(s, "canary_gap", 0))
     return JobKind.CANARY
@@ -124,10 +122,7 @@ def refile_clean(store: PostStore, canary: PostRecord) -> PostRecord | None:
     if (media / canary.post_id).is_dir():  # screenshots attached to the brief
         shutil.copytree(media / canary.post_id, media / clean.post_id, dirs_exist_ok=True)
     clean.log("filed again after the check post on this topic; drafted from the start")
-    store.put(clean)
-    store.jobs.enqueue(
-        JobKind.BRIEF, clean.post_id, {"urls": list(refile.urls), "test_log": refile.test_log}
-    )
+    store.file(clean, JobKind.BRIEF, {"urls": list(refile.urls), "test_log": refile.test_log})
     store.audit.append(
         "brief filed again after a canary",
         post_id=clean.post_id,
