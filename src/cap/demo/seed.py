@@ -158,33 +158,23 @@ EXAMPLE_ANALYTICS: dict[str, Any] = {
 }
 
 
-FORMATS = {"A": "take_it_apart", "B": "from_orbit", "C": "from_orbit"}
-SCIENCE_SCOPE = [
-    "the mechanism as the sources describe it",
-    "figures cited from the sources, with dates",
-    "first-hand results only from a test log, when one is given",
-]
-CLAIMS_SCOPE = {"A": SCIENCE_SCOPE, "B": SCIENCE_SCOPE, "C": SCIENCE_SCOPE}
-
-
 def new_brief(channel: str, topic: str) -> PostRecord:
-    """The record a brief starts as, visible on the Operator screen while it runs. The
-    brief builder (P6) is not in the laptop loop, so the format and the claims scope
-    the drafter expects are set here per channel."""
-    ch = Channel(channel)
+    """The record a brief starts as, visible on the Operator screen while it runs: the
+    brief built by rule (cap.domain.brief: format, claims scope, risk lane)."""
     from cap.characters import ANCHOR_ELEMENTS
     from cap.config import get_settings
+    from cap.domain.brief import build_brief
 
-    rec = PostRecord(
-        channel_id=ch,
-        brief=Brief(
-            topic=topic,
-            format_id=FORMATS[ch.value],
-            anchor_elements=ANCHOR_ELEMENTS[ch.value][:2],
-            claims_allowed=CLAIMS_SCOPE[ch.value],
-            length_s=get_settings().video_length_s,
-        ),
+    ch = Channel(channel)
+    brief = build_brief(
+        ch.value,
+        topic,
+        anchor_elements=ANCHOR_ELEMENTS[ch.value],
+        length_s=get_settings().video_length_s,
     )
+    rec = PostRecord(channel_id=ch, brief=brief)
+    if brief.lane.value == "high":
+        rec.log("high-risk lane: the topic touches a sensitive area; longer on the card")
     rec.status = PostStatus.DRAFTING
     rec.log(f"brief filed: {topic}")
     return rec

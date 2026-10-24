@@ -9,7 +9,7 @@ from cap.approval.app import card_for
 from cap.approval.identity import Reviewer
 from cap.config import get_settings
 from cap.domain.cost import over_budget
-from cap.schema.post_record import PostRecord, PostStatus
+from cap.schema.post_record import Lane, PostRecord, PostStatus
 from cap.store import PostStore
 from cap.ui.views.text import (
     LABELS,
@@ -109,6 +109,13 @@ def card_context(
         ),
         ("Real person shown", "yes" if media["real_person_depicted"] else "no"),
         ("Sponsor", card.sponsor["name"] if card.sponsor else "none"),
+        (
+            "Risk lane",
+            "high: the topic touches health, money, law, politics or children; "
+            "check it explains and never advises"
+            if record.brief.lane == Lane.HIGH
+            else "low",
+        ),
     ]
     return {
         "card": card,

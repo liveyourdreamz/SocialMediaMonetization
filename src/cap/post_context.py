@@ -78,6 +78,8 @@ These values are set by code for this post. Treat them as given; do not report a
 sponsored: {"yes, the Ad prefix and spoken disclosure apply" if sponsored else "no; no Ad prefix applies"}
 affiliate links: none
 claim limit: at most {s.max_claims} factual claims in the post
+claims allowed: {"; ".join(record.brief.claims_allowed) or "the mechanism and commonly cited figures"}
+risk lane: {record.brief.lane.value}{" (the topic touches a sensitive area: explain, never advise)" if record.brief.lane.value == "high" else ""}
 exemplars: none yet for this channel; write from the character block
 sourcing: the script is written from the model's knowledge; sources are found and each claim is checked after drafting (D41), so a claim without a source yet is expected at this stage, not a defect
 </post_context>"""

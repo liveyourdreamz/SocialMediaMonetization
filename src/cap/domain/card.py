@@ -35,6 +35,7 @@ from cap.config import get_settings
 from cap.schema.post_record import (
     Channel,
     Decision,
+    Lane,
     PostRecord,
     PostStatus,
     ReasonCode,
@@ -45,6 +46,7 @@ from cap.schema.post_record import (
 WORDS_PER_MINUTE = 200  # reading speed used for the per-card threshold
 MIN_READ_SECONDS = 30
 READ_SHARE = 0.8  # a reviewer who read less than 80% of the full read time is too fast
+HIGH_LANE_FACTOR = 1.5  # a high-lane topic (health, money, law, politics, children): longer
 
 
 class CardError(ValueError):
@@ -59,7 +61,10 @@ class CanaryMissedError(RuntimeError):
 def expected_reading_seconds(record: PostRecord) -> int:
     words = len(record.draft.script.split()) + len(record.draft.title.split())
     words += sum(len(c.text.split()) for c in record.draft.claims)
-    return max(MIN_READ_SECONDS, int(words / WORDS_PER_MINUTE * 60 * READ_SHARE))
+    seconds = words / WORDS_PER_MINUTE * 60 * READ_SHARE
+    if record.brief.lane == Lane.HIGH:
+        seconds *= HIGH_LANE_FACTOR
+    return max(MIN_READ_SECONDS, int(seconds))
 
 
 def pick_spot_check(record: PostRecord, rng: random.Random | None = None) -> SpotCheck | None:
