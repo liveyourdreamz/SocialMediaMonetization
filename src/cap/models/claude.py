@@ -123,3 +123,57 @@ class AnthropicClient(ModelClient):
             thinking=[t for t in thinking if t],
             stop_category=getattr(details, "category", None),
         )
+
+    # ---- the bounded tool loop (cap.models.loop) ---------------------------------------
+
+    def build_step_request(
+        self, call: ModelCall, messages: list[dict[str, Any]], tools: list[Any], final: bool
+    ) -> dict[str, Any]:
+        req: dict[str, Any] = {
+            "model": call.spec.model,
+            "max_tokens": call.max_tokens,
+            "system": call.system,
+            "messages": messages,
+            "output_config": {
+                "effort": call.spec.effort,
+                "format": {"type": "json_schema", "schema": call.output_model.model_json_schema()},
+            },
+            "tools": [t.declaration() for t in tools],
+            # the last turn has the tools switched off, so the model writes its output
+            "tool_choice": {"type": "none"} if final else {"type": "auto"},
+        }
+        if call.log_thinking:
+            req["thinking"] = {"type": "adaptive", "display": "summarized"}
+        return req
+
+    def _step(
+        self, call: ModelCall, messages: list[dict[str, Any]], tools: list[Any], final: bool
+    ) -> Any:
+        from cap.models.loop import Step, ToolUse
+
+        req = self.build_step_request(call, messages, tools, final)
+        try:
+            resp = self._client.messages.create(**req)
+        except Exception as e:  # network, 4xx, 5xx: the loop ends, the run records why
+            detail = f"{type(e).__name__}: {str(e)[:200]}"
+            log.error("anthropic loop step failed for %s: %s", call.spec.prompt_id, detail)
+            return Step(Completion(raw="", stop_reason="error", error=detail))
+        blocks = list(resp.content)
+        text = "".join(getattr(b, "text", "") for b in blocks if getattr(b, "type", "") == "text")
+        uses = [
+            ToolUse(b.id, b.name, dict(b.input))
+            for b in blocks
+            if getattr(b, "type", "") == "tool_use"
+        ]
+        details = getattr(resp, "stop_details", None)
+        return Step(
+            Completion(
+                raw=text,
+                stop_reason=resp.stop_reason or "end_turn",
+                usage=usage_of(resp),
+                model=resp.model,
+                stop_category=getattr(details, "category", None),
+            ),
+            uses,
+            [b.model_dump(exclude_none=True) for b in blocks],  # thinking blocks kept as sent
+        )
