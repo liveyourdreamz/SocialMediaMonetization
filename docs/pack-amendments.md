@@ -23,3 +23,9 @@ the build-side record.
 | A12 | P10 call C | Call C runs only on claims call B supported; on the record its status stays `pending` for the others. | C cannot add support, so a C run on a B-unsupported claim changes nothing; halves the verifier cost. |
 | A13 | P9 | The factor table with weights travels as a static block; `strength` and `intended_audience_note` are accepted and stored, not scored. | The Pack's P9 examples use factor ids the code does not weight; the block makes the ids the model returns the ids the code scores. |
 | A14 | PRD 4.12 originality | Checked on the draft and on every platform cut; the anchor requirement applies to the post, the similarity check to every cut. The lexical stand-in catches verbatim reuse only (S4 paraphrase is a known miss until embeddings). | PRD example: a Short reusing a cold open must fail. |
+
+## Since v1.1.2
+
+| # | Where | What the code does | Why |
+| --- | --- | --- | --- |
+| A15 | P6 Brief builder | Not called. The brief is built by code (cap.domain.brief): format from the registry, claims scope by rule, lane by a sensitive-area word list, sponsor permit and NMA checks, `verdict_allowed` false. Accepted by Hemant on 24 Oct 2026 as PRD D47. | P6 instruction 5 and its "blocked" example need sourced evidence at brief time; under D41 a brief is a topic with no evidence yet, so P6 would block every post. Its examples also name `tested_7_days`, retired by D42. P6 returns when the idea pipeline supplies sources; its text then needs the D42 format names. |
