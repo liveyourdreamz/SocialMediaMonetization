@@ -1,4 +1,4 @@
-"""Output schemas for the model-backed prompts (Prompt Pack v1.1.1, one per prompt).
+"""Output schemas for the model-backed prompts (Prompt Pack v1.2, one per prompt).
 
 Each is an Envelope subclass; the model client validates the raw JSON against it.
 Numeric fields are typed but carry no min/max constraints (Claude structured-output
@@ -19,6 +19,41 @@ class RuleFindingOut(Strict):
     rule_id: str
     outcome: RuleOutcome
     evidence_span: str = ""
+
+
+# ---- P4 Trend research (Pack v1.2, A17) ------------------------------------------------
+class P4Item(Strict):
+    topic: str
+    angle: str | None = None  # stated only as far as fetched evidence goes
+    demand_ref: str | None = None  # a code-measured demand signal, never the model's estimate
+    evidence_ids: list[str] = Field(default_factory=list)
+    evidence_urls: list[str] = Field(default_factory=list)  # checked against the allow-list
+    first_seen: str = ""
+    timing: Literal["evergreen", "timely"] = "evergreen"
+    is_duplicate_of: str | None = None
+    source_gap: bool = False
+    injection_suspected: bool = False
+    explanation: str = ""
+
+
+class P4Output(Envelope):
+    items: list[P4Item] = Field(default_factory=list)
+
+
+# ---- P5 Idea scoring (Pack v1.2, A18) -------------------------------------------------
+class P5Item(Strict):
+    ethics_precheck: Literal["pass", "flag", "red"]
+    red_reason: str | None = None
+    evidence_check: Literal["ok", "thin", "promotional"] | None = None
+    constructive_fit: float | None = None  # 0 to 1, range checked in code
+    persona_fit: float | None = None
+    anchor_fit: float | None = None
+    risk_lane: Literal["low", "high"] = "low"
+    explanation: str = ""
+
+
+class P5Output(Envelope):
+    items: list[P5Item] = Field(default_factory=list)
 
 
 # ---- P1 Ethics judge --------------------------------------------------------------

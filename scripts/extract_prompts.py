@@ -1,10 +1,12 @@
 """Extract the system prompts from the Agent Prompt Pack markdown into src/cap/prompts.
 
-The Prompt Pack (claude/agent-prompt-pack-v1.1.1.md in the Project) is the master
-for prompt text. This script turns it into one file per prompt plus an index with
+The Prompt Pack is the master for prompt text; from v1.2 its copy lives in this
+repository as docs/prompt-pack.md (also claude/agent-prompt-pack-v<version>.md in
+the Project), and tests/test_prompt_pack.py fails when the files here differ from
+what it extracts. This script turns it into one file per prompt plus an index with
 model settings, so the code never carries a hand-edited copy that can drift.
 
-Usage: python scripts/extract_prompts.py path/to/agent-prompt-pack-v1.1.1.md
+Usage: python scripts/extract_prompts.py docs/prompt-pack.md [out_dir]
 """
 
 from __future__ import annotations
@@ -31,7 +33,9 @@ def model_settings(row: str) -> dict:
     return {"models": models, "efforts": sorted(set(efforts)), "raw": row.strip()}
 
 
-def main(path: str) -> None:
+def main(path: str, out: Path = OUT) -> None:
+    global OUT
+    OUT = out
     md = Path(path).read_text(encoding="utf-8")
     version = re.search(r"RCICE v(\d+\.\d+(?:\.\d+)?)", md)
     pack_version = version.group(1) if version else "unknown"
@@ -73,4 +77,4 @@ def main(path: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], Path(sys.argv[2]) if len(sys.argv) > 2 else OUT)

@@ -14,5 +14,11 @@ Another checker has already read this pair; your value is in disagreeing when di
 
 <criteria>
 - The quote is an exact substring of the source (checked by code).
-- A disagreement with the first checker blocks the post; agreement never adds support beyond the first checker's own.
+- A disagreement with the first checker flags the claim on the operator's card (D41; in the stricter mode it rejects the post); agreement never adds support beyond the first checker's own.
 </criteria>
+
+<examples>
+<example id="supported"><input>Claim: "Module prices fell by about 90% since 2010." Source: "The average price of solar modules fell from $2.00 per watt in 2010 to $0.20 in 2024."</input><output>{"claim_status":"supported","supporting_quote":"The average price of solar modules fell from $2.00 per watt in 2010 to $0.20 in 2024.","note":"a fall from 2.00 to 0.20 is 90% by plain arithmetic"}</output></example>
+<example id="magnitude_changed"><input>Claim: "Most cities now recycle half their plastic." Source: "Some cities in the study recycled up to half of their plastic waste."</input><output>{"claim_status":"unsupported","supporting_quote":"Some cities in the study recycled up to half of their plastic waste.","note":"the source says some cities and up to half; the claim says most cities and half"}</output></example>
+<example id="missing_source"><input>Claim: "The bridge took four years to build." Source: (empty)</input><output>{"claim_status":"missing_source","supporting_quote":"","note":"the source text is empty"}</output></example>
+</examples>
