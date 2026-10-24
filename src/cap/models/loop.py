@@ -97,7 +97,7 @@ def tool_results(tools: dict[str, Tool], uses: list[ToolUse], nonce: str) -> lis
 def run_loop[T: Envelope](
     backend: LoopBackend,
     spec: PromptSpec,
-    user: str,
+    user: str | Callable[[str], str],
     output_model: type[T],
     tools: list[Tool],
     *,
@@ -105,6 +105,8 @@ def run_loop[T: Envelope](
     static_blocks: list[str] | None = None,
 ) -> ModelResult[T]:
     nonce = new_nonce()
+    if callable(user):  # the message wraps outside text in this run's nonce tag
+        user = user(nonce)
     call = ModelCall(
         spec=spec,
         nonce=nonce,

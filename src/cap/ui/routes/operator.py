@@ -107,7 +107,18 @@ def operator(
         build=__import__("cap.version", fromlist=["build_id"]).build_id(),
         running=any(p.status.value in ("drafting", "gated", "rendering") for p in store.all()),
         audit_check=getattr(request.app.state, "audit_check", None),
+        idea_runs=_idea_runs(store),
     )
+
+
+def _idea_runs(store: PostStore, n: int = 6) -> list[str]:
+    """The last weekly trend-research reports, newest first, from the audit log."""
+    runs = [e for e in store.audit.entries() if e.action in ("ideas run", "ideas run failed")]
+    lines = []
+    for e in reversed(runs[-n:]):
+        text = e.detail.get("report") or f"{e.detail.get('job', '')}: {e.detail.get('why', '')}"
+        lines.append(f"{e.at:%a %d %b %H:%M} · {text}")
+    return lines
 
 
 def _connections_summary() -> str:

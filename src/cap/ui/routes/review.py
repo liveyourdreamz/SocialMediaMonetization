@@ -265,4 +265,12 @@ def digest(
     store: PostStore = Depends(app_store),
 ) -> Response:
     approver_only(reviewer)
-    return render(request, "digest.html", reviewer, tab="digest", d=views.digest(store))
+    return render(
+        request,
+        "digest.html",
+        reviewer,
+        tab="digest",
+        d=views.digest(store),
+        ideas=views.ideas_this_week(store),
+        channel_label=views.channel_label,
+    )

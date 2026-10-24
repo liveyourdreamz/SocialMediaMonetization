@@ -12,7 +12,9 @@ from cap.ui.views.card import (  # noqa: F401 - the screens read cap.ui.views.*
 )
 from cap.ui.views.digest import (  # noqa: F401 - the screens read cap.ui.views.*
     Digest,
+    IdeaRow,
     digest,
+    ideas_this_week,
 )
 from cap.ui.views.outbox import (  # noqa: F401 - the screens read cap.ui.views.*
     RELEASE_TEXT,

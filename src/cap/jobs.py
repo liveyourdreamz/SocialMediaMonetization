@@ -32,6 +32,7 @@ class JobKind(StrEnum):
     RENDER = "render"  # the review cut; the post reaches the approval queue
     RELEASE = "release"  # the final render and seal after approval
     TOUR = "tour"  # the guided tour's worked example
+    IDEAS = "ideas"  # a channel's weekly trend research (D48); keyed "ideas-<ch>-<monday>"
 
 
 class JobStatus(StrEnum):

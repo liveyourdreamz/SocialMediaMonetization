@@ -136,6 +136,15 @@
     </div>
   </section>
 
+  <section class="stack" id="ideas">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Trend research</h2>
+    <div class="card tight stack-sm">
+      <span class="meta">Runs by itself every Monday at 08:00 Dubai time and fills the Digest with each channel's ideas. Run it now to see this week's ideas earlier; a week that already has ideas keeps them.</span>
+      {% for line in idea_runs %}<span class="meta tabular">{{ line }}</span>{% else %}<span class="muted">No runs yet.</span>{% endfor %}
+      <form method="post" action="/operator/ideas"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" type="submit">Run trend research now</button></form>
+    </div>
+  </section>
+
   <section class="stack">
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Parked posts</h2>
     <div class="stack-sm">

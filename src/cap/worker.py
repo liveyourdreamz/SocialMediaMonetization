@@ -24,6 +24,7 @@ from collections.abc import Callable
 
 from cap.approval import release_job
 from cap.audit import acting_as
+from cap.demo.ideas_job import run_ideas_job, schedule_due
 from cap.demo.seed import run_checks_job, run_render_job, run_tour, run_write_job
 from cap.jobs import Job, JobKind
 from cap.schema.post_record import PostRecord, PostStatus, ReleaseStatus
@@ -31,6 +32,7 @@ from cap.store import IN_FLIGHT, PostStore, park_if_interrupted
 
 Handler = Callable[[PostStore, Job], None]
 _log = logging.getLogger("cap.worker")
+TICK_S = 60.0  # how often the clock looks for scheduled work
 
 
 def default_handlers() -> dict[JobKind, Handler]:
@@ -40,6 +42,7 @@ def default_handlers() -> dict[JobKind, Handler]:
         JobKind.RENDER: run_render_job,
         JobKind.RELEASE: release_job.run,
         JobKind.TOUR: run_tour,
+        JobKind.IDEAS: run_ideas_job,
     }
 
 
@@ -96,8 +99,20 @@ class Worker:
 
     # ---- the loop ---------------------------------------------------------------------
 
+    def tick(self) -> None:
+        """The clock: queue work that is due by the time of day (the weekly ideas run)."""
+        try:
+            for key in schedule_due(self.store):
+                _log.info("queued %s", key)
+        except Exception:  # noqa: BLE001 - the clock never stops the worker
+            _log.exception("could not check the schedule")
+
     def _loop(self) -> None:
+        last_tick = 0.0
         while not self._stop.is_set():
+            if time.monotonic() - last_tick >= TICK_S:
+                last_tick = time.monotonic()
+                self.tick()
             try:
                 worked = self.run_once()
             except Exception:  # the queue itself failed (database gone): wait, retry
@@ -129,6 +144,9 @@ class Worker:
     # ---- what a failure means for the post ------------------------------------------------
 
     def _failed(self, job: Job, why: str) -> None:
+        if job.kind == JobKind.IDEAS:  # no post behind it: the audit log keeps the reason
+            self.store.audit.append("ideas run failed", detail={"job": job.post_id, "why": why})
+            return
         try:
             if job.kind == JobKind.RELEASE:
                 release_job.failed(self.store, job.post_id, why)

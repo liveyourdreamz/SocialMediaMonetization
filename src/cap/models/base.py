@@ -138,6 +138,12 @@ class ModelClient(ABC):
     @abstractmethod
     def _complete(self, call: ModelCall) -> Completion: ...
 
+    def _step(
+        self, call: ModelCall, messages: list[dict[str, Any]], tools: list[Any], final: bool
+    ) -> Any:
+        """One turn of a tool loop (cap.models.loop); backends that run loops override it."""
+        raise NotImplementedError(f"{type(self).__name__} does not run tool loops")
+
     def run[T: Envelope](
         self,
         spec: PromptSpec,

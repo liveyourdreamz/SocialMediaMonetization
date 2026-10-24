@@ -9,6 +9,36 @@
     <p class="meta" style="font-size: 13px">Week of {{ d.week }} · computed in code from the records; the written note (P12) joins when the model backend is live.</p>
   </header>
 
+  <section class="stack" id="ideas">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">This week's ideas</h2>
+    <p class="meta" style="font-size: 13px">Found by trend research from Wikipedia interest and constructive sources (D48). Pick one to file it as a brief; edit the title first if you like. Ideas you leave expire next Monday and are not proposed again for 90 days.</p>
+    {% for ch, rows in ideas.items() %}
+    <div class="stack-sm">
+      <h3 style="font-size: 16px; font-weight: 600">{{ channel_label(ch) }}</h3>
+      {% if rows %}
+      {% for r in rows %}
+      <div class="card tight stack-sm idea">
+        <div class="row"><span class="tag">#{{ r.rank }}</span><span class="meta">{{ r.timing }} · score {{ r.score }}{% if r.lane_high %} · <span class="word-signal">high-risk lane</span>{% endif %}</span></div>
+        {% if r.status == 'shown' %}
+        <form method="post" action="/ideas/{{ r.idea_id }}/pick" class="stack-sm"><input type="hidden" name="csrf" value="{{ csrf }}">
+          <label class="sr-only" for="t-{{ r.idea_id }}">Title</label>
+          <input id="t-{{ r.idea_id }}" name="topic" value="{{ r.topic }}" maxlength="140" style="font-size: 16px; font-weight: 600; min-height: 44px">
+          {% if r.angle %}<span>{{ r.angle }}</span>{% endif %}
+          <span class="meta">{{ r.why_now }}</span>
+          <span class="meta">{% for u in r.sources %}<a href="{{ u }}" rel="noopener noreferrer" target="_blank">source {{ loop.index }}</a>{% if not loop.last %} · {% endif %}{% endfor %} · {{ r.revenue }}</span>
+          <div class="row" style="gap: 8px"><button class="btn primary grow" type="submit">Pick</button></div>
+        </form>
+        <form method="post" action="/ideas/{{ r.idea_id }}/reject"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn grow" type="submit" style="width: 100%">Not this one</button></form>
+        {% else %}
+        <span style="font-weight: 600">{{ r.topic }}</span><span class="meta">{{ r.status }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% else %}<div class="card tight muted">No ideas yet this week. Trend research runs on Monday morning.</div>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+
   <div class="grid-2">
     <div class="card tight tile"><span class="lbl">Approved</span><span class="val">{{ d.approved }}</span><span class="meta">this week</span></div>
     <div class="card tight tile"><span class="lbl">Rejected</span><span class="val">{{ d.rejected }}{% if d.escalated %} <span style="font-size: 14px; font-weight: 500; color: var(--muted)">+ {{ d.escalated }} escalated</span>{% endif %}</span><span class="meta">your reject rate {{ pct(d.reviewer_reject_rate) }}</span></div>

@@ -100,6 +100,19 @@ class Settings(BaseSettings):
     # about 40 posts. A post over it is flagged on the card, never stopped; the hard cap
     # is the spend limit on the API key itself.
     post_budget_usd: float = Field(default=12.5, gt=0)
+    # Trend research (D48): the audience persona ideas are judged for, how many ideas a
+    # channel's Digest shows each Monday, and the share of them that are evergreen.
+    persona: str = (
+        "18 to 35: curious, practical and optimistic; reads at a general-audience level; "
+        "wants to know how things work and what is getting better"
+    )
+    ideas_per_channel: int = Field(default=15, ge=1, le=50)
+    # When the weekly run starts (ADR-017: Monday 08:00 Dubai). Dubai keeps UTC+4 all
+    # year, so a fixed offset needs no time-zone database on the laptop.
+    ideas_weekday: int = Field(default=0, ge=0, le=6)  # 0 = Monday
+    ideas_hour: int = Field(default=8, ge=0, le=23)
+    ideas_utc_offset_hours: int = Field(default=4, ge=-12, le=14)
+    evergreen_share: float = Field(default=0.7, ge=0.0, le=1.0)
     log_thinking: bool = False  # test runs: thinking.display summarized, logged by code
 
     # Approval token signing key (HMAC). Local default is for tests only; the validator
