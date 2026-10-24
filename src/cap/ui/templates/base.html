@@ -18,6 +18,12 @@
   <a href="/paused" style="min-height: 44px; display: inline-flex; align-items: center; padding: 0 8px">{{ 'Read why' if reviewer and reviewer.is_approver else 'Details' }}</a>
 </div>
 {% endif %}
+{% if drafting_paused %}
+<div class="band" role="status">
+  <span><strong>New drafts paused.</strong> {{ drafting_paused[0]|upper }}{{ drafting_paused[1:] }}. They start again once the queue is under the limit.</span>
+  <a href="/queue" style="min-height: 44px; display: inline-flex; align-items: center; padding: 0 8px">Open the queue</a>
+</div>
+{% endif %}
 {% block body %}{% endblock %}
 {% if reviewer and reviewer.is_approver and tab is defined %}
 <nav class="tabs" aria-label="Main">

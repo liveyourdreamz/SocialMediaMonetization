@@ -50,6 +50,9 @@ def _local_settings(monkeypatch, _c2pa_dir):
     monkeypatch.setenv("CAP_ARABIC_REVIEWERS", '["layla"]')
     monkeypatch.setenv("CAP_RENDERER", "text")
     monkeypatch.setenv("CAP_VOICE", "silent")
+    monkeypatch.setenv(
+        "CAP_JOB_RETRIES", "0"
+    )  # a failure parks at once (tests/test_worker.py retries)
     monkeypatch.delenv("K_SERVICE", raising=False)
     get_settings.cache_clear()
     yield

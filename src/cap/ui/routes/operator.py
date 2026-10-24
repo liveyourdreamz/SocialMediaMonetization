@@ -132,7 +132,15 @@ def operator(
         running=any(p.status.value in ("drafting", "gated", "rendering") for p in store.all()),
         audit_check=getattr(request.app.state, "audit_check", None),
         idea_runs=_idea_runs(store),
+        alerts=_alerts(store),
     )
+
+
+def _alerts(store: PostStore, n: int = 8) -> list[str]:
+    """The last alerts, newest first, from the audit log."""
+    found = [e for e in store.audit.entries() if e.action == "alert"][-n:]
+    return [f"{e.at:%a %d %b %H:%M} · {e.detail.get('subject', '')}: {e.detail.get('body', '')}"
+            for e in reversed(found)]  # fmt: skip
 
 
 def _idea_runs(store: PostStore, n: int = 6) -> list[str]:

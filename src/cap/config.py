@@ -133,8 +133,17 @@ class Settings(BaseSettings):
     # through a proxy or a public host. Empty: built from the request.
     public_base_url: str = ""
 
-    # D17: generation pauses when the queue has been idle this long.
-    queue_idle_pause_hours: int = 72
+    # D17 as amended by ADR-016: new drafting pauses while a post has waited this long
+    # for approval.
+    queue_idle_pause_hours: int = 24
+
+    # Alerts by email (cap.alerts); both live in the owner's .env, never in code.
+    alert_email_to: str = ""
+    smtp_url: SecretStr | None = None  # smtps://user:app-password@host:465
+
+    # PRD 3: a failed job is tried again this many times (after 1 minute, then 4)
+    # before its post is parked. Never more than cap.jobs.MAX_ATTEMPTS - 1.
+    job_retries: int = 2
 
     # D15 pilot cadence.
     longform_per_channel_per_month: int = 8

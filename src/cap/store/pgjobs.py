@@ -19,12 +19,14 @@ from psycopg_pool import ConnectionPool
 
 from cap.jobs import MAX_ATTEMPTS, Job, JobKind, JobQueue, JobStatus
 
-_COLUMNS = "id, kind, post_id, payload, status, attempts, error, created_at"
+_COLUMNS = "id, kind, post_id, payload, status, attempts, error, created_at, run_after"
 JOB_LOCKS = 7031  # the advisory-lock namespace for held jobs (two-key form)
 _CLAIM = (
     "UPDATE jobs SET status = 'running', attempts = attempts + 1,"
     " started_at = now() WHERE id = ("
-    "  SELECT j.id FROM jobs j WHERE j.status = 'queued' AND NOT EXISTS ("
+    "  SELECT j.id FROM jobs j WHERE j.status = 'queued'"
+    "   AND (j.run_after IS NULL OR j.run_after <= now()) AND NOT (j.kind = ANY(%s))"
+    "   AND NOT EXISTS ("
     "   SELECT 1 FROM jobs r WHERE r.post_id = j.post_id AND r.status = 'running')"
     "  ORDER BY j.id FOR UPDATE SKIP LOCKED LIMIT 1)"
     f" RETURNING {_COLUMNS}"
@@ -60,6 +62,7 @@ def _job(row: tuple[Any, ...]) -> Job:
         attempts=row[5],
         error=row[6],
         created_at=row[7],
+        run_after=row[8],
     )
 
 
@@ -71,21 +74,29 @@ class PostgresJobQueue(JobQueue):
         with self._pool.connection() as conn:
             return insert_job(conn, kind, post_id, payload or {})
 
-    def claim(self) -> Job | None:
+    def claim(self, skip: frozenset[JobKind] = frozenset()) -> Job | None:
         with self._pool.connection() as conn:
             try:
-                row = conn.execute(_CLAIM).fetchone()
+                row = conn.execute(_CLAIM, (_kinds(skip),)).fetchone()
             except errors.UniqueViolation:  # another worker just started this post
                 return None
         return _job(row) if row else None
 
+    def retry(self, job_id: int, error: str, after_s: float) -> None:
+        with self._pool.connection() as conn:
+            conn.execute(
+                "UPDATE jobs SET status = 'queued', error = %s, started_at = NULL,"
+                " run_after = now() + make_interval(secs => %s) WHERE id = %s",
+                (error[:500], after_s, job_id),
+            )
+
     @contextmanager
-    def held(self) -> Iterator[Job | None]:
+    def held(self, skip: frozenset[JobKind] = frozenset()) -> Iterator[Job | None]:
         # one connection for the whole job: its advisory lock is the proof of life
         with self._pool.connection() as conn:
             try:
                 with conn.transaction():
-                    row = conn.execute(_CLAIM).fetchone()
+                    row = conn.execute(_CLAIM, (_kinds(skip),)).fetchone()
                     if row is not None:  # locked before the claim is visible to anyone
                         conn.execute("SELECT pg_advisory_lock(%s, %s)", (JOB_LOCKS, row[0]))
             except errors.UniqueViolation:  # another worker just started this post
@@ -164,3 +175,7 @@ def _release(conn: Connection, job: Job) -> Job | None:
         f"{sql} WHERE id = %s AND status = 'running' RETURNING {_COLUMNS}", (job.id,)
     ).fetchone()
     return _job(row) if row else None
+
+
+def _kinds(skip: frozenset[JobKind]) -> list[str]:
+    return sorted(k.value for k in skip)

@@ -21,7 +21,9 @@ import logging
 import threading
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 
+from cap import alerts
 from cap.approval import release_job
 from cap.audit import acting_as
 from cap.config import get_settings
@@ -29,13 +31,16 @@ from cap.demo.canary_job import run_canary_job
 from cap.demo.ideas_job import run_ideas_job, schedule_due
 from cap.demo.seed import run_checks_job, run_render_job, run_tour, run_write_job
 from cap.domain.cost import Spend, carried_by, charge, metering, total
-from cap.jobs import Job, JobKind
+from cap.domain.queue import drafting_pause
+from cap.jobs import MAX_ATTEMPTS, Job, JobKind
 from cap.schema.post_record import PostRecord, PostStatus, ReleaseStatus
 from cap.store import IN_FLIGHT, PostStore, park_if_interrupted
 
 Handler = Callable[[PostStore, Job], None]
 _log = logging.getLogger("cap.worker")
 TICK_S = 60.0  # how often the clock looks for scheduled work
+RETRY_BASE_S = 60.0  # the first retry's pause; each later one is four times longer
+DRAFTING = frozenset({JobKind.BRIEF, JobKind.CANARY})  # what the ADR-016 pause holds back
 
 
 def default_handlers() -> dict[JobKind, Handler]:
@@ -64,6 +69,7 @@ class Worker:
         self.poll_s = poll_s
         self._stop = threading.Event()
         self._running: list[threading.Thread] = []
+        self.drafting_paused = ""  # why new drafting is paused (ADR-016), set by the clock
 
     # ---- start-up ---------------------------------------------------------------------
 
@@ -113,10 +119,12 @@ class Worker:
     # ---- the loop ---------------------------------------------------------------------
 
     def tick(self) -> None:
-        """The clock: take back jobs a dead process left, and queue work that is due by
-        the time of day (the weekly ideas run)."""
+        """The clock: take back jobs a dead process left, decide whether new drafting is
+        paused (ADR-016), and queue work that is due by the time of day (the weekly ideas
+        run)."""
         try:
             self.reclaim()
+            self._check_drafting_pause()
             for key in schedule_due(self.store):
                 _log.info("queued %s", key)
         except Exception:  # noqa: BLE001 - the clock never stops the worker
@@ -136,10 +144,21 @@ class Worker:
             if not worked:
                 self._stop.wait(self.poll_s)
 
+    def _check_drafting_pause(self) -> None:
+        why = drafting_pause(
+            self.store.queue(), datetime.now(UTC), get_settings().queue_idle_pause_hours
+        )
+        if why and not self.drafting_paused:
+            self._alert("New drafts paused", why + ". Open the queue to clear it.")
+        elif self.drafting_paused and not why:
+            self.store.audit.append("new drafts resumed")
+        self.drafting_paused = why
+
     def run_once(self) -> bool:
         """Claim and run one job, held for as long as it runs; False when there was
-        nothing to do."""
-        with self.store.jobs.held() as job:
+        nothing to do. While new drafting is paused, no brief or canary starts."""
+        skip = DRAFTING if self.drafting_paused else frozenset()
+        with self.store.jobs.held(skip) as job:
             if job is None:
                 return False
             self._run(job)
@@ -160,12 +179,35 @@ class Worker:
             except Exception as e:  # noqa: BLE001 - recorded on the job and the post (D43)
                 why = f"{type(e).__name__}: {str(e)[:300]}"
                 _log.exception("job %s (%s) failed", job.id, job.kind.value)
-                self.store.jobs.fail(job.id, why)
-                self._failed(job, why)
                 self._charge(job, [*spent, *carried_by(e)])
+                self._retry_or_fail(job, why)
                 return
         self.store.jobs.finish(job.id)
         self._charge(job, list(spent))
+
+    def _retry_or_fail(self, job: Job, why: str) -> None:
+        """PRD 3: a failure is tried again after a pause (1 minute, then 4) before the
+        post is parked with the reason (review R12)."""
+        if job.attempts <= min(get_settings().job_retries, MAX_ATTEMPTS - 1):
+            delay = RETRY_BASE_S * 4 ** (job.attempts - 1)
+            self.store.jobs.retry(job.id, why, delay)
+            line = f"{job.kind.value} failed ({why[:160]}); trying again in {delay // 60:.0f} min"
+            if job.kind == JobKind.IDEAS:
+                self.store.audit.append(
+                    "ideas run retrying", detail={"job": job.post_id, "why": why}
+                )
+            else:
+                self._note(job.post_id, line)
+            return
+        self.store.jobs.fail(job.id, why)
+        self._failed(job, why)
+        what = "This week's trend research" if job.kind == JobKind.IDEAS else f"Post {job.post_id}"
+        self._alert(f"{job.kind.value} failed", f"{what} stopped after {job.attempts} tries: {why}")
+
+    def _alert(self, subject: str, body: str) -> None:
+        """Email Hemant when set up; always in the audit log (the Operator screen)."""
+        sent = alerts.send(subject, body)
+        self.store.audit.append("alert", detail={"subject": subject, "body": body, "sent": sent})
 
     def _charge(self, job: Job, spent: list[Spend]) -> None:
         if not spent:

@@ -27,11 +27,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
-MAX_ATTEMPTS = 3  # a job interrupted this many times is given up and its post parked
+MAX_ATTEMPTS = 3  # a job started this many times (failed or interrupted) is given up
 
 
 class JobKind(StrEnum):
@@ -64,6 +64,7 @@ class Job:
     attempts: int = 0  # how many times a worker has started it
     error: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    run_after: datetime | None = None  # a retried job waits until then
 
 
 class JobQueue(ABC):
@@ -73,14 +74,19 @@ class JobQueue(ABC):
         kind of work is already queued or running for that post)."""
 
     @abstractmethod
-    def claim(self) -> Job | None:
-        """The oldest queued job whose post has nothing running, now marked running.
-        Not held: `recover` treats it as abandoned. Workers use `held`."""
+    def claim(self, skip: frozenset[JobKind] = frozenset()) -> Job | None:
+        """The oldest due queued job whose post has nothing running and whose kind is
+        not in `skip`, now marked running. Not held: `recover` treats it as abandoned.
+        Workers use `held`."""
 
     @abstractmethod
-    def held(self) -> AbstractContextManager[Job | None]:
+    def held(self, skip: frozenset[JobKind] = frozenset()) -> AbstractContextManager[Job | None]:
         """Claim the next job and hold it while the block runs (None: nothing to do).
-        Finish or fail it inside the block."""
+        Finish, fail or retry it inside the block."""
+
+    @abstractmethod
+    def retry(self, job_id: int, error: str, after_s: float) -> None:
+        """Back in the queue, due again `after_s` seconds from now, with the error."""
 
     @abstractmethod
     def finish(self, job_id: int) -> None: ...
@@ -129,19 +135,32 @@ class MemoryJobQueue(JobQueue):
             self._jobs.append(job)
             return job.id
 
-    def claim(self) -> Job | None:
+    def claim(self, skip: frozenset[JobKind] = frozenset()) -> Job | None:
+        now = datetime.now(UTC)
         with self._lock:
             busy = {j.post_id for j in self._jobs if j.status == JobStatus.RUNNING}
             for j in self._jobs:
-                if j.status == JobStatus.QUEUED and j.post_id not in busy:
+                due = j.run_after is None or j.run_after <= now
+                if (
+                    j.status == JobStatus.QUEUED
+                    and j.post_id not in busy
+                    and due
+                    and j.kind not in skip
+                ):
                     j.status = JobStatus.RUNNING
                     j.attempts += 1
                     return Job(**{**j.__dict__, "payload": dict(j.payload)})
             return None
 
+    def retry(self, job_id: int, error: str, after_s: float) -> None:
+        with self._lock:
+            j = self._jobs[job_id - 1]
+            j.status, j.error = JobStatus.QUEUED, error[:500]
+            j.run_after = datetime.now(UTC) + timedelta(seconds=after_s)
+
     @contextmanager
-    def held(self) -> Iterator[Job | None]:
-        job = self.claim()
+    def held(self, skip: frozenset[JobKind] = frozenset()) -> Iterator[Job | None]:
+        job = self.claim(skip)
         if job is None:
             yield None
             return

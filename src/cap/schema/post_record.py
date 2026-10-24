@@ -253,6 +253,7 @@ class Approval(Strict):
     pre_reveal_reason_code: ReasonCode | None = None  # P14 scores canaries on these two
     revised_after_reveal: bool = False
     decided_at: datetime | None = None  # when finalise closed the post
+    queued_at: datetime | None = None  # when the card entered the queue (ADR-016 pause)
     spot_check: SpotCheck | None = None
     edits: list[str] = Field(default_factory=list)  # PRD 4.5: reviewer edits as a diff log
     stage_one: StageOneReview | None = None

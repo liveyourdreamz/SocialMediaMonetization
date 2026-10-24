@@ -90,6 +90,7 @@ def prepare_card(record: PostRecord, rng: random.Random | None = None) -> PostRe
         raise CardError(f"post is {record.status.value}, not awaiting approval")
     record.approval.spot_check = pick_spot_check(record, rng)
     record.approval.expected_reading_s = expected_reading_seconds(record)
+    record.approval.queued_at = record.approval.queued_at or datetime.now(UTC)
     record.flags.card_prepared = True
     return record
 

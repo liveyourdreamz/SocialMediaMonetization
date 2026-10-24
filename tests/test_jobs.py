@@ -129,7 +129,7 @@ def test_a_dead_workers_job_comes_back_without_a_restart(pg_url):
     try:
         store.jobs.enqueue(JobKind.BRIEF, "p1")
         dead = psycopg.connect(pg_url, autocommit=True)  # a worker that then dies
-        row = dead.execute(_CLAIM).fetchone()
+        row = dead.execute(_CLAIM, ([],)).fetchone()
         dead.execute("SELECT pg_advisory_lock(%s, %s)", (JOB_LOCKS, row[0]))
         assert store.jobs.recover() == ([], [])  # alive: left alone
         dead.close()  # the process dies; its lock goes with it

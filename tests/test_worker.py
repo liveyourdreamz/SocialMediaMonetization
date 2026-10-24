@@ -172,3 +172,148 @@ def test_the_clock_runs_in_one_thread_only(monkeypatch):
     time.sleep(0.5)
     wk.stop()
     assert calls == ["cap-worker-0"]
+
+
+# ---- review R12: retry with backoff, then park -----------------------------------------
+
+
+def test_a_failure_is_tried_again_after_a_pause_then_parked(monkeypatch):
+    import cap.worker as w
+    from cap.config import get_settings
+
+    monkeypatch.setenv("CAP_JOB_RETRIES", "2")
+    get_settings.cache_clear()
+    monkeypatch.setattr(w, "RETRY_BASE_S", 0.0)
+    tries: list[int] = []
+
+    def flaky(store, job):  # type: ignore[no-untyped-def]
+        tries.append(job.attempts)
+        if len(tries) < 3:
+            raise RuntimeError("the voice service timed out")
+
+    store = MemoryStore()
+    rec = new_brief("A", "How tides work")
+    store.file(rec, JobKind.BRIEF, {})
+    worker = Worker(store, {JobKind.BRIEF: flaky})
+    while worker.run_once():
+        pass
+    assert tries == [1, 2, 3]
+    got = store.get(rec.post_id)
+    assert got.status != PostStatus.PARKED
+    assert sum("trying again" in h for h in got.history) == 2
+
+    def broken(store, job):  # type: ignore[no-untyped-def]
+        raise RuntimeError("down for good")
+
+    rec2 = new_brief("A", "How rain forms")
+    store.file(rec2, JobKind.BRIEF, {})
+    worker = Worker(store, {JobKind.BRIEF: broken})
+    while worker.run_once():
+        pass
+    assert store.get(rec2.post_id).status == PostStatus.PARKED
+    assert [j.attempts for j in store.jobs.jobs_for(rec2.post_id)] == [MAX_ATTEMPTS]
+
+
+@pytest.mark.parametrize("which", ["memory", "postgres"])
+def test_a_retried_job_waits_until_it_is_due(which, request):
+    if which == "memory":
+        from cap.jobs import MemoryJobQueue
+
+        queue = MemoryJobQueue()
+    else:
+        from cap.store.postgres import PostgresStore
+
+        store = PostgresStore.open(request.getfixturevalue("pg_url"))
+        request.addfinalizer(store.close)
+        queue = store.jobs
+    queue.enqueue(JobKind.BRIEF, "p1")
+    job = queue.claim()
+    queue.retry(job.id, "timed out", 3600)
+    assert queue.claim() is None  # not due for an hour
+    queue.retry(job.id, "timed out", 0)
+    assert queue.claim().id == job.id
+
+
+def test_a_failed_weekly_run_is_tried_again_later_that_week():
+    import datetime as dt
+
+    from cap.demo.ideas_job import RETRY_FAILED_WEEK_H, _tried_lately
+
+    store = MemoryStore()
+    store.jobs.enqueue(JobKind.IDEAS, "ideas-A-2026-10-26")
+    job = store.jobs.claim()
+    store.jobs.fail(job.id, "network down")
+    now = dt.datetime.now(dt.UTC)
+    assert _tried_lately(store, "ideas-A-2026-10-26", now)  # just failed: not yet
+    later = now + dt.timedelta(hours=RETRY_FAILED_WEEK_H + 1)
+    assert not _tried_lately(store, "ideas-A-2026-10-26", later)
+
+
+# ---- review R12: the 24-hour drafting pause and alerts --------------------------------
+
+
+def _waiting(store, hours):  # type: ignore[no-untyped-def]
+    import datetime as dt
+
+    p = PostRecord(channel_id=Channel.A, status=PostStatus.AWAITING_APPROVAL)
+    p.approval.queued_at = dt.datetime.now(dt.UTC) - dt.timedelta(hours=hours)
+    store.put(p)
+    return p
+
+
+def test_new_drafts_pause_while_a_card_waits_over_a_day_and_the_rest_go_on(monkeypatch):
+    import cap.worker as cw
+
+    monkeypatch.setattr(cw, "schedule_due", lambda s: [])  # this test is about the pause
+    store = MemoryStore()
+    old = _waiting(store, 25)
+    brief = new_brief("A", "How tides work")
+    store.file(brief, JobKind.BRIEF, {})
+    store.jobs.enqueue(JobKind.RENDER, "half-done-post")
+    ran: list[str] = []
+    w = Worker(store, {k: (lambda s, j: ran.append(j.kind.value)) for k in JobKind})
+    w.tick()
+    assert "waiting over 24 hours" in w.drafting_paused
+    while w.run_once():
+        pass
+    assert ran == ["render"]  # the post under way finished; the new brief waits
+    alerts = [e for e in store.audit.entries() if e.action == "alert"]
+    assert [a.detail["subject"] for a in alerts] == ["New drafts paused"]
+    assert "not emailed" in alerts[0].detail["sent"]
+    store.update(old.post_id, lambda r: setattr(r, "status", PostStatus.REJECTED))
+    w.tick()  # the card was decided: drafting starts again
+    assert not w.drafting_paused and w.run_once() and ran == ["render", "brief"]
+
+
+def test_a_post_that_stops_after_its_retries_is_an_alert():
+    store = MemoryStore()
+    rec = new_brief("A", "How rain forms")
+    store.file(rec, JobKind.BRIEF, {})
+
+    def broken(store, job):  # type: ignore[no-untyped-def]
+        raise RuntimeError("ffmpeg missing")
+
+    Worker(store, {JobKind.BRIEF: broken}).run_once()
+    (alert,) = [e for e in store.audit.entries() if e.action == "alert"]
+    assert alert.detail["subject"] == "brief failed" and "ffmpeg missing" in alert.detail["body"]
+
+
+def test_an_alert_is_emailed_when_email_is_set_up(monkeypatch):
+    from cap import alerts
+    from cap.config import get_settings
+
+    monkeypatch.setenv("CAP_ALERT_EMAIL_TO", "owner@example.org")
+    monkeypatch.setenv("CAP_SMTP_URL", "smtps://owner%40example.org:app-pass@smtp.example.org:465")
+    get_settings.cache_clear()
+    sent = []
+    monkeypatch.setattr(
+        alerts, "_deliver", lambda url, to, subject, body: sent.append((to, subject))
+    )
+    assert alerts.send("brief failed", "details") == "emailed to owner@example.org"
+    assert sent == [("owner@example.org", "[Content Agent Portfolio] brief failed")]
+
+    def refuse(*a):  # type: ignore[no-untyped-def]
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(alerts, "_deliver", refuse)
+    assert alerts.send("x", "y") == "not emailed: OSError"  # never the password-bearing URL

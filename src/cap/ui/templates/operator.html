@@ -145,6 +145,14 @@
     </div>
   </section>
 
+  <section class="stack" id="alerts">
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Alerts</h2>
+    <div class="card tight stack-sm">
+      <span class="meta">What needed you: a post that stopped after its retries, a failed trend-research run, new drafts paused. {% if settings.alert_email_to %}Also emailed to {{ settings.alert_email_to }}.{% else %}Email alerts are not set up; they show here only.{% endif %}</span>
+      {% for a in alerts %}<span class="meta">{{ a }}</span>{% else %}<span class="muted">None.</span>{% endfor %}
+    </div>
+  </section>
+
   <section class="stack">
     <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em">Parked posts</h2>
     <div class="stack-sm">

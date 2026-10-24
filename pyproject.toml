@@ -109,7 +109,7 @@ layers = [
     "cap.models | cap.routing",
     "cap.prompts | cap.rulebook | cap.characters",
     "cap.pginstall",
-    "cap.fetch | cap.connections | cap.setup | cap.updater | cap.instance | cap.lan | cap.localpg",
+    "cap.fetch | cap.connections | cap.setup | cap.updater | cap.instance | cap.lan | cap.localpg | cap.alerts",
     "cap.safehttp | cap.secretfile | cap.sources | cap.ideabook",
     "cap.domain",
     "cap.schema",

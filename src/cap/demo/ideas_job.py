@@ -19,7 +19,7 @@ from cap.config import get_settings
 from cap.ideas import demand
 from cap.ideas.feeds import week_items
 from cap.ideas.week import Sources, monday_of, run_week
-from cap.jobs import Job, JobKind
+from cap.jobs import Job, JobKind, JobStatus
 from cap.store import PostStore
 
 MAX_FEED_BYTES = 3_000_000
@@ -57,11 +57,25 @@ def schedule_due(store: PostStore, now: dt.datetime | None = None) -> list[str]:
     queued = []
     for ch in get_settings().channels:
         key = job_key(ch, monday)
-        if store.ideas.week(ch, monday, shown_only=False) or store.jobs.jobs_for(key):
+        if store.ideas.week(ch, monday, shown_only=False) or _tried_lately(store, key, now):
             continue
         store.jobs.enqueue(JobKind.IDEAS, key)
         queued.append(key)
     return queued
+
+
+RETRY_FAILED_WEEK_H = 6  # a week whose run failed is tried again after this long
+
+
+def _tried_lately(store: PostStore, key: str, now: dt.datetime | None) -> bool:
+    """A run for this week is queued, running or done, or failed less than
+    RETRY_FAILED_WEEK_H ago. A failed Monday run is tried again later in the week
+    rather than leaving the Digest empty until next Monday (review R12)."""
+    jobs = store.jobs.jobs_for(key)
+    if any(j.status != JobStatus.FAILED for j in jobs):
+        return True
+    since = (now or dt.datetime.now(dt.UTC)) - dt.timedelta(hours=RETRY_FAILED_WEEK_H)
+    return any(j.created_at > since for j in jobs)
 
 
 def queue_now(store: PostStore, channel: str) -> str:

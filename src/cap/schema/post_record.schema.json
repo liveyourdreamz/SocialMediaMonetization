@@ -85,6 +85,19 @@
           "default": null,
           "title": "Decided At"
         },
+        "queued_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queued At"
+        },
         "spot_check": {
           "anyOf": [
             {
