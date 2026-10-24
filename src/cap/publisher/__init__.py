@@ -15,9 +15,7 @@ from __future__ import annotations
 
 import json
 import shutil
-import threading
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -100,22 +98,12 @@ class LocalFolderAdapter:
         return f"local:{out}"
 
 
-# ---------------------------------------------------------------- one publish per post
+# ---------------------------------------------------------------- one destination at a time
 
-_POST_LOCKS: dict[str, threading.Lock] = {}
-_LOCKS_GUARD = threading.Lock()
-
-
-@contextmanager
-def _one_at_a_time(post_id: str) -> Iterator[None]:
-    with _LOCKS_GUARD:
-        lock = _POST_LOCKS.setdefault(post_id, threading.Lock())
-    if not lock.acquire(blocking=False):
-        raise PublishRefusedError("a publish of this post is already running")
-    try:
-        yield
-    finally:
-        lock.release()
+INTERRUPTED = (
+    "an earlier upload here was interrupted before the platform answered; check whether "
+    "it arrived, then publish again to send it"
+)
 
 
 def _record(record: PostRecord, name: str, result: str | Upload) -> None:
@@ -143,30 +131,61 @@ def publish_to(
     """Every chosen destination in turn, each one authorised just before its upload.
     Every destination is authorised once up front too, so a refusal (a tour post on
     a platform, an expired token) sends nothing anywhere. One platform failing never
-    undoes another; `save` persists the record after each result. The post is
-    published once a platform took it (or, with no platform chosen, the local copy)."""
+    undoes another; `save` persists the record before and after each upload. The post
+    is published once a platform took it (or, with no platform chosen, the local copy).
+
+    One publish of a post at a time is the caller's lock (cap.approval.app.publish_now
+    holds the store's, across processes). An upload whose process died before the
+    platform answered is not sent again blindly: the next publish says so, and the one
+    after sends it (review R8)."""
     if not adapters:
         raise PublishRefusedError("no destination chosen")
     persist = save or (lambda _r: None)
-    with _one_at_a_time(record.post_id):
-        for adapter in adapters:
-            authorise(record, token, adapter)
-        for adapter in adapters:
-            if adapter.name in record.publish.platform_post_ids:
-                record.log(f"{adapter.name}: already sent, not sent again")
-                continue
-            manifest = authorise(record, token, adapter)
-            try:
-                result = adapter.upload(manifest)
-            except Exception as e:  # noqa: BLE001 - recorded per destination, shown on the Outbox
-                record.publish.errors[adapter.name] = f"{type(e).__name__}: {str(e)[:200]}"
-                record.log(f"{adapter.name} refused or failed: {type(e).__name__}")
-            else:
-                _record(record, adapter.name, result)
-            persist(record)
-        _settle(record, adapters)
-        persist(record)
+    for adapter in adapters:
+        authorise(record, token, adapter)
+    interrupted = _interrupted(record, persist)
+    for adapter in adapters:
+        if adapter.name in record.publish.platform_post_ids:
+            record.log(f"{adapter.name}: already sent, not sent again")
+            continue
+        if adapter.name in interrupted:
+            continue
+        _send(record, token, adapter, persist)
+    _settle(record, adapters)
+    persist(record)
     return record
+
+
+def _interrupted(record: PostRecord, persist: Callable[[PostRecord], None]) -> set[str]:
+    """Uploads a dead process left unanswered: reported, skipped this time."""
+    left = set(record.publish.sending)
+    for name in left:
+        record.publish.errors[name] = INTERRUPTED
+        record.log(f"{name}: an earlier upload was interrupted; not sent again until you check")
+    if left:
+        record.publish.sending = []
+        persist(record)
+    return left
+
+
+def _send(
+    record: PostRecord,
+    token: ApprovalToken | None,
+    adapter: PlatformAdapter,
+    persist: Callable[[PostRecord], None],
+) -> None:
+    manifest = authorise(record, token, adapter)
+    record.publish.sending.append(adapter.name)
+    persist(record)  # the intent is saved before the upload starts
+    try:
+        result = adapter.upload(manifest)
+    except Exception as e:  # noqa: BLE001 - recorded per destination, shown on the Outbox
+        record.publish.errors[adapter.name] = f"{type(e).__name__}: {str(e)[:200]}"
+        record.log(f"{adapter.name} refused or failed: {type(e).__name__}")
+    else:
+        _record(record, adapter.name, result)
+    record.publish.sending.remove(adapter.name)
+    persist(record)
 
 
 def _settle(record: PostRecord, adapters: list[PlatformAdapter]) -> None:

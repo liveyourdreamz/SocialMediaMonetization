@@ -1157,6 +1157,13 @@
           },
           "title": "Destinations",
           "type": "array"
+        },
+        "sending": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sending",
+          "type": "array"
         }
       },
       "title": "Publish",

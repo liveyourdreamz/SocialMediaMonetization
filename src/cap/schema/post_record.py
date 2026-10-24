@@ -267,6 +267,9 @@ class Publish(Strict):
     urls: dict[str, str] = Field(default_factory=dict)  # destination -> where to see it
     errors: dict[str, str] = Field(default_factory=dict)  # destination -> why it did not go
     destinations: list[str] = Field(default_factory=list)  # what the approver chose
+    # uploads started and not yet answered: saved before each upload, so a process that
+    # dies mid-upload leaves a mark, and the next publish asks before sending again (R8)
+    sending: list[str] = Field(default_factory=list)
 
 
 class Metrics(Strict):

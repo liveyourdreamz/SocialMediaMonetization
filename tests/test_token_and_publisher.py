@@ -351,8 +351,29 @@ def test_a_tour_post_may_still_go_to_the_local_folder(tmp_path):
 # ---- H5: no duplicate uploads -------------------------------------------------
 
 
-def test_two_concurrent_publishes_upload_once(tmp_path):
-    r, t, _ = sealed(tmp_path)
+@pytest.fixture(params=["memory", "postgres"])
+def pub_store(request):
+    from cap.store import MemoryStore
+
+    if request.param == "memory":
+        yield MemoryStore()
+        return
+    from cap.store.postgres import PostgresStore
+
+    s = PostgresStore.open(request.getfixturevalue("pg_url"))
+    try:
+        yield s
+    finally:
+        s.close()
+
+
+def test_two_concurrent_publishes_upload_once(tmp_path, pub_store):
+    """Review R8: one publish of a post at a time across processes (the store's lock),
+    and the post is read inside it."""
+    from cap.approval.app import publish_now
+
+    r, _, _ = sealed(tmp_path)
+    pub_store.put(r)
     gate = threading.Event()
     calls: list[str] = []
 
@@ -363,25 +384,42 @@ def test_two_concurrent_publishes_upload_once(tmp_path):
             return "yt-1"
 
     slow = Slow()
-    outcomes: list[str] = []
-
-    def go() -> None:
-        try:
-            publish_to(r, t, [slow])
-            outcomes.append("published")
-        except PublishRefusedError as e:
-            outcomes.append(str(e))
-
-    first = threading.Thread(target=go)
+    outcomes: list[str | None] = []
+    first = threading.Thread(
+        target=lambda: outcomes.append(publish_now(pub_store, r.post_id, publisher=slow))
+    )
     first.start()
     deadline = time.time() + 5
     while not calls and time.time() < deadline:
         time.sleep(0.01)
-    go()  # the second, while the first is uploading
+    outcomes.append(publish_now(pub_store, r.post_id, publisher=slow))  # while the first uploads
     gate.set()
     first.join(5)
     assert calls == [r.post_id]
-    assert sorted(outcomes) == ["a publish of this post is already running", "published"]
+    assert sorted(outcomes, key=str) == [None, "a publish of this post is already running"]
+    assert pub_store.get(r.post_id).publish.platform_post_ids == {"youtube": "yt-1"}
+    assert publish_now(pub_store, r.post_id, publisher=slow) is None  # a later click
+    assert calls == [r.post_id]  # sends nothing again
+
+
+def test_a_save_conflict_after_an_upload_keeps_the_platform_id(tmp_path):
+    """Review R8: a note saved by someone else mid-publish must not cost a sent id."""
+    from cap.approval.app import publish_now
+    from cap.store import MemoryStore
+
+    store = MemoryStore()
+    r, _, _ = sealed(tmp_path)
+    store.put(r)
+
+    class Noisy(Recording):
+        def upload(self, manifest):
+            store.update(r.post_id, lambda rec: rec.log("a worker note"))  # someone else saves
+            return super().upload(manifest)
+
+    assert publish_now(store, r.post_id, publisher=Noisy()) is None
+    got = store.get(r.post_id)
+    assert got.publish.platform_post_ids == {"youtube": "youtube-1"}
+    assert got.status == PostStatus.PUBLISHED and any("a worker note" in h for h in got.history)
 
 
 def test_each_result_is_saved_at_once_and_a_retry_skips_what_already_went(tmp_path):
@@ -401,8 +439,12 @@ def test_each_result_is_saved_at_once_and_a_retry_skips_what_already_went(tmp_pa
             save=lambda rec: saved.append(dict(rec.publish.platform_post_ids)),
         )
     assert saved[-1] == {"youtube": "youtube-1"}  # on disk before the crash
-    assert r.status == PostStatus.APPROVED
+    assert r.status == PostStatus.APPROVED and r.publish.sending == ["youtube_short"]
+    # the app died mid-upload: the next publish says so and sends nothing there (R8)
     out = publish_to(r, t, [long_cut, short_cut])
+    assert short_cut.got == [] and "interrupted" in out.publish.errors["youtube_short"]
+    assert out.publish.sending == []
+    out = publish_to(out, t, [long_cut, short_cut])  # Hemant checked; publish again
     assert len(long_cut.got) == 1 and len(short_cut.got) == 1
     assert out.status == PostStatus.PUBLISHED and set(out.publish.platform_post_ids) == {
         "youtube",

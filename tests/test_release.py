@@ -64,8 +64,8 @@ def test_the_review_render_shows_a_placeholder_and_the_published_file_speaks_the
     final = Path(next(f.uri for f in rec.release.files if f.role == "long"))
     assert final != Path(rec.asset.uri) and LINE in final.read_text(encoding="utf-8")
     assert (
-        publish_now(store, rec, publisher=LocalFolderAdapter(tmp_path / "pub")) is None
-        and rec.status == PostStatus.PUBLISHED
+        publish_now(store, rec.post_id, publisher=LocalFolderAdapter(tmp_path / "pub")) is None
+        and store.get(rec.post_id).status == PostStatus.PUBLISHED
     )
     published = tmp_path / "pub" / rec.post_id / final.name
     assert LINE in published.read_text(encoding="utf-8")
@@ -131,7 +131,7 @@ def test_publishing_is_refused_while_the_final_video_is_being_made(
     try:
         assert rec.status == PostStatus.APPROVED
         assert rec.release.status == ReleaseStatus.PREPARING and not rec.approval.token
-        refused = publish_now(store, rec, publisher=LocalFolderAdapter(tmp_path / "pub"))
+        refused = publish_now(store, rec.post_id, publisher=LocalFolderAdapter(tmp_path / "pub"))
         assert refused and "not ready" in refused and not (tmp_path / "pub").exists()
         api = Browser(create_app(store), follow_redirects=False)
         api.sign_in("hemant")
@@ -142,7 +142,8 @@ def test_publishing_is_refused_while_the_final_video_is_being_made(
         drain(store, rec.post_id)
         rec = store.get(rec.post_id)
     assert rec.release.status == ReleaseStatus.READY
-    assert publish_now(store, rec) is None and rec.status == PostStatus.PUBLISHED
+    assert publish_now(store, rec.post_id) is None
+    assert store.get(rec.post_id).status == PostStatus.PUBLISHED
 
 
 def test_a_failed_final_render_stays_approved_without_a_token_and_can_be_retried(

@@ -97,7 +97,7 @@ def test_finding_3_a_tour_post_never_reaches_the_configured_platform(tmp_path, m
     from cap.config import get_settings
     from cap.demo.seed import demo_post
     from cap.domain.card import record_verdict
-    from cap.schema.post_record import Decision, PostStatus
+    from cap.schema.post_record import Decision, PostRecord, PostStatus
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CAP_DATA_DIR", str(tmp_path / "d"))
@@ -125,11 +125,16 @@ def test_finding_3_a_tour_post_never_reaches_the_configured_platform(tmp_path, m
     rec = store.get(rec.post_id)
     try:
         for chosen in ([], ["youtube_long"]):  # nothing ticked, or YouTube ticked
-            rec.status = PostStatus.APPROVED
-            rec.publish.platform_post_ids.clear()
-            assert publish_now(store, rec, chosen, publisher=FakeYouTube()) is None
-            assert uploads == [] and rec.publish.destinations == ["local"]
-            assert rec.status == PostStatus.PUBLISHED
+
+            def unpublish(r: PostRecord) -> None:
+                r.status = PostStatus.APPROVED
+                r.publish.platform_post_ids.clear()
+
+            store.update(rec.post_id, unpublish)
+            assert publish_now(store, rec.post_id, chosen, publisher=FakeYouTube()) is None
+            got = store.get(rec.post_id)
+            assert uploads == [] and got.publish.destinations == ["local"]
+            assert got.status == PostStatus.PUBLISHED
     finally:
         get_settings.cache_clear()
 

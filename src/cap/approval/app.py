@@ -32,7 +32,7 @@ from cap.schema.post_record import (
     ReasonCode,
     ReleaseStatus,
 )
-from cap.store import PostStore
+from cap.store import LockBusyError, PostConflictError, PostStore
 
 
 class StageOneIn(BaseModel):
@@ -88,7 +88,7 @@ def finalise_and_issue(store: PostStore, record: PostRecord, reviewer: str, **kw
 
 def publish_now(
     store: PostStore,
-    record: PostRecord,
+    post_id: str,
     destinations: list[str] | None = None,
     publisher: PlatformAdapter | None = None,
 ) -> str | None:
@@ -97,7 +97,24 @@ def publish_now(
     None when the publisher ran (each destination's result is on the record).
     `destinations` are the Outbox's choices (youtube_long, facebook, ...); the local
     folder is always first. A tour post never leaves the laptop. The scheduler calls
-    this at the posting slot; the Outbox button calls it now."""
+    this at the posting slot; the Outbox button calls it now.
+
+    One publish of a post at a time, across every process (the store's lock), and the
+    post is read inside it, so a request holding an older copy never sends again what
+    another has just sent (review R8)."""
+    try:
+        with store.exclusive(f"publish:{post_id}", wait=False):
+            return _publish_locked(store, store.get(post_id), destinations, publisher)
+    except LockBusyError:
+        return "a publish of this post is already running"
+
+
+def _publish_locked(
+    store: PostStore,
+    record: PostRecord,
+    destinations: list[str] | None,
+    publisher: PlatformAdapter | None,
+) -> str | None:
     from cap.publisher import adapters_for, publish_to
     from cap.release import decode_token
 
@@ -112,12 +129,31 @@ def publish_now(
         wanted = ["local", *chosen]
     try:
         record.publish.destinations = wanted
-        publish_to(record, decode_token(record), adapters, save=store.put)
+        publish_to(record, decode_token(record), adapters, save=lambda r: _save_publish(store, r))
     except PublishRefusedError as e:
         record.log(f"publish refused: {e}")
-        store.put(record)
+        _save_publish(store, record)
         return str(e)
     return None
+
+
+def _save_publish(store: PostStore, record: PostRecord) -> None:
+    """Save what the publisher did. Someone else saving the post in between (a note
+    from the worker, say) must never cost a platform id that has already been sent, so
+    on a conflict the publish block and status are laid onto the current copy (only
+    the publisher writes them, and it holds the publish lock)."""
+    try:
+        store.put(record)
+    except PostConflictError:
+
+        def lay_on(current: PostRecord) -> None:
+            current.publish = record.publish.model_copy(deep=True)
+            current.status = record.status
+            current.log("publish results saved over a concurrent change")
+
+        merged = store.update(record.post_id, lay_on)
+        for name in type(record).model_fields:  # carry on from the merged copy
+            setattr(record, name, getattr(merged, name))
 
 
 def visible_to(record: PostRecord, reviewer: Reviewer) -> bool:

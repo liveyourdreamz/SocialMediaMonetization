@@ -66,7 +66,7 @@ async def publish_post(
     approver_only(reviewer)
     if store.paused:
         return RedirectResponse("/paused", status_code=303)
-    record = store.get(post_id)
+    store.get(post_id)  # 404 for an unknown post; publish_now reads it again under its lock
     form = await request.form()
     from cap.connections import DESTINATION_LABELS
 
@@ -76,7 +76,7 @@ async def publish_post(
         if isinstance(d, str) and d in DESTINATION_LABELS and d != "local"
     ]
     # uploads take minutes: off the event loop, so the app keeps answering (H5)
-    refused = await run_in_threadpool(publish_now, store, record, chosen)
+    refused = await run_in_threadpool(publish_now, store, post_id, chosen)
     return _back_to_outbox(post_id, refused)
 
 

@@ -393,7 +393,7 @@ def _approve_and_publish(store, rec, adapter) -> None:  # type: ignore[no-untype
     rec = store.get(rec.post_id)
     if rec.release.status != ReleaseStatus.READY:
         raise RuntimeError(f"final video: {rec.release.error or rec.release.status.value}")
-    refused = publish_now(store, rec, publisher=adapter)
+    refused = publish_now(store, rec.post_id, publisher=adapter)
     rec = store.get(rec.post_id)
     if refused or rec.status != PostStatus.PUBLISHED:
         raise RuntimeError(refused or f"status after publish: {rec.status.value}")

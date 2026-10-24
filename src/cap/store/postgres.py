@@ -26,6 +26,7 @@ from cap.schema.migrate import load_record
 from cap.schema.post_record import PostRecord, PostStatus
 from cap.store import (
     AppState,
+    LockBusyError,
     PostConflictError,
     PostNotFoundError,
     PostStore,
@@ -174,10 +175,15 @@ class PostgresStore(PostStore):
         return PostgresHistory(self._pool)
 
     @contextmanager
-    def exclusive(self, name: str) -> Iterator[None]:
+    def exclusive(self, name: str, *, wait: bool = True) -> Iterator[None]:
         """A session advisory lock: one holder across every process on this database."""
         with self._pool.connection() as conn:
-            conn.execute("SELECT pg_advisory_lock(hashtext(%s))", (name,))
+            if wait:
+                conn.execute("SELECT pg_advisory_lock(hashtext(%s))", (name,))
+            else:
+                got = conn.execute("SELECT pg_try_advisory_lock(hashtext(%s))", (name,)).fetchone()
+                if not (got and got[0]):
+                    raise LockBusyError(name)
             try:
                 yield
             finally:

@@ -86,6 +86,10 @@ class AppState:
     canary_gap: int = 0  # cards to wait before the next canary; 0 = draw (cap.domain.canary)
 
 
+class LockBusyError(Exception):
+    """`exclusive(name, wait=False)` found the name held."""
+
+
 class PostStore(ABC):
     """Keep posts, the app state and the card timers.
 
@@ -102,13 +106,18 @@ class PostStore(ABC):
         self._named_locks_guard = threading.Lock()
 
     @contextmanager
-    def exclusive(self, name: str) -> Iterator[None]:
+    def exclusive(self, name: str, *, wait: bool = True) -> Iterator[None]:
         """Run a check-then-act block alone: no other thread (here) or process (the
-        Postgres adapter) holding the same name runs at the same time."""
+        Postgres adapter) holding the same name runs at the same time. With
+        `wait=False`, LockBusyError when someone holds it."""
         with self._named_locks_guard:
             lock = self._named_locks.setdefault(name, threading.Lock())
-        with lock:
+        if not lock.acquire(blocking=wait):
+            raise LockBusyError(name)
+        try:
             yield
+        finally:
+            lock.release()
 
     # ---- posts ------------------------------------------------------------------------
 
