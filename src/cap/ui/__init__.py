@@ -21,9 +21,9 @@ __all__ = ["STATIC", "templates", "ui_router"]
 
 
 def ui_router() -> APIRouter:
-    from cap.ui.routes import auth, connections, ideas, operator, outbox, review, tour
+    from cap.ui.routes import auth, connections, ideas, operator, outbox, review, tour, welcome
 
     r = APIRouter(include_in_schema=False)
-    for area in (auth, review, ideas, outbox, operator, connections, tour):
+    for area in (auth, review, ideas, outbox, operator, connections, tour, welcome):
         r.include_router(area.router)
     return r

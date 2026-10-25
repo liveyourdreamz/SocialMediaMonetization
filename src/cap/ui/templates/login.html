@@ -7,6 +7,10 @@
     <h1 style="font-size: 28px; line-height: 32px; font-weight: 600">Sign in</h1>
     <p class="muted">Only reviewers on the list get in. Nothing here publishes without an approval.</p>
   </div>
+  <a class="card link" href="/welcome" style="display: flex; flex-direction: row; gap: 14px; align-items: center; text-align: start; text-decoration: none">
+    <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><circle cx="12" cy="12" r="10"/><path d="m10 8 6 4-6 4z"/></svg>
+    <span class="stack-sm" style="gap: 2px"><strong style="font-size: 17px">New here? Show me around</strong><span class="muted" style="font-size: 14px">Ten short steps: what each screen is for and what you do on it. No sign-in needed; nothing changes.</span></span>
+  </a>
   {% if error %}<div class="error"><strong>Refused.</strong> {{ error }}</div>{% endif %}
   {% if google %}
   <a class="btn primary" href="/auth/google" style="gap: 10px">

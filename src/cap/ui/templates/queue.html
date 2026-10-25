@@ -9,7 +9,7 @@
     </div>
     <h1 style="font-size: 28px; line-height: 32px; font-weight: 600">{{ 'قائمة المراجعة، القناة C' if rtl else 'Approval queue' }}</h1>
     <p class="muted" style="font-size: 15px">
-      {% if items %}<strong style="color: var(--ink)">{{ items | length }} {{ 'بانتظارك' if rtl else 'waiting' }}</strong>{% if not rtl %} · oldest first{% endif %}{% else %}{{ 'لا شيء بانتظارك.' if rtl else 'Nothing waiting. Generation pauses after 72 hours idle.' }}{% endif %}
+      {% if items %}<strong style="color: var(--ink)">{{ items | length }} {{ 'بانتظارك' if rtl else 'waiting' }}</strong>{% if not rtl %} · oldest first{% endif %}{% else %}{{ 'لا شيء بانتظارك.' if rtl else 'Nothing waiting. New drafts pause while a post waits over ' ~ settings.queue_idle_pause_hours ~ ' hours.' }}{% endif %}
     </p>
   </header>
 

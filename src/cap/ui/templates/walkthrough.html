@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Show me around · Content Agent Portfolio{% endblock %}
+{% block body %}
+<style>
+  .wt-phone { border: var(--hairline) solid var(--line); border-radius: 22px; background: var(--bg, var(--surface)); padding: 14px 12px 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 18px; }
+  .wt-phone .card { padding: 10px 12px; }
+  .wt-ex { align-self: flex-start; font: 600 10px/14px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border: var(--hairline) dashed var(--line); border-radius: var(--radius-pill); padding: 2px 8px; }
+  .wt-tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-top: var(--hairline) solid var(--line); margin: 4px -12px 0; }
+  .wt-tabs span { text-align: center; padding: 8px 0 10px; font-size: 11px; color: var(--muted); }
+  .wt-tabs span.on { color: var(--ink); font-weight: 600; box-shadow: inset 0 3px 0 var(--accent); }
+  .wt-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 12px; border-radius: var(--radius-md, 10px); border: var(--hairline) solid var(--line); font-weight: 500; font-size: 13px; background: var(--surface); }
+  .wt-btn.primary { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+  .wt-btn.hit { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .wt-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: var(--radius-pill); border: var(--hairline) solid var(--line); font-size: 12px; }
+  .wt-chip.on { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+  .wt-dots { display: flex; gap: 6px; flex-wrap: wrap; }
+  .wt-dots a { width: 28px; height: 28px; border-radius: var(--radius-pill); border: var(--hairline) solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; text-decoration: none; color: var(--muted); }
+  .wt-dots a[aria-current] { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+  .wt-do { margin: 0; padding-inline-start: 22px; display: flex; flex-direction: column; gap: 6px; font-size: 16px; line-height: 23px; }
+</style>
+<main class="screen no-tabs">
+  <div class="row" style="font-size: 14px">
+    <a href="/login" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 500"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Sign in</a>
+    <span class="meta">Step {{ n }} of {{ total }}</span>
+  </div>
+
+  <div class="stack-sm">
+    <span class="eyebrow">Show me around</span>
+    <h1 style="font-size: 26px; line-height: 32px; font-weight: 600">{{ s.title }}</h1>
+    <p class="muted" style="font-size: 14px; margin: 0">{{ s.where }}</p>
+  </div>
+
+  {% set tab = {'portfolio': 'Portfolio', 'digest': 'Digest', 'operator': 'Operator', 'queue': 'Queue', 'card': 'Queue', 'verdict': 'Queue', 'reveal': 'Queue', 'outbox': 'Operator'}.get(s.key, '') %}
+  <figure class="wt-phone" aria-label="A drawing of the screen, with example content" style="margin: 0">
+    <span class="wt-ex">Example</span>
+    {% if s.key == 'idea' %}
+      {% for label, icon in [('Ideas arrive, or you file a topic', 'M12 3v3M5 12H2M22 12h-3M7 7 5 5M17 7l2-2M12 8a4 4 0 0 0-2 7.5V18h4v-2.5A4 4 0 0 0 12 8Z'), ('The agents write, check and make the video', 'M4 5h16v11H4zM9 20h6'), ('You read it and decide', 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z'), ('You choose where it goes, and publish', 'M5 12h14M13 6l6 6-6 6')] %}
+      <div class="card" style="display: flex; gap: 10px; align-items: center"><span class="step">{{ loop.index }}</span><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ icon }}"/></svg><span style="font-size: 14px">{{ label }}</span></div>
+      {% endfor %}
+      <p class="meta" style="margin: 0 0 12px">Steps 1 and 3 are yours. Nothing is published without step 3.</p>
+    {% elif s.key == 'portfolio' %}
+      <div class="hero" style="border-radius: 12px; padding: 12px"><strong>3 posts waiting</strong><span style="font-size: 12px">about 24 minutes to review · oldest 1 day</span></div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+        {% for lbl, val in [('Revenue per post', '$0'), ('Cost per post', '$9.80'), ('Review time', '18 min'), ('Test posts caught', '2 of 2')] %}
+        <div class="card tile"><span class="lbl">{{ lbl }}</span><span class="val" style="font-size: 18px; line-height: 24px">{{ val }}</span></div>
+        {% endfor %}
+      </div>
+    {% elif s.key == 'digest' %}
+      <span class="eyebrow">This week's ideas · Patch</span>
+      {% for title, why in [('Why solar panels keep getting cheaper', '41,200 views this week, 3.1x its usual · prices fell by nine tenths'), ('How a heat pump moves heat uphill', '18,900 views this week, 2.2x its usual')] %}
+      <div class="card stack-sm"><strong style="font-size: 14px">{{ title }}</strong><span class="meta">{{ why }}</span>
+        <div style="display: flex; gap: 8px"><span class="wt-btn primary{{ ' hit' if loop.first }}">Pick</span><span class="wt-btn">Not this one</span></div></div>
+      {% endfor %}
+    {% elif s.key == 'operator' %}
+      <span class="eyebrow">New post</span>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap"><span class="wt-chip on">Auto</span><span class="wt-chip">A · Patch</span><span class="wt-chip">B · Falak</span><span class="wt-chip">C · Falak · عربي</span></div>
+      <div class="card" style="color: var(--muted)">How cocoons work</div>
+      <span class="wt-btn primary hit">Create the post</span>
+      <span class="eyebrow">Your posts</span>
+      <div class="card stack-sm"><strong style="font-size: 14px">How cocoons work</strong><div class="progress"><div style="width: 40%"></div></div><span class="meta">Writing the script · Falak</span></div>
+    {% elif s.key == 'queue' %}
+      <strong style="font-size: 18px">Approval queue</strong><span class="meta">2 waiting · oldest first</span>
+      {% for ch, title, mins in [('A · PATCH', 'How a pacemaker keeps time', '9 min'), ('B · FALAK', 'How monsoons form', '11 min')] %}
+      <div class="card stack-sm"{% if loop.first %} style="outline: 3px solid var(--accent); outline-offset: 2px"{% endif %}><span class="tag">{{ ch }}</span><strong class="read" style="font-size: 15px">{{ title }}</strong><span class="meta">4 claims · {{ mins }} to read</span></div>
+      {% endfor %}
+    {% elif s.key == 'card' %}
+      <span class="tag">A · PATCH</span><strong class="read" style="font-size: 16px">How a pacemaker keeps time</strong>
+      <div class="card" style="background: var(--surface-sunken); height: 70px; display: flex; align-items: center; justify-content: center" aria-hidden="true">▶ video</div>
+      <p class="read" style="margin: 0">[Your opening line goes here] Let's take it apart. A pacemaker is a tiny clock with a wire…</p>
+      <div class="card stack-sm"><span style="font-size: 13px">Claim: a pacemaker battery lasts 7 to 10 years</span><span class="quote" style="font-size: 12px">"Batteries typically last 7 to 10 years."</span></div>
+      <div style="display: flex; gap: 6px; padding-bottom: 12px"><span class="wt-btn" style="flex: 1">Reject</span><span class="wt-btn">Escalate</span><span class="wt-btn primary" style="flex: 1">Approve…</span></div>
+    {% elif s.key == 'verdict' %}
+      <span class="eyebrow">To reject: tap a reason</span>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap">{% for code, text in chips %}<span class="wt-chip{{ ' on' if loop.first }}">{{ text }}</span>{% endfor %}</div>
+      <span class="wt-btn">Reject with this reason</span>
+      <hr class="hr" style="margin: 4px 0">
+      <span class="eyebrow">To approve: two small steps</span>
+      <div class="card stack-sm"><span style="display: flex; gap: 8px; align-items: center"><span class="step">1</span>Write the opening line Patch says</span><span class="meta" style="font-style: italic">Hemant here: one wire, one heartbeat.</span></div>
+      <div class="card stack-sm"><span style="display: flex; gap: 8px; align-items: center"><span class="step">2</span>Does the source say this?</span><div style="display: flex; gap: 6px"><span class="wt-chip on">Yes, it does</span><span class="wt-chip">No</span></div></div>
+      <span class="wt-btn primary" style="margin-bottom: 12px">Approve</span>
+    {% elif s.key == 'reveal' %}
+      <strong style="font-size: 16px">Now, what the machines thought</strong>
+      {% for name in gate_names %}<div class="card" style="display: flex; gap: 8px; align-items: center"><span class="word-pass">✓</span>{{ name }}: passed</div>{% endfor %}
+      <div class="banner verdict" style="padding: 10px 12px"><span class="head" style="font-size: 14px">This was a test post.</span><span class="facts" style="font-size: 12px">It had one planted mistake (a number with no source), and you caught it with the right reason. It is never published.</span></div>
+      <div style="display: flex; gap: 6px; padding-bottom: 12px"><span class="wt-btn" style="flex: 1">Keep approve</span><span class="wt-btn" style="flex: 1">Change to reject</span></div>
+    {% elif s.key == 'outbox' %}
+      <span class="eyebrow">Outbox: approved, waiting to publish</span>
+      <div class="card" style="background: var(--surface-sunken); height: 60px; display: flex; align-items: center; justify-content: center" aria-hidden="true">▶ final video, with your opening line</div>
+      {% for label, ok in [('This laptop (always)', true), ('YouTube, long-form', true), ('YouTube Short', true), ('Facebook · connect it first', false)] %}
+      <label style="display: flex; gap: 8px; align-items: center; font-size: 13px{% if not ok %}; color: var(--muted){% endif %}"><input type="checkbox" {% if ok %}checked{% endif %} disabled>{{ label }}</label>
+      {% endfor %}
+      <span class="wt-btn primary hit" style="margin-bottom: 12px">Publish now</span>
+    {% elif s.key == 'attention' %}
+      <div class="band" style="border-radius: 10px"><span><strong>Queue paused.</strong> Nothing publishes until an approver reopens it.</span></div>
+      <div class="band" style="border-radius: 10px"><span><strong>New drafts paused.</strong> 1 post waiting over 24 hours for your verdict.</span></div>
+      <span class="eyebrow">Operator · Alerts</span>
+      <div class="card"><span class="meta">Sun 25 Oct 09:12 · brief failed: Post How cocoons work stopped after 3 tries: the voice service timed out</span></div>
+    {% endif %}
+    {% if tab %}<div class="wt-tabs" aria-hidden="true">{% for t in ['Portfolio', 'Queue', 'Digest', 'Operator'] %}<span class="{{ 'on' if t == tab }}">{{ t }}</span>{% endfor %}</div>{% else %}<div></div>{% endif %}
+  </figure>
+
+  <section class="stack-sm">
+    <p style="font-size: 17px; line-height: 25px; margin: 0">{{ s.what }}</p>
+    <h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em; margin-top: 8px">What you do</h2>
+    <ol class="wt-do">{% for d in s.do %}<li>{{ d }}</li>{% endfor %}</ol>
+    {% if s.tip %}<div class="card tight" style="font-size: 14px; line-height: 20px"><strong>Good to know.</strong> {{ s.tip }}</div>{% endif %}
+  </section>
+
+  <nav class="stack-sm" aria-label="Walkthrough steps">
+    <div style="display: flex; gap: 10px">
+      {% if n > 1 %}<a class="btn secondary" style="flex: 1" href="/welcome/{{ n - 1 }}">Back</a>{% endif %}
+      {% if n < total %}<a class="btn primary" style="flex: 2" href="/welcome/{{ n + 1 }}">Next: {{ next_title }}</a>
+      {% else %}<a class="btn primary" style="flex: 2" href="/login">Sign in and start</a>{% endif %}
+    </div>
+    <div class="wt-dots">{% for st in steps %}<a href="/welcome/{{ loop.index }}" {% if loop.index == n %}aria-current="step"{% endif %} title="{{ st.title }}">{{ loop.index }}</a>{% endfor %}</div>
+  </nav>
+</main>
+{% endblock %}
