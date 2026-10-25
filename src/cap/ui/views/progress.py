@@ -114,8 +114,6 @@ def _action(record: PostRecord, current: str, stopped: str) -> tuple[str, str, s
         return "Closed at your review", "See the card", f"/posts/{pid}"
     if stopped:
         label = dict(STEPS)[stopped]
-        if can_try_again(record):  # a failure: the cause may be gone (the network is back)
-            return f"Stopped at {label.lower()}", f"Try again from {label.lower()}", ""
         return (
             f"Stopped at {label.lower()}",
             "File the brief again once the cause is fixed",
@@ -131,26 +129,50 @@ def _action(record: PostRecord, current: str, stopped: str) -> tuple[str, str, s
     return _DOING[current], _WAIT, ""
 
 
-def workflow(record: PostRecord) -> dict[str, Any]:
+def _restart(record: PostRecord, stopped: str, stuck: bool) -> dict[str, str] | None:
+    """The Restart button on a failed or hung step: its label, why, and where it posts."""
+    if not stopped or not (stuck or can_try_again(record)):
+        return None
+    step = dict(STEPS)[stopped].lower()
+    if stuck:
+        why = (f"The {step} step has run far longer than it should; it may have lost its "
+               "connection. Restarting runs it again with the same inputs.")  # fmt: skip
+    else:
+        cause = _reason(record).split(" could not run: ", 1)[-1].removeprefix("interrupted: ")
+        why = (f"The {step} step failed ({cause}). Once the cause is gone, restarting runs "
+               "it again with the same inputs.")  # fmt: skip
+    return {"label": f"Restart the {step} step", "reason": why,
+            "url": f"/posts/{record.post_id}/restart"}  # fmt: skip
+
+
+def workflow(record: PostRecord, stuck: bool = False) -> dict[str, Any]:
     """The seven steps of one post with a state each (done, current, stopped, todo), the
     step number, a one-line status and the next action: the same everywhere a post is
-    shown, so 'where am I and what is left' always has one answer."""
+    shown, so 'where am I and what is left' always has one answer. A step that failed,
+    or hangs (`stuck`: running past cap.demo.retry.STUCK_AFTER), carries a Restart
+    button against it."""
     st = record.status.value
     current, stopped = _position(record)
+    if stuck and current and not stopped:
+        stopped = current  # shown as a problem, not as working
     steps, idx = _states(current, stopped)
     headline, nxt, href = _action(record, current, stopped)
+    restart = _restart(record, stopped, stuck)
+    if restart:  # the button sits on the step; nothing else to do
+        label = dict(STEPS)[stopped].lower()
+        headline, nxt, href = (f"Stuck at {label}" if stuck else f"Stopped at {label}"), "", ""
     return {
         "steps": steps,
         "number": min(idx + 1, len(STEPS)) if current or stopped else len(STEPS),
         "total": len(STEPS),
         "done": sum(1 for s in steps if s["state"] == "done"),
         "headline": headline,
-        "reason": _reason(record) if stopped else "",
+        "reason": restart["reason"] if restart else (_reason(record) if stopped else ""),
+        "restart": restart,
         "next": nxt,
         "href": href,
-        "running": st in _RUNNING
-        or (st == "approved" and record.release.status.value == "preparing"),
+        "running": not stuck
+        and (st in _RUNNING or (st == "approved" and record.release.status.value == "preparing")),
         "stopped": bool(stopped),
         "finished": st == "published",
-        "retry": f"/posts/{record.post_id}/try-again" if can_try_again(record) else "",
     }

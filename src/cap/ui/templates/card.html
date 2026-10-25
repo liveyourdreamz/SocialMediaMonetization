@@ -9,7 +9,7 @@
     <span class="muted">{{ reading }}{% if blind and not closed %} · on the card <span class="tabular" data-clock="{{ on_card }}">{{ on_card_text }}</span>{% endif %}</span>
   </div>
 
-  {% set flow = workflow(record) %}
+  {% set flow = workflow(record, record.post_id in stuck) %}
   {% set flow_compact = true %}
   <div class="row" style="justify-content: flex-start; gap: 10px"><span class="eyebrow">Step {{ flow.number }} of {{ flow.total }} · {{ flow.headline }}</span>{% include "_flow.html" %}</div>
   {% set flow_compact = false %}

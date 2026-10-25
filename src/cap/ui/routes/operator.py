@@ -110,19 +110,18 @@ def _image_bytes(name: str, up: UploadFile) -> bytes | None:
     return data
 
 
-@router.post("/posts/{post_id}/try-again", dependencies=[Depends(check_csrf)])
-def try_again(
+@router.post("/posts/{post_id}/restart", dependencies=[Depends(check_csrf)])
+def restart_step(
     post_id: str,
     reviewer: Reviewer = Depends(current_reviewer),
     store: PostStore = Depends(app_store),
 ) -> Response:
-    """Redo the step a post stopped on after a failure (cap.demo.retry)."""
+    """The Restart button on a failed or hung step (cap.demo.retry)."""
     approver_only(reviewer)
-    from cap.demo.retry import TryAgainRefusedError
-    from cap.demo.retry import try_again as redo
+    from cap.demo.retry import TryAgainRefusedError, restart
 
     try:
-        redo(store, post_id, reviewer.name)
+        restart(store, post_id, reviewer.name)
     except TryAgainRefusedError as e:
         raise HTTPException(409, str(e)) from None
     return RedirectResponse(f"/posts/{post_id}", status_code=303)

@@ -32,7 +32,7 @@ from cap.demo.ideas_job import run_ideas_job, schedule_due
 from cap.demo.seed import run_checks_job, run_render_job, run_tour, run_write_job
 from cap.domain.cost import Spend, carried_by, charge, metering, total
 from cap.domain.queue import drafting_pause
-from cap.jobs import MAX_ATTEMPTS, Job, JobKind
+from cap.jobs import MAX_ATTEMPTS, Job, JobKind, JobStatus
 from cap.schema.post_record import PostRecord, PostStatus, ReleaseStatus
 from cap.store import IN_FLIGHT, PostStore, park_if_interrupted
 
@@ -180,10 +180,21 @@ class Worker:
                 why = f"{type(e).__name__}: {str(e)[:300]}"
                 _log.exception("job %s (%s) failed", job.id, job.kind.value)
                 self._charge(job, [*spent, *carried_by(e)])
-                self._retry_or_fail(job, why)
+                if not self._replaced(job):
+                    self._retry_or_fail(job, why)
                 return
-        self.store.jobs.finish(job.id)
         self._charge(job, list(spent))
+        if not self._replaced(job):
+            self.store.jobs.finish(job.id)
+
+    def _replaced(self, job: Job) -> bool:
+        """Hemant restarted this step while it hung (cap.demo.retry): a fresh job has
+        taken over, so this one's ending is not recorded and nothing runs twice."""
+        if self.store.jobs.status_of(job.id) == JobStatus.RUNNING:
+            return False
+        _log.info("job %s (%s) was restarted while it ran; its result is dropped",
+                  job.id, job.kind.value)  # fmt: skip
+        return True
 
     def _retry_or_fail(self, job: Job, why: str) -> None:
         """PRD 3: a failure is tried again after a pause (1 minute, then 4) before the

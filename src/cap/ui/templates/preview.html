@@ -19,7 +19,7 @@
     <h1 class="read" style="font-size: 26px; line-height: 1.2; font-weight: 600; text-wrap: balance; margin: 0">{{ record.draft.title }}</h1>
     <span class="meta">{{ channel_label }}{% if approved or published %} · approved by {{ record.approval.reviewer }}{% endif %}</span>
   </header>
-  {% set flow = workflow(record) %}
+  {% set flow = workflow(record, record.post_id in stuck) %}
   {% include "_flow.html" %}
 
   <div class="stack-sm">

@@ -160,8 +160,8 @@ STEPS: list[Step] = [
         (
             "Read the band and follow its link.",
             "On Operator, Alerts and Parked posts say what happened and what to do.",
-            "A post that stopped on a failure, such as a dropped connection, has a Try "
-            "again button: it redoes only the step it stopped on.",
+            "A step that failed or hangs, after a dropped connection say, shows a "
+            "Restart button right on that step: it runs only that step again.",
         ),  # fmt: skip
         "After signing in, the hands-on tour on the Portfolio walks one example post "
         "through every step for real, publishing to a folder on this laptop only.",

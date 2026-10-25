@@ -71,7 +71,7 @@ def test_the_walkthrough_shows_no_real_state(anon):
         ("Yes, it does", "approve.html"),
         ("Write the opening line", "approve.html"),
         ("Parked posts", "operator.html"),
-        ("Try again", "operator.html"),
+        ("Restart", "operator.html"),
         ("Alerts", "operator.html"),
         (">Portfolio<", "base.html"),
         (">Queue", "base.html"),

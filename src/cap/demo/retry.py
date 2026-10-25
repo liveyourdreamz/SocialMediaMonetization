@@ -1,6 +1,11 @@
-"""Try again: put a post that stopped on a failure back at the step it stopped on
-(Hemant, 25 Oct: a Wi-Fi drop left a Falak draft stuck, with no way to restart it from
-the screens; PRD 6 runbook step 3, "retry parked posts").
+"""Restart a step: the button on a step that failed or hangs (Hemant, 25 Oct: a Wi-Fi
+drop left a Falak draft stuck, with no way to restart it from the screens; PRD 6
+runbook step 3, "retry parked posts").
+
+Two cases, one button. A step that hangs (running far longer than any step should,
+STUCK_AFTER) is closed and queued again with the same inputs; if its worker wakes up
+later, it sees it was replaced and drops its result (cap.worker). A post that stopped on
+a failure goes back to the step it stopped on (below).
 
 Only a post parked because a step failed after its retries, or was interrupted by a
 restart, can be tried again: the cause may have gone (the network is back). A post
@@ -12,6 +17,7 @@ saved and queued in one transaction.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from cap.jobs import Job, JobKind
@@ -81,3 +87,41 @@ def try_again(store: PostStore, post_id: str, who: str) -> JobKind:
         "post tried again", post_id=post_id, detail={"step": step, "job": kind.value}
     )
     return kind
+
+
+STUCK_AFTER = timedelta(minutes=15)  # no step runs this long when it is working
+
+
+def stuck_posts(store: PostStore, now: datetime | None = None) -> set[str]:
+    """Posts whose running step has run past STUCK_AFTER (the screens mark them)."""
+    at = now or datetime.now(UTC)
+    return {
+        j.post_id for j in store.jobs.running() if j.started_at and at - j.started_at >= STUCK_AFTER
+    }
+
+
+def stuck_job(store: PostStore, post_id: str, now: datetime | None = None) -> Job | None:
+    """The post's running job when it has run past STUCK_AFTER, else None."""
+    job = store.jobs.running_for(post_id)
+    if job is None or job.started_at is None:
+        return None
+    return job if (now or datetime.now(UTC)) - job.started_at >= STUCK_AFTER else None
+
+
+def restart(store: PostStore, post_id: str, who: str, now: datetime | None = None) -> JobKind:
+    """The Restart button: a hung step is replaced by a fresh run of it; a failed one is
+    tried again. TryAgainRefusedError when neither applies."""
+    at = now or datetime.now(UTC)
+    with store.exclusive(f"restart:{post_id}"):
+        job = stuck_job(store, post_id, at)
+        if job is None or job.started_at is None:
+            return try_again(store, post_id, who)
+        minutes = int((at - job.started_at).total_seconds() // 60)
+        store.jobs.fail(job.id, f"restarted by {who} after {minutes} minutes")
+        record = store.get(post_id)
+        record.log(f"restarted the {job.kind.value} step after {minutes} minutes, asked by {who}")
+        store.file(record, job.kind, dict(job.payload))
+        store.audit.append(
+            "step restarted", post_id=post_id, detail={"job": job.kind.value, "minutes": minutes}
+        )
+        return job.kind

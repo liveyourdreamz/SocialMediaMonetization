@@ -13,7 +13,7 @@
     <span class="meta">{{ channel_label }} · filed {{ record.created_at | day(True, True) }}</span>
   </header>
 
-  {% set flow = workflow(record) %}
+  {% set flow = workflow(record, record.post_id in stuck) %}
   {% include "_flow.html" %}
 
   <details class="card tight" {% if flow.stopped %}open{% endif %}>

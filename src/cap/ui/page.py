@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 from cap.approval.deps import app_store
 from cap.approval.identity import Reviewer, csrf_token
 from cap.config import get_settings
+from cap.demo.retry import stuck_posts
 from cap.domain.queue import drafting_pause
 from cap.ui import views
 
@@ -37,6 +38,7 @@ def render(
         "reviewer": reviewer,
         "paused": store.paused,
         "queue_count": len(queue),
+        "stuck": stuck_posts(store) if approver else set(),
         "drafting_paused": drafting_pause(
             queue, datetime.now(UTC), get_settings().queue_idle_pause_hours
         ),

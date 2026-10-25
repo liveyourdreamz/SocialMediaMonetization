@@ -19,7 +19,7 @@ from psycopg_pool import ConnectionPool
 
 from cap.jobs import MAX_ATTEMPTS, Job, JobKind, JobQueue, JobStatus
 
-_COLUMNS = "id, kind, post_id, payload, status, attempts, error, created_at, run_after"
+_COLUMNS = "id, kind, post_id, payload, status, attempts, error, created_at, run_after, started_at"
 JOB_LOCKS = 7031  # the advisory-lock namespace for held jobs (two-key form)
 _CLAIM = (
     "UPDATE jobs SET status = 'running', attempts = attempts + 1,"
@@ -63,6 +63,7 @@ def _job(row: tuple[Any, ...]) -> Job:
         error=row[6],
         created_at=row[7],
         run_after=row[8],
+        started_at=row[9],
     )
 
 
@@ -80,6 +81,24 @@ class PostgresJobQueue(JobQueue):
                 row = conn.execute(_CLAIM, (_kinds(skip),)).fetchone()
             except errors.UniqueViolation:  # another worker just started this post
                 return None
+        return _job(row) if row else None
+
+    def status_of(self, job_id: int) -> JobStatus:
+        with self._pool.connection() as conn:
+            row = conn.execute("SELECT status FROM jobs WHERE id = %s", (job_id,)).fetchone()
+        return JobStatus(row[0]) if row else JobStatus.FAILED
+
+    def running(self) -> list[Job]:
+        with self._pool.connection() as conn:
+            rows = conn.execute(f"SELECT {_COLUMNS} FROM jobs WHERE status = 'running'").fetchall()
+        return [_job(r) for r in rows]
+
+    def running_for(self, post_id: str) -> Job | None:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                f"SELECT {_COLUMNS} FROM jobs WHERE post_id = %s AND status = 'running'",
+                (post_id,),
+            ).fetchone()
         return _job(row) if row else None
 
     def retry(self, job_id: int, error: str, after_s: float) -> None:

@@ -65,6 +65,7 @@ class Job:
     error: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     run_after: datetime | None = None  # a retried job waits until then
+    started_at: datetime | None = None  # when a worker last took it
 
 
 class JobQueue(ABC):
@@ -83,6 +84,18 @@ class JobQueue(ABC):
     def held(self, skip: frozenset[JobKind] = frozenset()) -> AbstractContextManager[Job | None]:
         """Claim the next job and hold it while the block runs (None: nothing to do).
         Finish, fail or retry it inside the block."""
+
+    @abstractmethod
+    def status_of(self, job_id: int) -> JobStatus:
+        """The job's status now (a restarted job is no longer running)."""
+
+    @abstractmethod
+    def running_for(self, post_id: str) -> Job | None:
+        """The job running for this post, if any."""
+
+    @abstractmethod
+    def running(self) -> list[Job]:
+        """Every job running now."""
 
     @abstractmethod
     def retry(self, job_id: int, error: str, after_s: float) -> None:
@@ -149,8 +162,24 @@ class MemoryJobQueue(JobQueue):
                 ):
                     j.status = JobStatus.RUNNING
                     j.attempts += 1
+                    j.started_at = now
                     return Job(**{**j.__dict__, "payload": dict(j.payload)})
             return None
+
+    def status_of(self, job_id: int) -> JobStatus:
+        with self._lock:
+            return self._jobs[job_id - 1].status
+
+    def running(self) -> list[Job]:
+        with self._lock:
+            return [Job(**{**j.__dict__, "payload": dict(j.payload)})
+                    for j in self._jobs if j.status == JobStatus.RUNNING]  # fmt: skip
+
+    def running_for(self, post_id: str) -> Job | None:
+        with self._lock:
+            j = next((j for j in self._jobs
+                      if j.post_id == post_id and j.status == JobStatus.RUNNING), None)  # fmt: skip
+            return Job(**{**j.__dict__, "payload": dict(j.payload)}) if j else None
 
     def retry(self, job_id: int, error: str, after_s: float) -> None:
         with self._lock:

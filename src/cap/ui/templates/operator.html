@@ -48,12 +48,15 @@
     <div class="row"><h2 class="eyebrow" style="font-weight: 600; letter-spacing: .06em; margin: 0">Your posts</h2><a href="/tour" class="linkbtn" style="font-size: 14px">Guided tour</a></div>
     <div class="stack-sm">
       {% for p in recent %}
-      {% set flow = workflow(p) %}
-      <a class="card tight link" href="/posts/{{ p.post_id }}{% if p.status.value in ('approved', 'published') %}/preview{% endif %}" style="gap: 6px">
+      {% set flow = workflow(p, p.post_id in stuck) %}
+      <div class="card tight stack-sm" style="gap: 8px">
+      <a class="link" href="/posts/{{ p.post_id }}{% if p.status.value in ('approved', 'published') %}/preview{% endif %}" style="display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit">
         <span class="read" style="font-size: 16px; line-height: 22px">{{ p.draft.title or p.brief.topic }}</span>
         <span class="row" style="justify-content: flex-start; gap: 10px">{% set flow_compact = true %}{% include "_flow.html" %}{% set flow_compact = false %}<span class="meta{% if flow.stopped %} word-signal{% endif %}">{{ flow.number }}/{{ flow.total }} · {{ flow.headline }}</span></span>
-        <span class="meta">{{ p.channel_id.value }} · {{ settings.channel_characters.get(p.channel_id.value, '') }}{% if flow.stopped and flow.reason %} · {{ flow.reason[:110] }}{% endif %}</span>
+        <span class="meta">{{ p.channel_id.value }} · {{ settings.channel_characters.get(p.channel_id.value, '') }}{% if flow.stopped and flow.reason %} · {{ flow.reason[:140] }}{% endif %}</span>
       </a>
+      {% if flow.restart %}<form method="post" action="{{ flow.restart.url }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary sm" type="submit">{{ flow.restart.label }}</button></form>{% endif %}
+      </div>
       {% else %}
       <p class="meta">No posts yet.</p>
       {% endfor %}
@@ -162,9 +165,10 @@
         <span class="tag">{{ p.channel_id.value }}</span>
         <span class="read" style="font-size: 17px">{{ p.draft.title or p.brief.topic }}</span>
         <span class="muted" style="font-size: 13px">{{ reason }}</span>
-        {% if workflow(p).retry %}
-        <form method="post" action="{{ workflow(p).retry }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary sm" type="submit">Try again</button></form>
-        <span class="meta">It stopped on a failure (a dropped connection, a service that was down). Trying again redoes only the step it stopped on.</span>
+        {% set pflow = workflow(p) %}
+        {% if pflow.restart %}
+        <form method="post" action="{{ pflow.restart.url }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary sm" type="submit">{{ pflow.restart.label }}</button></form>
+        <span class="meta">It stopped on a failure (a dropped connection, a service that was down). Restarting redoes only that step.</span>
         {% else %}
         <span class="meta">This one waits for a decision, not a retry. Deciding it from here is not built yet; file the topic again if you want it made.</span>
         {% endif %}
