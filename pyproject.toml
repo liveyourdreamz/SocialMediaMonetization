@@ -90,7 +90,7 @@ name = "Layers: entry points > web > application > agents and gates > knowledge 
 type = "layers"
 layers = [
     "cap.cli",
-    "cap.check | cap.smoke | cap.serve_cmd",
+    "cap.check | cap.smoke | cap.serve_cmd | cap.visuals_trial",
     "cap.server",
     "cap.worker",
     "cap.ui",
@@ -102,7 +102,7 @@ layers = [
     "cap.store",
     "cap.jobs | cap.audit",
     "cap.render",
-    "cap.harness | cap.research | cap.ideas",
+    "cap.harness | cap.research | cap.ideas | cap.visuals",
     "cap.gates",
     "cap.agents",
     "cap.post_context",

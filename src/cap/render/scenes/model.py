@@ -100,7 +100,7 @@ STOP = {
 @dataclass
 class Scene:
     kind: (
-        str  # intro, app_fail, timer, flow, calendar, verdict, figure, orbit, media, talk,
+        str  # intro, app_fail, timer, flow, calendar, verdict, figure, orbit, media, talk, photo,
         # sources, opening_slot (the review render's silent stand-in for the opening line)
     )
     text: str  # the spoken paragraph
@@ -114,6 +114,8 @@ class Scene:
     days: int = 7
     times: int = 1  # "twice" -> 2
     media: Path | None = None
+    photo: Path | None = None  # a real photograph fills the frame (cap.visuals, D50)
+    credit: str = ""  # its author and licence, on screen while it shows
     items: list[str] = field(default_factory=list)
     label: str = ""
     index: int = 0  # task number for the checklist

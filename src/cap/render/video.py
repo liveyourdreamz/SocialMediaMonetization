@@ -14,6 +14,7 @@ import hashlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PIL import Image
 
@@ -32,7 +33,12 @@ from cap.render.media import concat, duration, encode_scene
 from cap.render.voice import VOICES, silence, speak
 from cap.schema.post_record import Platform, PostRecord
 
+if TYPE_CHECKING:
+    from cap.visuals import Picture
+
 Voice = Callable[[str, str, Path], None]
+# the scenes' spoken texts -> a photograph for each, or None to keep its panel (cap.visuals)
+Pictures = Callable[[list[str]], list["Picture | None"]]
 LONG, SHORT, THUMB = (1920, 1080), (1080, 1920), (1280, 720)
 _SILENT = ("sources", "opening_slot")
 
@@ -50,9 +56,12 @@ class _Episode:
     voice_fn: Voice
     sources: list[str]
     tool: str  # the app under test, named on Patch's thumbnail
+    pictures: Pictures | None = None
 
 
-def _episode(record: PostRecord, out_dir: Path, voice_fn: Voice, stage: Stage) -> _Episode:
+def _episode(
+    record: PostRecord, out_dir: Path, voice_fn: Voice, stage: Stage, pictures: Pictures | None
+) -> _Episode:
     s = get_settings()
     channel = record.channel_id.value
     cast = s.channel_characters.get(channel, "")
@@ -69,6 +78,7 @@ def _episode(record: PostRecord, out_dir: Path, voice_fn: Voice, stage: Stage) -
         voice_fn=voice_fn,
         sources=confirmed_sources(record),  # the one filter: supported claims, no test log
         tool=sc.tool_name(record.draft.title, record.brief.topic) if cast == "Patch" else "",
+        pictures=pictures,
     )
 
 
@@ -102,11 +112,21 @@ def _plan_cut(ep: _Episode, text: str, title: str) -> list[sc.Scene]:
         arabic=ep.arabic,
     )
     plan[0].kind = "talk"
+    if ep.pictures is not None:
+        _photograph(plan, ep.pictures)
     if slot_at is not None:
         slot = sc.Scene(kind="opening_slot", text=PLACEHOLDER_UNIT, sentences=[PLACEHOLDER_UNIT])
         plan.insert(slot_at + 1, slot)
     plan.append(sc.Scene(kind="sources", text="", sentences=[]))
     return plan
+
+
+def _photograph(plan: list[sc.Scene], pictures: Pictures) -> None:
+    """Every spoken scene that has a photograph shows it instead of its panel."""
+    for k, (scene, pic) in enumerate(zip(plan, pictures([s.text for s in plan]), strict=True)):
+        if pic is not None:
+            scene.kind, scene.photo, scene.credit = "photo", pic.path, pic.credit
+            scene.index = k  # alternates the zoom: in, out, in...
 
 
 def _frames(
@@ -159,18 +179,24 @@ def _cut(
 
 
 def render(
-    record: PostRecord, out_dir: Path, *, voice_fn: Voice = speak, stage: Stage = "review"
+    record: PostRecord,
+    out_dir: Path,
+    *,
+    voice_fn: Voice = speak,
+    stage: Stage = "review",
+    pictures: Pictures | None = None,
+    with_short: bool = True,
 ) -> RenderResult:
     """Render one stage of the package into <out_dir>/<post_id>/ (review) or
     <out_dir>/<post_id>/final/ (final, after approval). `voice_fn` is injectable so
     tests run offline."""
-    ep = _episode(record, out_dir, voice_fn, stage)
+    ep = _episode(record, out_dir, voice_fn, stage, pictures)
     video, seconds = _cut(ep, script_text(record, stage=stage), record.draft.title, LONG, "long")
     cut = next(
         (v for v in record.variants if v.platform == Platform.YOUTUBE_SHORT and v.script_cut), None
     )
     short = None
-    if cut:
+    if cut and with_short:
         text = script_text(record, cut.script_cut, stage)
         short, _ = _cut(ep, text, cut.title or record.draft.title, SHORT, "short")
     thumb = ep.work / "thumbnail.png"

@@ -11,6 +11,7 @@ from cap.render.characters import draw_falak, draw_patch
 from cap.render.scenes.draw import Layout, draw_chrome, draw_subtitle, layout, panel_frame
 from cap.render.scenes.model import ACCENT, GROUND, INK, Scene
 from cap.render.scenes.panels import draw_panel, sources_panel
+from cap.render.scenes.photo import photo_frame
 from cap.render.text import shape_text, text_font, text_kw, wrap_lines
 
 
@@ -28,6 +29,11 @@ def frame(
     sources: list[str] | None = None,
 ) -> Image.Image:
     """Frame i of n for the scene; t_total is the running time in the whole episode."""
+    if sc.kind == "photo" and sc.photo is not None:
+        return photo_frame(
+            sc, i, n, t_total, lay,
+            character=character, channel=channel, level=level, arabic=arabic,
+        )  # fmt: skip
     im = Image.new("RGB", lay.size, GROUND)
     d = ImageDraw.Draw(im)
     draw_chrome(d, lay, character, channel)

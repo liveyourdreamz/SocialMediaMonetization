@@ -79,6 +79,11 @@ def _parser() -> argparse.ArgumentParser:
     t.add_argument("action", choices=["build", "check"])
     db = sub.add_parser("db", help="the laptop's own Postgres")
     db.add_argument("action", choices=["install", "status"])
+    vi = sub.add_parser("visuals", help="remake a post with real photographs, beside the old one")
+    vi.add_argument("action", choices=["trial"])
+    vi.add_argument(
+        "--post", default=None, help="post id (or its start); default: newest published"
+    )
     return p
 
 
@@ -197,6 +202,12 @@ def _cmd_db(args: argparse.Namespace) -> int:
     return _db(args.action)
 
 
+def _cmd_visuals(args: argparse.Namespace) -> int:
+    from cap.visuals_trial import trial
+
+    return trial(args.post)
+
+
 _COMMANDS = {
     "schema": _cmd_schema,
     "rulebook": _cmd_rulebook,
@@ -211,6 +222,7 @@ _COMMANDS = {
     "smoke": _cmd_smoke,
     "serve": _cmd_serve,
     "db": _cmd_db,
+    "visuals": _cmd_visuals,
 }
 
 
