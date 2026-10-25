@@ -219,7 +219,8 @@ def test_h4_progress_is_saved_as_each_stage_starts(fixtures, record, tmp_path):
     deps = make_deps(MockClient(fixtures), record, tmp_path)
     deps.on_progress = lambda r: seen.append(r.status.value)
     run_post(record, SOURCES, deps)
-    assert seen[:3] == ["drafting", "gated", "rendering"]
+    # each stage saves as it starts (and again for each log line inside it)
+    assert list(dict.fromkeys(seen))[:3] == ["drafting", "gated", "rendering"]
 
 
 # ---- M6: two saves of one post at once ---------------------------------------------

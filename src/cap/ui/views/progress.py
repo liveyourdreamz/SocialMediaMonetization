@@ -176,3 +176,32 @@ def workflow(record: PostRecord, stuck: bool = False) -> dict[str, Any]:
         "stopped": bool(stopped),
         "finished": st == "published",
     }
+
+
+def waiting_note(store: Any, record: PostRecord) -> str:
+    """Why a post that should be moving is not, in words (Hemant, 25 Oct: five minutes
+    on step 2 with nothing to say why). Empty when its step is actually running."""
+    from datetime import UTC, datetime
+
+    from cap.jobs import JobKind, JobStatus
+
+    jobs = store.jobs.jobs_for(record.post_id)
+    job = jobs[-1] if jobs else None
+    if job is None or job.status != JobStatus.QUEUED:
+        return ""
+    if job.run_after and job.run_after > datetime.now(UTC):
+        at = job.run_after.astimezone().strftime("%H:%M")
+        why = f", after: {job.error[:140]}" if job.error else ""
+        return f"Waiting to try this step again at {at}{why}"
+    busy = [j for j in store.jobs.running() if j.post_id != record.post_id]
+    if not busy:
+        return "About to start"
+    if busy[0].kind == JobKind.IDEAS:
+        what = "this week's trend research"
+    else:
+        try:
+            other = store.get(busy[0].post_id)
+            what = f"“{other.draft.title or other.brief.topic}”"
+        except Exception:  # noqa: BLE001 - a name is a nicety
+            what = "another post"
+    return f"Waiting in line: the app makes one post at a time and is working on {what}"

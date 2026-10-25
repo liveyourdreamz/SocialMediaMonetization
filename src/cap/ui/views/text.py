@@ -105,13 +105,25 @@ GATE_NAMES = [
 
 
 def day(d: date | datetime, year: bool = True, time: bool = False) -> str:
-    """'8 Dec 2026' without a leading zero, on every platform (Windows' strftime rejects the dash flag)."""
+    """'8 Dec 2026' without a leading zero, on every platform (Windows' strftime rejects
+    the dash flag). A stored time (UTC) is shown in this computer's time zone."""
+    if isinstance(d, datetime) and d.tzinfo is not None:
+        d = d.astimezone()
     out = f"{d.day} {d.strftime('%b')}"
     if year:
         out += f" {d.year}"
     if time:
         out += f" {d.strftime('%H:%M')}"
     return out
+
+
+def log_line(line: str) -> tuple[str, str]:
+    """A history line ("<ISO time> <event>") as (local HH:MM:SS, event)."""
+    when, _, what = line.partition(" ")
+    try:
+        return datetime.fromisoformat(when).astimezone().strftime("%H:%M:%S"), what
+    except ValueError:
+        return "", line
 
 
 def minutes(seconds: int) -> str:

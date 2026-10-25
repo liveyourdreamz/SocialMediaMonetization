@@ -15,12 +15,13 @@
 
   {% set flow = workflow(record, record.post_id in stuck) %}
   {% include "_flow.html" %}
+  {% if waiting %}<p class="card tight" style="margin: 0; font-size: 14px">{{ waiting }}</p>{% endif %}
 
   <details class="card tight" {% if flow.stopped %}open{% endif %}>
     <summary style="cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center">The log · {{ lines | length }} {{ "entry" if lines | length == 1 else "entries" }}</summary>
     <div class="stack-sm" style="font-size: 14px; line-height: 20px; margin-top: 8px">
       {% for when, what in lines %}
-      <div class="row" style="align-items: flex-start; gap: 12px"><span class="muted" style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap">{{ when[11:19] }}</span><span style="word-break: break-word">{{ what }}</span></div>
+      <div class="row" style="align-items: flex-start; gap: 12px"><span class="muted" style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap">{{ when }}</span><span style="word-break: break-word">{{ what }}</span></div>
       {% else %}<span class="muted">Nothing logged yet.</span>{% endfor %}
     </div>
   </details>

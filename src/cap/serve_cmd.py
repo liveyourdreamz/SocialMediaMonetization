@@ -116,6 +116,19 @@ def _run_app(
         return 1
 
 
+def _console_log() -> None:
+    """The app's own lines (a step starting, finishing, retrying, failing) in the
+    console window, with the time."""
+    import logging
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s  %(message)s", "%H:%M:%S"))
+    log = logging.getLogger("cap")
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+    log.propagate = False
+
+
 def _prepare_records(
     args: argparse.Namespace, settings: Settings, data: Path, store: PostStore
 ) -> None:
@@ -189,7 +202,10 @@ def _serve_store(
     if args.open:
         _open_later(local_url)
     try:
-        uvicorn.run(create_app(store), host=args.host, port=args.port)
+        _console_log()
+        # no line per page request: the pages refresh every few seconds and buried the
+        # worker's own lines (25 Oct); errors still print
+        uvicorn.run(create_app(store), host=args.host, port=args.port, access_log=False)
     finally:
         stop_workers()  # before the database closes
     return 0

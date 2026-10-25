@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import unicodedata
+from collections.abc import Callable
 
 from cap.agents.outputs import P10CallAOutput, P10VerifyOutput
 from cap.models import ModelClient, SourceDoc
@@ -246,14 +247,20 @@ def check_claim(
 
 
 def check_facts(
-    record: PostRecord, client: ModelClient, sources: list[SourceDoc], test_log: str = ""
+    record: PostRecord,
+    client: ModelClient,
+    sources: list[SourceDoc],
+    test_log: str = "",
+    on_claim: Callable[[str], None] | None = None,
 ) -> tuple[FactsGate, bool]:
     all_sources = list(sources)
     if test_log:
         all_sources.append(testlog_source(record, test_log))
     claims, endorsement_wording, injection = discover_claims(client, record, all_sources)
     gate = FactsGate(endorsement_wording=endorsement_wording)
-    for claim in claims:
+    say = on_claim or (lambda line: None)
+    say(f"checking {len(claims)} claims against {len(all_sources)} sources")
+    for n, claim in enumerate(claims, start=1):
         if claim.in_test_log and claim.source_url is None and test_log:
             claim.source_url = f"{TESTLOG_SCHEME}{record.post_id}"
         cc, inj = check_claim(client, claim, all_sources, test_log, record.brief.fast_moving)
@@ -264,6 +271,7 @@ def check_facts(
             claim.source_quote = None
             claim.source_url = None
         gate.claim_checks.append(cc)
+        say(f"claim {n} of {len(claims)}: {cc.final.replace('_', ' ')}")
     record.draft.claims = claims
     gate.checked = len(claims)
     gate.unsupported_claims = [cc.claim_text for cc in gate.claim_checks if cc.final != "supported"]

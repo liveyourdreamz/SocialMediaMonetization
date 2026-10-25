@@ -79,6 +79,14 @@ def _progress(deps: PipelineDeps, record: PostRecord) -> None:
     record.revision = saved.revision  # the next save builds on this one
 
 
+def _note(deps: PipelineDeps, record: PostRecord, line: str) -> None:
+    """A line in the post's log, saved at once, so its page shows what is happening
+    inside a long step (Hemant, 25 Oct: five minutes on "Writing the script" and one
+    log entry)."""
+    record.log(line)
+    _progress(deps, record)
+
+
 def _metered[**P](step: Callable[P, PostRecord]) -> Callable[P, PostRecord]:
     """Charge the model calls a step made to the record it returns; when the step
     raises, the calls travel on the error to the worker, which charges them (R9)."""
@@ -107,8 +115,12 @@ def write(record: PostRecord, sources: list[SourceDoc], deps: PipelineDeps) -> P
     test_log = deps.test_logs.get(record.post_id, "")
     try:
         record = draft(record, deps.client, sources, block, test_log=test_log)
+        _note(
+            deps, record, f"script written ({len(record.draft.claims)} claims); the critic reads it"
+        )
         record, accepted = critique(record, deps.client, block)
         if not accepted:
+            _note(deps, record, "the critic asked for changes; rewriting the script")
             # one revision pass (PRD agent 5): the drafter sees the critique this time
             record = draft(
                 record,
@@ -118,6 +130,9 @@ def write(record: PostRecord, sources: list[SourceDoc], deps: PipelineDeps) -> P
                 test_log=test_log,
                 critique=critique_text(record),
             )
+            _note(deps, record, "script rewritten; writing the YouTube versions")
+        else:
+            _note(deps, record, "the critic accepted it; writing the YouTube versions")
         record = adapt(record, deps.client, [Platform.YOUTUBE_LONG, Platform.YOUTUBE_SHORT])
     except AgentBlockedError as e:
         return _park(record, str(e))
@@ -150,13 +165,17 @@ def checks(record: PostRecord, sources: list[SourceDoc], deps: PipelineDeps) -> 
     """Research, then the four gates, then the one verdict (cap.domain.verdict): pass,
     questions for the card (D43), or reject."""
     record.status = PostStatus.GATED
-    _progress(deps, record)
+    _note(deps, record, "looking for a source for each claim")
     sources = research(record, sources, deps)
     # facts first (D41): the claims are checked, and only links that confirmed a
     # claim become the source list that R-12 and the published description use
     try:
         facts, injection = check_facts(
-            record, deps.client, sources, test_log=deps.test_logs.get(record.post_id, "")
+            record,
+            deps.client,
+            sources,
+            test_log=deps.test_logs.get(record.post_id, ""),
+            on_claim=lambda line: _note(deps, record, line),
         )
     except AgentBlockedError as e:
         return _park(record, str(e))
@@ -205,7 +224,7 @@ def render(record: PostRecord, deps: PipelineDeps) -> PostRecord:
     placeholder. The final render runs after approval (cap.approval.release_job) and
     is what the token binds."""
     record.status = PostStatus.RENDERING
-    _progress(deps, record)
+    _note(deps, record, "recording the voice and drawing the video")
     kind = get_settings().renderer
     try:
         r = render_stage(record, deps.render_dir, "review", kind)

@@ -74,8 +74,9 @@ def card(
             record=record,
             running=running,
             channel_label=views.channel_label(record.channel_id.value),
+            waiting=views.waiting_note(store, record) if running else "",
             lines=[
-                h.split(" ", 1)
+                views.log_line(h)
                 for h in record.history
                 if reviewer.is_approver
                 or not any(k in h for k in ("gate", "ethics", "facts", "critic", "judge"))

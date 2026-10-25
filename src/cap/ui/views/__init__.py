@@ -37,6 +37,7 @@ from cap.ui.views.portfolio import (  # noqa: F401 - the screens read cap.ui.vie
 )
 from cap.ui.views.progress import (  # noqa: F401 - the screens read cap.ui.views.*
     STEPS,
+    waiting_note,
     workflow,
 )
 from cap.ui.views.text import (  # noqa: F401 - the screens read cap.ui.views.*
@@ -48,6 +49,7 @@ from cap.ui.views.text import (  # noqa: F401 - the screens read cap.ui.views.*
     channel_label,
     day,
     is_rtl,
+    log_line,
     minutes,
     script_paragraphs,
     word_count,

@@ -103,7 +103,8 @@ class Worker:
     def start(self) -> Worker:
         self.recover()
         for i in range(self.threads):
-            # the clock runs in the first thread only (review R3: one tick per minute)
+            # the clock runs in the first thread only (review R3: one tick per minute);
+            # the others keep themselves for posts (run_once)
             t = threading.Thread(
                 target=self._loop, args=(i == 0,), name=f"cap-worker-{i}", daemon=True
             )
@@ -137,7 +138,7 @@ class Worker:
                 last_tick = time.monotonic()
                 self.tick()
             try:
-                worked = self.run_once()
+                worked = self.run_once(posts_only=not clock)
             except Exception:  # the queue itself failed (database gone): wait, retry
                 _log.exception("the job queue could not be read")
                 worked = False
@@ -154,10 +155,15 @@ class Worker:
             self.store.audit.append("new drafts resumed")
         self.drafting_paused = why
 
-    def run_once(self) -> bool:
+    def run_once(self, posts_only: bool = False) -> bool:
         """Claim and run one job, held for as long as it runs; False when there was
-        nothing to do. While new drafting is paused, no brief or canary starts."""
+        nothing to do. While new drafting is paused, no brief or canary starts. A
+        `posts_only` thread never takes the weekly trend research, so a long ideas run
+        cannot hold every thread while posts wait (25 Oct: two posts sat on "Writing
+        the script" for over ten minutes with nothing in their logs)."""
         skip = DRAFTING if self.drafting_paused else frozenset()
+        if posts_only:
+            skip = skip | {JobKind.IDEAS}
         with self.store.jobs.held(skip) as job:
             if job is None:
                 return False
@@ -170,6 +176,9 @@ class Worker:
         every call of a step that raised, is charged here, so nothing paid for goes
         unrecorded (D44, review R9)."""
         handler = self.handlers.get(job.kind)
+        _log.info(
+            "%s step started for post %s (try %d)", job.kind.value, job.post_id[:8], job.attempts
+        )
         with metering() as spent:
             try:
                 if handler is None:
@@ -186,6 +195,7 @@ class Worker:
         self._charge(job, list(spent))
         if not self._replaced(job):
             self.store.jobs.finish(job.id)
+            _log.info("%s step finished for post %s", job.kind.value, job.post_id[:8])
 
     def _replaced(self, job: Job) -> bool:
         """Hemant restarted this step while it hung (cap.demo.retry): a fresh job has
