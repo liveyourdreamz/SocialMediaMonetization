@@ -162,7 +162,12 @@
         <span class="tag">{{ p.channel_id.value }}</span>
         <span class="read" style="font-size: 17px">{{ p.draft.title or p.brief.topic }}</span>
         <span class="muted" style="font-size: 13px">{{ reason }}</span>
-        <span class="meta">Deciding a parked post re-runs its gates; that control arrives with the gate re-run loop (week 2).</span>
+        {% if workflow(p).retry %}
+        <form method="post" action="{{ workflow(p).retry }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary sm" type="submit">Try again</button></form>
+        <span class="meta">It stopped on a failure (a dropped connection, a service that was down). Trying again redoes only the step it stopped on.</span>
+        {% else %}
+        <span class="meta">This one waits for a decision, not a retry. Deciding it from here is not built yet; file the topic again if you want it made.</span>
+        {% endif %}
       </div>
       {% endfor %}
       {% else %}<div class="card tight muted">Nothing parked.</div>{% endif %}

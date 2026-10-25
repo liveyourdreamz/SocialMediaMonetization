@@ -21,7 +21,8 @@
     {% endfor %}
   </ol>
   <div class="flow-next">
-    {% if flow.href %}<a class="btn {{ 'primary' if not flow.stopped else 'secondary' }} sm" href="{{ flow.href }}">{{ flow.next }}</a>{% else %}<span class="meta">{{ flow.next }}</span>{% endif %}
+    {% if flow.retry %}<form method="post" action="{{ flow.retry }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary sm" type="submit">{{ flow.next }}</button></form>
+    {% elif flow.href %}<a class="btn {{ 'primary' if not flow.stopped else 'secondary' }} sm" href="{{ flow.href }}">{{ flow.next }}</a>{% else %}<span class="meta">{{ flow.next }}</span>{% endif %}
   </div>
 </section>
 {% endif %}

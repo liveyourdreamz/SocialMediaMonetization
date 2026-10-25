@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from cap.demo.retry import can_try_again
 from cap.schema.post_record import PostRecord
 from cap.ui.views.outbox import release_view
 
@@ -113,6 +114,8 @@ def _action(record: PostRecord, current: str, stopped: str) -> tuple[str, str, s
         return "Closed at your review", "See the card", f"/posts/{pid}"
     if stopped:
         label = dict(STEPS)[stopped]
+        if can_try_again(record):  # a failure: the cause may be gone (the network is back)
+            return f"Stopped at {label.lower()}", f"Try again from {label.lower()}", ""
         return (
             f"Stopped at {label.lower()}",
             "File the brief again once the cause is fixed",
@@ -149,4 +152,5 @@ def workflow(record: PostRecord) -> dict[str, Any]:
         or (st == "approved" and record.release.status.value == "preparing"),
         "stopped": bool(stopped),
         "finished": st == "published",
+        "retry": f"/posts/{record.post_id}/try-again" if can_try_again(record) else "",
     }

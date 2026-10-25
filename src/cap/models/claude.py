@@ -18,6 +18,8 @@ from cap.models.base import (
     log,
 )
 
+SILENCE_S = 300.0  # no byte for this long on a streamed reply: the connection is gone
+
 
 class AnthropicClient(ModelClient):
     """Production backend. The key comes from settings (Secret Manager in production)."""
@@ -30,14 +32,21 @@ class AnthropicClient(ModelClient):
             )
         import anthropic  # imported here so the mock path never needs the SDK
 
-        # An explicit timeout: with the SDK default, any non-streaming call whose
-        # max_tokens exceeds ~21k raises before the request is sent ("Streaming is
-        # required..."), which parked every high-effort prompt on the first laptop run.
+        # Every call streams (`_send`). A long draft can think for minutes, but a
+        # streamed reply keeps the connection alive with server events, so complete
+        # silence means the connection is gone: after SILENCE_S the call fails and the
+        # worker tries the step again a minute later. Before, a non-streaming call
+        # waited up to 20 minutes on a dropped Wi-Fi connection (Hemant, 25 Oct).
         self._client = anthropic.Anthropic(
             api_key=settings.anthropic_api_key.get_secret_value(),
-            timeout=anthropic.Timeout(1200.0, connect=10.0),
+            timeout=anthropic.Timeout(SILENCE_S, connect=10.0),
             max_retries=2,
         )
+
+    def _send(self, **request: Any) -> Any:
+        """One streamed request, accumulated into the same Message a plain call returns."""
+        with self._client.messages.stream(**request) as stream:
+            return stream.get_final_message()
 
     def build_request(self, call: ModelCall) -> dict[str, Any]:
         """The exact request body; separated from the send so tests can check it."""
@@ -96,7 +105,7 @@ class AnthropicClient(ModelClient):
             extra: dict[str, Any] = {
                 k: v for k, v in req.items() if k in ("tools", "tool_choice", "thinking")
             }
-            resp = self._client.messages.create(
+            resp = self._send(
                 model=req["model"],
                 max_tokens=req["max_tokens"],
                 system=cast("list[TextBlockParam]", req["system"]),
@@ -153,7 +162,7 @@ class AnthropicClient(ModelClient):
 
         req = self.build_step_request(call, messages, tools, final)
         try:
-            resp = self._client.messages.create(**req)
+            resp = self._send(**req)
         except Exception as e:  # network, 4xx, 5xx: the loop ends, the run records why
             detail = f"{type(e).__name__}: {str(e)[:200]}"
             log.error("anthropic loop step failed for %s: %s", call.spec.prompt_id, detail)
