@@ -27,6 +27,7 @@ from cap import fetch
 from cap.config import get_settings
 from cap.domain.cost import note, usage_of
 from cap.fetch import HEADERS, UA, failed_reason
+from cap.models.base import ModelUnreachableError
 from cap.prompts import SONNET
 from cap.sources import BLOCKED_DOMAINS, SCIENCE_DOMAINS, verification_ok
 
@@ -213,6 +214,8 @@ def find_sources(
                 )
             if note and not urls:
                 log.append(f"research: {note[:200]}")
+        except ModelUnreachableError:
+            raise  # no network: the step is tried again later, not quietly left unsourced
         except Exception as e:  # noqa: BLE001 - fall back; the scout alone never parks a post
             log.append(
                 f"research: the scout failed ({type(e).__name__}: {str(e)[:120]}); "

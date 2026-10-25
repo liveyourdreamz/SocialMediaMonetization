@@ -4,6 +4,8 @@ on, with the inputs it had; a post parked for a decision does not."""
 
 from __future__ import annotations
 
+import pytest
+
 from cap.demo.canary_job import file_brief
 from cap.demo.retry import can_try_again, plan
 from cap.demo.seed import new_brief
@@ -55,13 +57,43 @@ def test_a_post_parked_for_a_decision_is_not_tried_again(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     store = MemoryStore()
     rec = new_brief("A", "How a pacemaker keeps time")
+    rec.flags.injection_suspected = True  # as the pipeline sets it
     rec.stop("checks", "injection suspected in a fetched page", PostStatus.PARKED)
     store.put(rec)
+    escalated = new_brief("A", "How a heart valve works")
+    escalated.stop("review", "escalated by hemant: unsure", PostStatus.PARKED)
+    store.put(escalated)
+    assert not can_try_again(store.get(escalated.post_id))
     assert not can_try_again(store.get(rec.post_id))
     api = Browser(create_app(store), follow_redirects=False)
     api.sign_in("hemant")
     assert "waits for a decision" in api.get("/operator").text
     assert api.form(f"/posts/{rec.post_id}/restart").status_code == 409
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "P2 call 1: APIConnectionError: Connection error.",  # 25 Oct, desalination
+        "P2: numerals on screen, in the title or the script with no claim: ['30']",  # Mars
+        "render failed: edge-tts timed out",
+    ],
+)
+def test_any_failed_step_offers_restart(reason, tmp_path, monkeypatch):
+    """25 Oct: both posts above showed "Stopped at draft" with no button."""
+    monkeypatch.chdir(tmp_path)
+    store = MemoryStore()
+    rec = new_brief("B", "How monsoons form")
+    file_brief(store, rec, {"urls": [], "test_log": ""})
+    store.jobs.fail(store.jobs.claim().id, "done")
+    rec = store.get(rec.post_id)
+    rec.stop("draft", reason, PostStatus.PARKED)
+    store.put(rec)
+    api = Browser(create_app(store, run_jobs=False), follow_redirects=False)
+    api.sign_in("hemant")
+    assert "Restart the draft step" in api.get("/operator").text
+    assert api.form(f"/posts/{rec.post_id}/restart").status_code == 303
+    assert store.jobs.jobs_for(rec.post_id)[-1].kind == JobKind.BRIEF
 
 
 def test_an_interrupted_checks_step_resumes_at_checks_with_its_sources():

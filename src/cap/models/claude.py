@@ -15,10 +15,36 @@ from cap.models.base import (
     Completion,
     ModelCall,
     ModelClient,
+    ModelUnreachableError,
     log,
 )
 
 SILENCE_S = 300.0  # no byte for this long on a streamed reply: the connection is gone
+
+
+def _unreachable(e: Exception) -> bool:
+    """Worth trying again later: the network, a timeout, rate limits, the service's own
+    5xx or overload. A 4xx (bad request, bad key) would fail the same way again."""
+    import anthropic
+    import httpx
+
+    transient = (
+        anthropic.APIConnectionError,  # includes APITimeoutError
+        anthropic.RateLimitError,
+        anthropic.InternalServerError,  # 5xx, including 529 overloaded
+        httpx.TransportError,  # a stream cut off mid-reply
+    )
+    return isinstance(e, transient)
+
+
+def _failed(e: Exception, prompt_id: str) -> str:
+    detail = f"{type(e).__name__}: {str(e)[:200]}"
+    log.error("anthropic call failed for %s: %s", prompt_id, detail)
+    if _unreachable(e):
+        raise ModelUnreachableError(
+            f"{prompt_id}: the model could not be reached ({detail})"
+        ) from e
+    return detail
 
 
 class AnthropicClient(ModelClient):
@@ -35,7 +61,8 @@ class AnthropicClient(ModelClient):
         # Every call streams (`_send`). A long draft can think for minutes, but a
         # streamed reply keeps the connection alive with server events, so complete
         # silence means the connection is gone: after SILENCE_S the call fails and the
-        # worker tries the step again a minute later. Before, a non-streaming call
+        # worker tries the step again a minute later
+        # (ModelUnreachableError). Before, a non-streaming call
         # waited up to 20 minutes on a dropped Wi-Fi connection (Hemant, 25 Oct).
         self._client = anthropic.Anthropic(
             api_key=settings.anthropic_api_key.get_secret_value(),
@@ -113,10 +140,8 @@ class AnthropicClient(ModelClient):
                 output_config=cast("OutputConfigParam", req["output_config"]),
                 **extra,  # type: ignore[arg-type]
             )
-        except Exception as e:  # network, 4xx, 5xx: fail closed, the caller parks the post
-            detail = f"{type(e).__name__}: {str(e)[:200]}"
-            log.error("anthropic call failed for %s: %s", call.spec.prompt_id, detail)
-            return Completion(raw="", stop_reason="error", error=detail)
+        except Exception as e:  # unreachable: raised (retried); 4xx: the caller parks
+            return Completion(raw="", stop_reason="error", error=_failed(e, call.spec.prompt_id))
         text = "".join(
             getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text"
         )
@@ -163,10 +188,10 @@ class AnthropicClient(ModelClient):
         req = self.build_step_request(call, messages, tools, final)
         try:
             resp = self._send(**req)
-        except Exception as e:  # network, 4xx, 5xx: the loop ends, the run records why
-            detail = f"{type(e).__name__}: {str(e)[:200]}"
-            log.error("anthropic loop step failed for %s: %s", call.spec.prompt_id, detail)
-            return Step(Completion(raw="", stop_reason="error", error=detail))
+        except Exception as e:  # unreachable: raised (retried); 4xx: the loop ends
+            return Step(
+                Completion(raw="", stop_reason="error", error=_failed(e, call.spec.prompt_id))
+            )
         blocks = list(resp.content)
         text = "".join(getattr(b, "text", "") for b in blocks if getattr(b, "type", "") == "text")
         uses = [

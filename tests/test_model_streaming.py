@@ -51,12 +51,33 @@ def test_calls_stream_and_read_the_final_message():
     assert out.usage == {"input_tokens": 5, "output_tokens": 7}
 
 
-def test_a_dead_connection_is_an_error_result_not_a_hang():
+def test_a_dead_connection_raises_so_the_worker_tries_again():
+    """Not a refusal (that parks the post): the step fails and is retried later."""
     import httpx
+    import pytest
+
+    from cap.models import ModelUnreachableError
 
     s = FakeStream(error=httpx.ReadTimeout("no data for 300 s"))
-    out = _client(s).run(spec("P1", "A"), "u", P1Output)
-    assert out.output is None and "ReadTimeout" in (out.reason or "")
+    with pytest.raises(ModelUnreachableError, match="ReadTimeout"):
+        _client(s).run(spec("P1", "A"), "u", P1Output)
+
+
+def test_the_sdk_connection_error_raises_too_but_a_bad_request_does_not():
+    import anthropic
+    import httpx
+    import pytest
+
+    from cap.models import ModelUnreachableError
+
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    with pytest.raises(ModelUnreachableError):
+        _client(FakeStream(error=anthropic.APIConnectionError(request=req))).run(
+            spec("P1", "A"), "u", P1Output
+        )
+    bad = anthropic.BadRequestError("bad", response=httpx.Response(400, request=req), body=None)
+    out = _client(FakeStream(error=bad)).run(spec("P1", "A"), "u", P1Output)
+    assert out.output is None and "BadRequestError" in (out.reason or "")
 
 
 def test_silence_is_minutes_not_twenty():

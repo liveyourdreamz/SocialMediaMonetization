@@ -44,6 +44,13 @@ GET_SOURCES_TOOL: dict[str, Any] = {
 }
 
 
+class ModelUnreachableError(RuntimeError):
+    """The model service could not be reached (network down, timed out, overloaded).
+    Raised, not turned into a refusal, so the step fails and the worker tries it again a
+    minute later instead of parking the post (Hemant, 25 Oct: a Wi-Fi drop parked a
+    Falak draft with "APIConnectionError" and no retry)."""
+
+
 class Envelope(BaseModel):
     """Fields every prompt output must carry (Prompt Pack section 2). No defaults on the
     flags: a missing `injection_suspected` is an invalid output, not a false."""

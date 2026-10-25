@@ -7,11 +7,13 @@ STUCK_AFTER) is closed and queued again with the same inputs; if its worker wake
 later, it sees it was replaced and drops its result (cap.worker). A post that stopped on
 a failure goes back to the step it stopped on (below).
 
-Only a post parked because a step failed after its retries, or was interrupted by a
-restart, can be tried again: the cause may have gone (the network is back). A post
-parked for a decision (escalated by the reviewer, injection suspected, made for kids
-doubtful) cannot: trying again would not change the answer, and those are decided on
-their own path. The step runs again with the inputs it had (its last job's payload),
+Any post parked because a step failed can be tried again: the network dropped, the model
+refused or wrote something a rule caught (a fresh draft usually passes), the voice or
+ffmpeg failed, the app restarted. Only a post parked for a decision cannot: escalated by
+the reviewer, or injection suspected in a fetched page. Trying again would not change
+the answer, and those are decided on their own path. (Until 25 Oct this was the other
+way round, a list of failure reasons that could be retried, and a draft parked on
+"APIConnectionError" matched none of them, so it showed no button.) The step runs again with the inputs it had (its last job's payload),
 saved and queued in one transaction.
 """
 
@@ -24,7 +26,6 @@ from cap.jobs import Job, JobKind
 from cap.schema.post_record import PostRecord, PostStatus
 from cap.store import PostStore
 
-FAILURE_REASONS = ("the pipeline could not run", "the tour pipeline could not run", "interrupted")
 # the workflow step a post stopped at -> (the job that redoes it, the status it runs from)
 STEP_JOB: dict[str, tuple[JobKind, PostStatus]] = {
     "brief": (JobKind.BRIEF, PostStatus.DRAFTING),
@@ -39,10 +40,13 @@ class TryAgainRefusedError(ValueError):
     """The post cannot be tried again; the message says why, in words."""
 
 
+def waits_for_decision(record: PostRecord) -> bool:
+    """Parked for a person to decide, not because a step failed."""
+    return record.flags.stopped_at == "review" or record.flags.injection_suspected
+
+
 def can_try_again(record: PostRecord) -> bool:
-    return record.status == PostStatus.PARKED and record.flags.stop_reason.startswith(
-        FAILURE_REASONS
-    )
+    return record.status == PostStatus.PARKED and not waits_for_decision(record)
 
 
 def _last(jobs: list[Job], kind: JobKind) -> Job | None:

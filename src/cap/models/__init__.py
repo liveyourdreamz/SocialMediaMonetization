@@ -29,6 +29,7 @@ from cap.models.base import (
     ModelCall,
     ModelClient,
     ModelResult,
+    ModelUnreachableError,
     SourceDoc,
     _blocked_output,
     _envelope_block,
@@ -41,6 +42,7 @@ from cap.models.mock import MockClient
 
 __all__ = [
     "AnthropicClient",
+    "ModelUnreachableError",
     "Completion",
     "Envelope",
     "FixtureValue",
