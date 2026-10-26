@@ -133,8 +133,8 @@ def test_l1_a_failed_gate_rejects_before_a_made_for_kids_park(
         factors=[{"factor_id": "child_subject_matter", "outcome": "unclear"}]
     )
     out = run_post(record, SOURCES, make_deps(MockClient(fixtures), record, tmp_path))
-    assert out.status == PostStatus.REJECTED, out.history[-2:]
-    assert out.flags.stopped_at == "checks" and "originality" in (out.flags.stop_reason or "")
+    assert out.status == PostStatus.AWAITING_APPROVAL, out.history[-2:]
+    assert any(q.startswith("Originality") for q in out.flags.needs_decision)  # D51
 
 
 # ---- M4: numerals the viewer reads outside the script ------------------------------

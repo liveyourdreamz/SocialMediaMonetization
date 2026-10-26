@@ -151,5 +151,10 @@ def _no_surprise_canaries(request, monkeypatch):
 
 
 @pytest.fixture
-def canaries():
-    """Opt in: briefs filed in this test become canaries when one is due."""
+def canaries(monkeypatch):
+    """Opt in: briefs filed in this test become canaries when one is due (they are off
+    for Hemant by default since 26 Oct: CAP_CANARIES)."""
+    from cap.config import get_settings
+
+    monkeypatch.setenv("CAP_CANARIES", "true")
+    get_settings.cache_clear()

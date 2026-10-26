@@ -35,7 +35,6 @@ from cap.domain.card import prepare_card
 from cap.domain.cost import charge, keep_on, metering
 from cap.gates import (
     HistoryIndex,
-    Outcome,
     check_disclosure,
     check_ethics,
     check_facts,
@@ -201,12 +200,7 @@ def checks(record: PostRecord, sources: list[SourceDoc], deps: PipelineDeps) -> 
     record.gates.disclosure = check_disclosure(record, deps.client)
     # one rule decides what the four results mean together (cap.domain.verdict)
     verdict = decide(record)
-    if verdict.outcome == Outcome.REJECT:
-        record.status = PostStatus.REJECTED
-        record.stop("checks", "gates failed: " + "; ".join(verdict.reasons))
-        record.log("gates failed: " + "; ".join(verdict.reasons))
-        return record
-    # D43: what a gate could not settle goes to the card for Hemant to decide
+    # D43, D51: every finding goes to the card; the checks never stop a post
     for q in verdict.questions:
         if q not in record.flags.needs_decision:
             record.flags.needs_decision.append(q)

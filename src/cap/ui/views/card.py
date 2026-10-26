@@ -84,7 +84,9 @@ def card_context(
         o, e, d, f = g["originality"], g["ethics"], g["disclosure"], g["facts"]
         gates.append(_gate("Originality and anchor", o["pass"], _orig_line(o)))
         gates.append(_gate("Ethics, two judges", e["verdict"] == "pass", _ethics_line(e)))
-        gates.append(_gate("Disclosure and labelling", d["pass"], _disc_line(d), near=_mfk_near(d)))
+        legal = (d.get("paid_promo") and not d.get("ad_prefix_ok")) or d.get("mfk_band") == "likely"
+        gates.append(_gate("Disclosure and labelling", d["pass"], _disc_line(d),
+                           near=_mfk_near(d), legal=bool(legal)))  # fmt: skip
         unconfirmed = any(c.get("final") != "supported" for c in f.get("claim_checks") or [])
         gates.append(_gate("Facts and claims", f["pass"], _facts_line(f), near=unconfirmed))
     media = card.media_manifest
@@ -159,9 +161,17 @@ def card_context(
     }
 
 
-def _gate(name: str, passed: bool, line: str, near: bool = False) -> dict[str, Any]:
-    state = "pass" if passed and not near else ("near" if passed else "fail")
-    prefix = "Pass" if passed and not near else ("Pass, near miss" if passed else "Fail")
+def _gate(
+    name: str, passed: bool, line: str, near: bool = False, legal: bool = False
+) -> dict[str, Any]:
+    """A traffic light (D51): green passed, amber for him to weigh, red only for a legal
+    risk outside the platform. None of them stops the post; he decides."""
+    if passed:
+        state, prefix = ("near", "Pass, near miss") if near else ("pass", "Pass")
+    elif legal:
+        state, prefix = "fail", "Red, legal risk"
+    else:
+        state, prefix = "near", "Amber, your call"
     return {"name": name, "state": state, "line": f"{prefix} · {line}"}
 
 

@@ -72,4 +72,4 @@ def test_originality_reads_postgres_history_in_the_real_loop(store, monkeypatch)
     drain(store, again.post_id)
     got = store.get(again.post_id)
     assert got.gates.originality.nearest_post_id == first.post_id
-    assert got.status == PostStatus.REJECTED
+    assert got.status == PostStatus.AWAITING_APPROVAL

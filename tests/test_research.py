@@ -177,7 +177,11 @@ def test_flag_mode_unconfirmed_claims_reach_the_card_block_mode_rejects(keyed, m
             ["research: one unrelated page"],
         ),
     )
-    for mode, expect in (("flag", PostStatus.AWAITING_APPROVAL), ("block", PostStatus.REJECTED)):
+    # D51: block mode no longer stops the post either; it reaches the card as a finding
+    for mode, expect in (
+        ("flag", PostStatus.AWAITING_APPROVAL),
+        ("block", PostStatus.AWAITING_APPROVAL),
+    ):
         monkeypatch.setenv("CAP_FACT_MODE", mode)
         get_settings.cache_clear()
         rec = run_brief(

@@ -70,7 +70,9 @@ def test_an_exhausted_api_credit_is_named_and_retried_not_parked_as_a_refusal():
         _client(FakeStream(error=low)).run(spec("P1", "A"), "u", P1Output)
 
 
-def test_a_check_post_that_cannot_be_made_carries_on_as_a_normal_post(monkeypatch, tmp_path):
+def test_a_check_post_that_cannot_be_made_carries_on_as_a_normal_post(
+    monkeypatch, tmp_path, canaries
+):
     from cap import agents
     from cap.demo.seed import new_brief
     from cap.jobs import JobKind
@@ -97,3 +99,21 @@ def test_a_check_post_that_cannot_be_made_carries_on_as_a_normal_post(monkeypatc
     assert not got.flags.canary and got.status == PostStatus.AWAITING_APPROVAL, got.history[-3:]
     assert any("carrying on as a normal post" in h for h in got.history)
     assert [j.status.value for j in store.jobs.jobs_for(rec.post_id)] == ["done"]  # no retries
+
+
+def test_with_check_posts_off_a_filed_canary_is_made_as_a_normal_post(monkeypatch, tmp_path):
+    """26 Oct: "I don't want anybody to cross check my briefs" (CAP_CANARIES off)."""
+    from cap.demo.seed import new_brief
+    from cap.jobs import JobKind
+    from cap.schema.enums import FaultType
+    from cap.store import MemoryStore
+    from cap.worker import drain
+
+    monkeypatch.chdir(tmp_path)
+    store = MemoryStore()
+    rec = new_brief("A", "Solar eclipse")
+    rec.flags.canary, rec.flags.canary_fault_type = True, FaultType.UNSOURCED_NUMBER
+    store.file(rec, JobKind.CANARY, {"urls": [], "test_log": ""})
+    drain(store, rec.post_id)
+    got = store.get(rec.post_id)
+    assert not got.flags.canary and any("switched off" in h for h in got.history)

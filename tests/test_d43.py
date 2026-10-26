@@ -62,13 +62,13 @@ def test_the_publisher_takes_a_settled_post_and_refuses_an_unsettled_one(
     assert publish(rec, t, DryRunAdapter()).status == PostStatus.PUBLISHED
 
 
-def test_an_outright_ethics_fail_still_rejects(fixtures, record, tmp_path):
+def test_an_outright_ethics_fail_is_a_finding_he_settles(fixtures, record, tmp_path):
     fixtures[("P1", "A")] = ok(
         verdict="fail",
         rule_findings=[{"rule_id": "R-01", "outcome": "block", "evidence_span": "them"}],
     )
     out = run_post(record, SOURCES, make_deps(MockClient(fixtures), record, tmp_path))
-    assert out.status == PostStatus.REJECTED and out.gates.ethics.verdict == Verdict.FAIL
+    assert out.status == PostStatus.AWAITING_APPROVAL and out.gates.ethics.verdict == Verdict.FAIL
     assert not gates_cleared(out)
 
 

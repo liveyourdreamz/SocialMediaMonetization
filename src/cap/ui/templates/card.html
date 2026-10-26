@@ -60,8 +60,8 @@
 
   {% if not blind and record.flags.needs_decision %}
   <section class="banner" role="note" style="border-left: 4px solid var(--color-signal, #b45309)">
-    <span class="eyebrow">You decide · {{ record.flags.needs_decision | length }} question{{ 's' if record.flags.needs_decision | length != 1 }}</span>
-    <span class="head">The checks could not settle {{ 'these' if record.flags.needs_decision | length != 1 else 'this' }}. Nothing stopped; it is your call.</span>
+    <span class="eyebrow">You decide · {{ record.flags.needs_decision | length }} finding{{ 's' if record.flags.needs_decision | length != 1 }}</span>
+    <span class="head">What the checks found. They advise; nothing is stopped. It is your call.</span>
     {% for q in record.flags.needs_decision %}<span class="facts">· {{ q }}</span>{% endfor %}
     {% if record.approval.decisions_acknowledged %}<span class="facts">Reviewed and accepted by {{ record.approval.reviewer }}.</span>{% endif %}
   </section>

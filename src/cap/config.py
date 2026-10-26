@@ -156,6 +156,10 @@ class Settings(BaseSettings):
     blind_review_point_cards: int = 200
     reject_other_share_flag: float = 0.20
 
+    # Hemant, 26 Oct: "I don't want anybody to cross check my briefs." The check posts
+    # (P14) are off unless CAP_CANARIES=true is set in .env.
+    canaries: bool = False
+
     # Canary schedule (P14): (one in N, until card M); M = 0 is "from then on". Front
     # loaded: 1 in 3 until card 15, 1 in 5 until card 100, then 1 in 10. After any miss,
     # 1 in 3 for the next 10 cards (cap.domain.canary).

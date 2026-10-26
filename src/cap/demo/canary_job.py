@@ -87,7 +87,7 @@ def file_brief(
     """Save a brief Hemant filed or picked and queue its first job: BRIEF for a clean
     post, CANARY when one is due. Returns the job kind queued."""
     with store.exclusive(LOCK):
-        if record.flags.tour or not canary_due(store, rng):
+        if record.flags.tour or not get_settings().canaries or not canary_due(store, rng):
             store.file(record, JobKind.BRIEF, payload)
             return JobKind.BRIEF
         record.flags.canary = True  # set by code, never by a model (D23)
@@ -167,6 +167,15 @@ def run_canary_job(store: PostStore, job: Job) -> None:
     from cap.demo.seed import _setup
 
     record = store.get(job.post_id)
+    if not get_settings().canaries:  # switched off after this one was filed: a normal post
+        from cap.demo.seed import run_write_job
+
+        record.flags.canary, record.flags.canary_fault_type = False, None
+        record.flags.canary_refile = None
+        record.log("check posts are switched off; made as a normal post")
+        store.put(record)
+        run_write_job(store, job)
+        return
     test_log = str(job.payload.get("test_log", ""))
     deps, sources = _setup(store, record, test_log, urls=list(job.payload.get("urls", [])))
     docs = pipeline.as_sources(sources)

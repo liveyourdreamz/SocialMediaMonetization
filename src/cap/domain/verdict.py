@@ -1,15 +1,17 @@
-"""The one home of the gate decision (PRD 3, R-20, D41, D43).
+"""The one home of the gate decision (PRD 3, R-20, D41, D43, D51).
 
-After the four gates have run, a post is in exactly one of three states:
+D51 (Hemant, 26 Oct: "you don't have the right to block the flow"; "I make the final
+decision"): the checks advise, the approver decides. No gate stops a post. After the
+four gates have run a post is in one of two states:
 
 * PASS: every gate passed and nothing is open. It goes to the card as it is.
-* QUESTIONS: no gate failed outright, but something only the approver can settle is
-  open: an ethics escalation, a doubtful or unscored made-for-kids result, or claims
-  the facts gate could not confirm in flag mode (D41). Each becomes one card question;
-  the post is publishable once the approver has acknowledged every one.
-* REJECT: a gate failed outright (a near-duplicate, an ethics fail, a likely
-  made-for-kids post, a missing Ad prefix, an unsupported claim in block mode,
-  endorsement wording). Nobody clears it (R-20).
+* QUESTIONS: something is for the approver to weigh. Each finding becomes one card
+  line with a light: RED for a legal risk outside the platform (a paid post without
+  the Ad prefix, a post likely made for kids), AMBER for everything else (an ethics
+  fail or escalation, unconfirmed claims, endorsement wording, originality). He reads
+  them, ticks once that he has, and approves or rejects as he sees fit.
+
+REJECT stays in the enum for records written before D51; `decide` no longer returns it.
 
 The pipeline, the record's `gates_cleared` (which the publisher checks) and the views
 all read this module; none of them restates the rule.
@@ -36,8 +38,8 @@ class Outcome(StrEnum):
 @dataclass(frozen=True)
 class GateVerdict:
     outcome: Outcome
-    questions: tuple[str, ...] = ()  # for the approver; meaningful when not REJECT
-    reasons: tuple[str, ...] = ()  # "gate: why", one per outright failure
+    questions: tuple[str, ...] = ()  # the findings for the approver, with their light
+    reasons: tuple[str, ...] = ()  # "gate: why", one per gate that did not pass
 
     @property
     def failed_gates(self) -> tuple[str, ...]:
@@ -47,12 +49,10 @@ class GateVerdict:
 def decide(record: PostRecord) -> GateVerdict:
     """The gate outcome for a record whose gates have run."""
     g = record.gates
-    reasons = _reasons(g)
-    questions = _questions(g)
-    if reasons:
-        return GateVerdict(Outcome.REJECT, questions, reasons)
+    reasons = _reasons(g)  # kept: which gates did not pass (the canary's catches)
+    questions = tuple(_light(r) for r in reasons) + _questions(g)
     if questions:
-        return GateVerdict(Outcome.QUESTIONS, questions)
+        return GateVerdict(Outcome.QUESTIONS, questions, reasons)
     return GateVerdict(Outcome.PASS)
 
 
@@ -78,6 +78,18 @@ def confirmed_sources(record: PostRecord) -> list[str]:
             and not c.source_url.startswith(TESTLOG_SCHEME)
         }
     )
+
+
+RED = "RED"  # the first word of a finding that carries a legal risk outside the platform
+_LEGAL = ("disclosure: paid post without the Ad prefix", "disclosure: likely made for kids")
+
+
+def _light(reason: str) -> str:
+    """A finding that used to stop the post, as a line for the approver."""
+    gate, _, why = reason.partition(":")
+    if reason in _LEGAL:
+        return f"{RED} · {gate.capitalize()}:{why}. Publishing this carries a legal risk."
+    return f"{gate.capitalize()}:{why}"
 
 
 def _originality_reason(g: Gates) -> str:

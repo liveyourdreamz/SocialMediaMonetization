@@ -109,7 +109,7 @@ def test_the_verdict_is_pass_questions_or_reject():
         bad = _passing()
         breaks(bad.gates)
         bad.approval.decisions_acknowledged = ["anything at all"]
-        assert decide(bad).outcome == Outcome.REJECT and not gates_cleared(bad)
+        assert decide(bad).outcome == Outcome.QUESTIONS and not gates_cleared(bad)
 
 
 def test_a_pipeline_reject_names_every_failed_gate(fixtures, record, tmp_path):
@@ -120,9 +120,9 @@ def test_a_pipeline_reject_names_every_failed_gate(fixtures, record, tmp_path):
     fixtures[("P9", "default")] = ok(factors=_factors(child_subject_matter="present"))
     fixtures[("P9", "default")]["factors"][1]["outcome"] = "present"
     out = _run(fixtures, record, tmp_path)
-    assert out.status == PostStatus.REJECTED
+    assert out.status == PostStatus.AWAITING_APPROVAL
     assert set(decide(out).failed_gates) == {"ethics", "disclosure"}
-    assert not out.flags.needs_decision  # a failure is never a question
+    assert out.flags.needs_decision  # D51: a failure is a finding for Hemant, not a stop
 
 
 # ---- G3: the published source list ---------------------------------------------------
@@ -229,7 +229,7 @@ def test_a_judge_pass_with_a_blocking_finding_fails_the_post(fixtures, record, t
         rule_findings=[{"rule_id": "R-01", "outcome": "block", "evidence_span": "those people"}],
     )
     out = _run(fixtures, record, tmp_path)
-    assert out.gates.ethics.verdict == Verdict.FAIL and out.status == PostStatus.REJECTED
+    assert out.gates.ethics.verdict == Verdict.FAIL and out.status == PostStatus.AWAITING_APPROVAL
 
 
 def test_a_judge_escalate_with_a_blocking_finding_fails(fixtures, record, tmp_path):
@@ -415,7 +415,7 @@ def test_unconfirmed_claims_reject_in_block_mode(fixtures, record, tmp_path, mon
     _block_mode(monkeypatch)
     fixtures[("P10", "B")] = ok(claim_status="unsupported", supporting_quote="")
     out = _run(fixtures, record, tmp_path)
-    assert out.status == PostStatus.REJECTED and "facts" in decide(out).failed_gates
+    assert out.status == PostStatus.AWAITING_APPROVAL and "facts" in decide(out).failed_gates
 
 
 def test_an_outdated_source_is_reported_as_outdated(record, monkeypatch):
@@ -436,7 +436,7 @@ def test_endorsement_wording_rejects_in_flag_mode(fixtures, record, tmp_path):
     a["endorsement_wording"] = ["the best note app you can buy"]
     fixtures[("P10", "A")] = a
     out = _run(fixtures, record, tmp_path)
-    assert not out.gates.facts.passed and out.status == PostStatus.REJECTED
+    assert not out.gates.facts.passed and out.status == PostStatus.AWAITING_APPROVAL
 
 
 def test_the_question_lists_each_unconfirmed_claim():
@@ -517,7 +517,7 @@ def test_an_approved_post_makes_its_duplicate_fail_originality(
     assert record_approved(approved, h)
     again = PostRecord(channel_id=Channel.A, brief=record.brief)
     out = _run(fixtures, again, tmp_path / "r2", history=h)
-    assert out.status == PostStatus.REJECTED
+    assert out.status == PostStatus.AWAITING_APPROVAL
     assert out.gates.originality.nearest_post_id == approved.post_id
 
 
