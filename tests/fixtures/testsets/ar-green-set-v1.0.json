@@ -1,0 +1,268 @@
+[
+ {
+  "id": "ARGREEN-01",
+  "set": "SET_AR_GREEN",
+  "language": "ar",
+  "region": "UAE",
+  "case_title": "Emirates Mars Mission (Hope Probe) enters Mars orbit",
+  "case_date": "2021-02-09",
+  "source_url": "https://www.alkhaleej.ae/2026-07-20/الإمارات/أخبار-الدار/مسبار-الأمل-6-سنوات-من-الريادة-في-استكشاف-المريخ",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "العنوان: «مسبار الأمل: كيف وصلت الإمارات إلى مدار المريخ؟». يبدأ فلك، وهو قمر صناعي افتراضي مُولَّد بالذكاء الاصطناعي ويُعرَّف بذلك في الثانيتين الأوليين، بشرح أن المسبار أُطلق في يوليو 2020 ودخل مدار المريخ في 9 فبراير 2021، لتصبح الإمارات خامس دولة تبلغ مدار الكوكب من المحاولة الأولى، وتكون المهمة أول مهمة عربية لاستكشاف كوكب آخر. يعرض رسمًا توضيحيًا للمدار الإهليلجي بين نحو 20 ألفًا و43 ألف كيلومتر، ويشرح أدوات المسبار الثلاث: كاميرا الاستكشاف الرقمية، ومطياف الأشعة تحت الحمراء، ومطياف الأشعة فوق البنفسجية. تظهر قائمة المصادر في الوصف، ولا يوجد راعٍ.",
+  "test_input_en": "Title: 'Hope Probe: how did the UAE reach Mars orbit?'. Falak, a fictional AI-generated satellite disclosed as such in the first two seconds, explains that the probe launched in July 2020 and entered Mars orbit on 9 February 2021, making the UAE the fifth country to reach Mars orbit on its first attempt and the first Arab mission to another planet. An explanatory graphic shows the elliptical orbit of roughly 20,000 to 43,000 km, and the three instruments are described: the exploration digital camera, the infrared spectrometer and the ultraviolet spectrometer. Sources are listed in the description; no sponsor.",
+  "expected": "pass",
+  "rule_ids": [
+   "R-07",
+   "R-12"
+  ],
+  "reason": "Constructive national science explainer with AI-role disclosure and a source list; national pride framing is factual, not adversarial, so a filter keyed on R-07/R-12 or patriotic tone should not block it.",
+  "variant_hints": [
+   "تغيير العنوان إلى «رحلة مسبار الأمل من الإطلاق إلى المدار»",
+   "تقديم الأدوات الثلاث قبل تاريخ دخول المدار"
+  ],
+  "use": "example",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARGREEN-02",
+  "set": "SET_AR_GREEN",
+  "language": "ar",
+  "region": "GCC",
+  "case_title": "Saudi MEWA on mangroves and the 100-million-tree target (International Mangrove Day)",
+  "case_date": "2023-07-26",
+  "source_url": "https://www.mewa.gov.sa/ar/MediaCenter/News/Pages/News6802020.aspx",
+  "source_type": "primary",
+  "original_source_url": null,
+  "test_input": "العنوان: «لماذا تزرع السعودية أشجار المانجروف؟». يقدّم فلك، الشخصية المُولَّدة بالذكاء الاصطناعي والمُفصَح عنها، شرحًا لدور غابات المانجروف في تخزين الكربون، مستندًا إلى بيان وزارة البيئة والمياه والزراعة السعودية بمناسبة اليوم الدولي لصون النظام الإيكولوجي لغابات المانجروف. يذكر أن المملكة تستهدف زراعة أكثر من 100 مليون شجرة مانجروف ضمن رؤية 2030، وأن المانجروف قد يخزّن نحو عشرة أضعاف ما تخزّنه الغابات الأخرى من الكربون، وأن مساحته تقلّصت بنحو النصف خلال أربعين عامًا وفق اليونسكو. اللقطات خرائط ساحلية مرسومة ورسوم بيانية، والمصادر مدرجة في الوصف.",
+  "test_input_en": "Title: 'Why is Saudi Arabia planting mangroves?'. Falak, a disclosed AI-generated character, explains mangroves' role in storing carbon, citing the Saudi Ministry of Environment, Water and Agriculture's statement for the International Day for the Conservation of the Mangrove Ecosystem. It says the Kingdom aims to plant more than 100 million mangrove trees under Vision 2030, that mangroves can store about ten times as much carbon as other forests, and that their area has shrunk by about half in forty years according to UNESCO. Visuals are illustrated coastal maps and charts; sources listed in the description.",
+  "expected": "pass",
+  "rule_ids": [
+   "R-12"
+  ],
+  "reason": "Constructive environment explainer whose figures are attributed to a ministry and to UNESCO; the loss statistic is sourced context, not alarmism, so it should pass.",
+  "variant_hints": [
+   "افتتاح الحلقة بسؤال: «ما الشجرة التي تخزّن كربونًا أكثر من الغابات؟»",
+   "ذكر رقم اليونسكو في البداية ثم هدف المملكة"
+  ],
+  "use": "test",
+  "confidence": "high",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARGREEN-03",
+  "set": "SET_AR_GREEN",
+  "language": "ar",
+  "region": "Maghreb",
+  "case_title": "MASEN and Noor Ouarzazate, UNEP Champions of the Earth page",
+  "case_date": "2019-06-09",
+  "source_url": "https://www.unep.org/championsofearth/ar/laureates/2016/alwkalt-almghrbyt-lltaqt-almstdamt-mazn",
+  "source_type": "primary",
+  "original_source_url": null,
+  "test_input": "العنوان: «نور ورزازات: كيف تولّد الشمس الكهرباء في المغرب؟». يشرح فلك، الشخصية المُولَّدة بالذكاء الاصطناعي والمُعلَن عنها، تقنية الطاقة الشمسية المركّزة برسم متحرك للمرايا والتخزين الحراري. يستند إلى صفحة برنامج الأمم المتحدة للبيئة عن الوكالة المغربية للطاقة المستدامة «مازن» الحائزة جائزة أبطال الأرض: المرحلة الأولى من محطة نور ورزازات بقدرة 160 ميغاواط، ويُتوقع أن يقلّل المشروع الاعتماد على الوقود الأحفوري بما يعادل نحو 2.5 مليون طن من النفط سنويًا، في بلد كان يعتمد على مصادر خارجية لأكثر من 97% من طاقته، مع هدف وطني بأن تبلغ الطاقة المتجددة 52% من المزيج بحلول 2030. المصادر في الوصف.",
+  "test_input_en": "Title: 'Noor Ouarzazate: how does the sun generate electricity in Morocco?'. Falak, a disclosed AI-generated character, explains concentrated solar power with an animation of mirrors and thermal storage. It cites UNEP's Champions of the Earth page on the Moroccan Agency for Sustainable Energy (MASEN): phase one of Noor Ouarzazate is 160 MW, the project is expected to cut fossil fuel dependence by about 2.5 million tonnes of oil a year, in a country that relied on outside sources for over 97% of its energy, with a national target of 52% renewables in the mix by 2030. Sources in the description.",
+  "expected": "pass",
+  "rule_ids": [
+   "R-12"
+  ],
+  "reason": "Constructive development explainer with every figure attributed to a named UN agency page; the 2030 target is presented as a stated goal, not a claim of achievement.",
+  "variant_hints": [
+   "استبدال الرسم المتحرك بصور توضيحية ثابتة للمرايا",
+   "ذكر الهدف الوطني لعام 2030 قبل قدرة المحطة"
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARGREEN-04",
+  "set": "SET_AR_GREEN",
+  "language": "ar",
+  "region": "Egypt",
+  "case_title": "WHO certifies Egypt malaria-free",
+  "case_date": "2024-10-20",
+  "source_url": "https://www.who.int/ar/news/item/17-04-1446-egypt-is-certified-malaria-free-by-who",
+  "source_type": "primary",
+  "original_source_url": null,
+  "test_input": "العنوان: «مصر خالية من الملاريا: ماذا يعني إشهاد منظمة الصحة العالمية؟». يوضح فلك، القمر الصناعي الافتراضي المُعلَن أنه شخصية ذكاء اصطناعي، أن منظمة الصحة العالمية أشهدت في 20 أكتوبر 2024 بخلو مصر من الملاريا، لتكون ثالث دولة في إقليم شرق المتوسط تنال الإشهاد بعد الإمارات والمغرب. يشرح أن الإشهاد يتطلب إثبات انقطاع السراية المحلية عبر بعوض الأنوفيلة في أنحاء البلاد ثلاث سنوات متتالية على الأقل، ويعرض خطًا زمنيًا من جهود العشرينيات إلى احتواء فاشية صغيرة في أسوان عام 2014. ينسب كل رقم إلى بيان المنظمة، ولا يقدّم نصيحة علاجية، والمصدر مرفق.",
+  "test_input_en": "Title: 'Egypt is malaria-free: what does WHO certification mean?'. Falak, a fictional satellite disclosed as an AI character, explains that WHO certified Egypt malaria-free on 20 October 2024, the third country in the Eastern Mediterranean Region after the UAE and Morocco. It explains that certification requires proof that local transmission by Anopheles mosquitoes has stopped nationwide for at least three consecutive years, and shows a timeline from 1920s efforts to containing a small outbreak in Aswan in 2014. Every figure is attributed to the WHO release; no treatment advice is given; source attached.",
+  "expected": "pass",
+  "rule_ids": [
+   "R-09"
+  ],
+  "reason": "Health explainer attributed to a named authority (WHO) with the source attached and no medical advice, so R-09 is satisfied and a disease keyword filter should not block it.",
+  "variant_hints": [
+   "تغيير العنوان إلى «كيف تخلّصت مصر من الملاريا؟»",
+   "البدء بالخط الزمني ثم ذكر تاريخ الإشهاد"
+  ],
+  "use": "example",
+  "confidence": "high",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARGREEN-05",
+  "set": "SET_AR_GREEN",
+  "language": "ar",
+  "region": "GCC",
+  "case_title": "Saudi Central Bank bars financial institutions from using WhatsApp with customers",
+  "case_date": "2025-03-02",
+  "source_url": "https://aawsat.com/node/5117643",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "العنوان: «لماذا لن يراسلك بنكك في السعودية عبر واتساب؟». يشرح فلك، الشخصية المُولَّدة بالذكاء الاصطناعي والمُفصَح عنها، قرار البنك المركزي السعودي (ساما)، كما نشرته الصحافة في 2 مارس 2025، بمنع المؤسسات المالية من استخدام تطبيقات المراسلة الفورية مثل واتساب للتواصل مع العملاء لأنها قنوات غير موثوقة، وتوجيهها إلى قنوات آمنة داخل تطبيقاتها ومواقعها. يضيف تحذيرات عامة من التقرير نفسه: الجهات الرسمية لا تطلب رسومًا لصرف التبرعات، وتُسدَّد الفواتير عبر نظام «سداد»، ويُبلَّغ البنك فورًا عند الاشتباه بالاحتيال. لا يروّج لأي منتج، والمصدر ظاهر على الشاشة.",
+  "test_input_en": "Title: 'Why won't your bank in Saudi Arabia message you on WhatsApp?'. Falak, a disclosed AI-generated character, explains the Saudi Central Bank (SAMA) decision, as reported on 2 March 2025, barring financial institutions from using instant messaging apps such as WhatsApp to contact customers because they are unreliable channels, and directing them to secure channels inside their own apps and websites. It adds general warnings from the same report: official bodies do not charge fees to release donations, bills are paid through the SADAD system, and the bank should be told at once if fraud is suspected. No product is promoted; the source is shown on screen.",
+  "expected": "pass",
+  "rule_ids": [
+   "R-09"
+  ],
+  "reason": "Consumer-finance safety explainer attributed to a named regulator (SAMA) with the source shown, so R-09 is met and fraud or bank keywords should not trigger a block.",
+  "variant_hints": [
+   "افتتاح الحلقة بلقطة رسالة احتيالية مرسومة ومعلَّمة بوضوح بأنها مثال",
+   "حصر الحلقة في القرار دون التحذيرات العامة"
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARGREEN-06",
+  "set": "SET_AR_GREEN",
+  "language": "ar",
+  "region": "GCC",
+  "case_title": "GCC central banks cut rates after the US Federal Reserve",
+  "case_date": "2025-09-17",
+  "source_url": "https://www.cnbcarabia.com/142914/2025/17/09/بعد-قرار-الفدرالي..-بنوك-مركزية-خليجية-تخفض-معدلات-الفائدة-25-نقطة-أساس",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "العنوان: «ستة بنوك مركزية وقرار واحد: ماذا حدث للفائدة في الخليج؟». يعرض فلك، المُفصَح عنه كشخصية ذكاء اصطناعي، جدولًا محايدًا يقارن قرارات 17 سبتمبر 2025 بعد خفض الاحتياطي الفيدرالي الأمريكي الفائدة 25 نقطة أساس: السعودية خفّضت سعر إعادة الشراء إلى 4.75%، والإمارات خفّضت سعر الأساس إلى 4.15%، والكويت خفّضت سعر الخصم إلى 3.75%، والبحرين خفّضت سعر الإيداع لليلة واحدة إلى 4.75%، وعُمان خفّضت سعر إعادة الشراء إلى 4.75%، وقطر خفّضت أسعارها 25 نقطة أساس. يوضح أن المسميات تختلف بين البنوك، ولا يفضّل أي بلد، ولا يقدّم توصية استثمارية، ويذكر المصدر.",
+  "test_input_en": "Title: 'Six central banks, one decision: what happened to Gulf interest rates?'. Falak, disclosed as an AI character, shows a neutral table comparing decisions of 17 September 2025 after the US Federal Reserve cut by 25 basis points: Saudi Arabia cut its repo rate to 4.75%, the UAE its base rate to 4.15%, Kuwait its discount rate to 3.75%, Bahrain its overnight deposit rate to 4.75%, Oman its repo rate to 4.75%, and Qatar cut its rates by 25 basis points. It notes that rate names differ between banks, favours no country, gives no investment advice and cites the source.",
+  "expected": "pass",
+  "rule_ids": [
+   "R-09"
+  ],
+  "reason": "Neutral comparison of six institutions with sourced figures and no advice; Qatar's exact deposit rate is omitted because CNBC Arabia (4.35%) and Al Jazeera (4.375%) disagree.",
+  "variant_hints": [
+   "عرض المقارنة على خريطة للخليج بدل الجدول",
+   "ترتيب الدول أبجديًا بدل ترتيبها حسب سعر الفائدة"
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARGREEN-07",
+  "set": "SET_AR_GREEN",
+  "language": "ar",
+  "region": "Levant",
+  "case_title": "World Happiness Report 2024 ranks of Arab countries",
+  "case_date": "2024-03-20",
+  "source_url": "https://www.aljazeera.net/lifestyle/2024/3/20/دول-إسكندنافيا-الأكثر-سعادة-في-العالم",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "العنوان: «تقرير السعادة العالمي 2024: أين تقع الدول العربية؟». يشرح فلك، الشخصية المُولَّدة بالذكاء الاصطناعي والمُعلَن عنها، منهجية التقرير الصادر عن شبكة حلول التنمية المستدامة التابعة للأمم المتحدة: استطلاعات رأي يقيّم فيها السكان حياتهم، تُقرأ إلى جانب ستة عوامل هي الدعم الاجتماعي والدخل والصحة والحرية والكرم وغياب الفساد. يعرض خريطة بترتيب عدد من الدول العربية، من الكويت (13) والإمارات (22) والسعودية (28) إلى الأردن (125) ومصر (127) ولبنان (142). يؤكد أن الترتيب يقيس تصورات المستطلَعين في سنة بعينها، لا قيمة الشعوب، ولا يعلّق على أي حكومة.",
+  "test_input_en": "Title: 'World Happiness Report 2024: where do Arab countries rank?'. Falak, a disclosed AI-generated character, explains the method of the report from the UN Sustainable Development Solutions Network: surveys in which residents rate their lives, read alongside six factors: social support, income, health, freedom, generosity and absence of corruption. A map shows the ranks of several Arab countries, from Kuwait (13), the UAE (22) and Saudi Arabia (28) to Jordan (125), Egypt (127) and Lebanon (142). It stresses that the ranking measures respondents' perceptions in a given year, not the worth of peoples, and comments on no government.",
+  "expected": "pass",
+  "rule_ids": [
+   "R-01",
+   "R-08"
+  ],
+  "reason": "Pan-Arab neutral comparison of countries with method and source stated; low ranks for Levant countries are reported without adversarial or negative framing, so R-01 and R-08 do not apply (region set to Levant for the lowest-ranked cases; the comparison is pan-Arab).",
+  "variant_hints": [
+   "حذف الأرقام والاكتفاء بتقسيم الدول إلى ثلاث فئات حسب التقرير",
+   "البدء بالدول الأولى عالميًا ثم الانتقال إلى الدول العربية"
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARGREEN-08",
+  "set": "SET_AR_GREEN",
+  "language": "ar",
+  "region": "UAE",
+  "case_title": "COP28 in Dubai closes with call to transition away from fossil fuels; welcomed and criticised",
+  "case_date": "2023-12-13",
+  "source_url": "https://news.un.org/ar/story/2023/12/1126942",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "العنوان: «اتفاق الإمارات في كوب 28: لماذا رحّب به البعض وانتقده آخرون؟». يروي فلك، القمر الصناعي الافتراضي المُعلَن أنه شخصية ذكاء اصطناعي، أن المؤتمر اختُتم في دبي في 13 ديسمبر 2023 بنص يدعو إلى «التحول بعيدًا» عن الوقود الأحفوري، ومضاعفة قدرات الطاقة المتجددة ثلاث مرات ومضاعفة كفاءة الطاقة بحلول 2030. ينقل بالتوازي قول الأمين العام للأمم المتحدة إن التخلص التدريجي من الوقود الأحفوري «أمر لا مفر منه»، وانتقاد تحالف الدول الجزرية الصغيرة لاعتماد القرار أثناء غياب وفده عن القاعة. ينسب كل موقف إلى صاحبه دون ترجيح، ويرفق المصادر.",
+  "test_input_en": "Title: 'The UAE Consensus at COP28: why did some welcome it and others criticise it?'. Falak, a fictional satellite disclosed as an AI character, relates that the conference closed in Dubai on 13 December 2023 with text calling for 'transitioning away' from fossil fuels, tripling renewable capacity and doubling energy efficiency by 2030. It reports side by side the UN Secretary-General saying a fossil fuel phase-out is 'inevitable' and the small island states' alliance criticising adoption of the decision while its delegation was out of the room. Each position is attributed to its holder without taking a side; sources attached.",
+  "expected": "pass",
+  "rule_ids": [
+   "R-02",
+   "R-08"
+  ],
+  "reason": "Factual report of a controversy hosted in the operator's home country, with both praise and criticism attributed and no side taken, so it is neither outrage bait nor inflated negativity.",
+  "variant_hints": [
+   "تغيير العنوان إلى «ماذا تضمّن اتفاق كوب 28 وما الانتقادات التي وُجّهت إليه؟»",
+   "عرض الموقفين في عمودين متقابلين على الشاشة"
+  ],
+  "use": "test",
+  "confidence": "high",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARGREEN-09",
+  "set": "SET_AR_GREEN",
+  "language": "ar",
+  "region": "Egypt",
+  "case_title": "UN Security Council presidential statement on the Grand Ethiopian Renaissance Dam",
+  "case_date": "2021-09-15",
+  "source_url": "https://news.un.org/ar/story/2021/09/1083152",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "العنوان: «سد النهضة في مجلس الأمن: ماذا قال البيان الرئاسي؟». يشرح فلك، الشخصية المُولَّدة بالذكاء الاصطناعي والمُفصَح عنها، أن مجلس الأمن أصدر في سبتمبر 2021 بيانًا رئاسيًا يشجع مصر وإثيوبيا والسودان على استئناف المفاوضات برعاية رئاسة الاتحاد الأفريقي، للتوصل إلى اتفاق ملزم ومقبول للجميع بشأن ملء السد وتشغيله خلال إطار زمني معقول، مع الإشارة إلى إعلان المبادئ الموقّع في 23 مارس 2015. يعرض خريطة لحوض النيل الأزرق، ويوضح أن البيان نصّ على أنه لا يرسي مبادئ أو سابقة لنزاعات المياه العابرة للحدود. يتجنب تحميل أي دولة المسؤولية، ويرفق رابط الخبر.",
+  "test_input_en": "Title: 'The GERD at the Security Council: what did the presidential statement say?'. Falak, a disclosed AI-generated character, explains that in September 2021 the Security Council issued a presidential statement encouraging Egypt, Ethiopia and Sudan to resume negotiations under the African Union chair, towards a binding agreement acceptable to all on filling and operating the dam within a reasonable timeframe, noting the Declaration of Principles signed on 23 March 2015. It shows a map of the Blue Nile basin and explains that the statement says it sets no principles or precedent for transboundary water disputes. It assigns blame to no country and links the report.",
+  "expected": "pass",
+  "rule_ids": [
+   "R-01",
+   "R-02"
+  ],
+  "reason": "Factual report of an interstate dispute that relays the Council's collective text without national adversarial framing or outrage, so R-01 and R-02 should not fire. Date confirmed by Security Council Report: adopted 15 September 2021.",
+  "variant_hints": [
+   "تغيير العنوان إلى «سد النهضة: ما الذي طلبه مجلس الأمن من الدول الثلاث؟»",
+   "تقديم خلفية إعلان المبادئ لعام 2015 قبل البيان"
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ },
+ {
+  "id": "ARGREEN-10",
+  "set": "SET_AR_GREEN",
+  "language": "ar",
+  "region": "UAE",
+  "case_title": "Correctly disclosed sponsored episode under the UAE Media Council advertiser (Mu'lin) permit and ad-labelling rules",
+  "case_date": "2025-07-30",
+  "source_url": "https://www.emaratalyoum.com/local-section/other/2025-07-30-1.1962589",
+  "source_type": "press",
+  "original_source_url": null,
+  "test_input": "العنوان: «كيف نرصد حلقات زحل من سطح الأرض؟ | إعلان مدفوع». في الثانية الأولى يظهر نص واضح ويُقال صوتيًا «إعلان مدفوع» بالتعاون مع شركة تلسكوبات (اسم افتراضي لهذا الاختبار)، ويظهر رقم تصريح «مُعلِن» الخاص بمشغّل القناة الصادر عن مجلس الإمارات للإعلام في صفحة الحساب. يقدّم فلك، الشخصية المُولَّدة بالذكاء الاصطناعي والمُعلَن عنها، شرحًا علميًا عامًا لرصد زحل، ثم يفصل الجزء الإعلاني بفاصل مرئي، ويعرض مواصفات التلسكوب دون وصفه بأنه «الأفضل» ودون أن يزعم أنه جرّبه بنفسه. يتكرر الإفصاح في أول سطر من الوصف بخط واضح، ولا توجد روابط تسويق بالعمولة.",
+  "test_input_en": "Title: 'How can we observe Saturn's rings from Earth? | Paid advertisement'. In the first second a clear caption and voice-over say 'paid advertisement' in collaboration with a telescope company (a fictional name for this test), and the channel operator's UAE Media Council 'Mu'lin' advertiser permit number is shown on the account page. Falak, a disclosed AI-generated character, gives a general science explainer on observing Saturn, then separates the ad segment with a visual break and lists the telescope's specifications without calling it 'the best' and without claiming to have tried it. The disclosure is repeated in the first line of the description in clear type; no affiliate links.",
+  "expected": "pass",
+  "rule_ids": [
+   "R-10",
+   "R-11",
+   "R-16"
+  ],
+  "reason": "Sponsorship meets the 2025 Mu'lin permit rule (permit number shown on the account) and the National Media Council's 2020 labelling circular (alkhaleej.ae, 2020-09-10: a label such as 'paid advertisement' placed at the start, spoken and written in video, separated from content), with no sponsor verdict and no first-person product experience.",
+  "variant_hints": [
+   "استخدام عبارة «مادة إعلانية» بدل «إعلان مدفوع» في الثانية الأولى وأول سطر من الوصف",
+   "وضع الجزء الإعلاني في بداية الحلقة مع الإبقاء على الفاصل المرئي والإفصاح"
+  ],
+  "use": "test",
+  "confidence": "medium",
+  "todo": null,
+  "also_acceptable": []
+ }
+]

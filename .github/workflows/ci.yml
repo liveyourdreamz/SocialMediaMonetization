@@ -1,0 +1,156 @@
+name: ci
+
+on:
+  push:
+    branches: [main, bootstrap]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:  # D45: every test that touches the store runs on Postgres
+        image: postgres:16
+        env:
+          POSTGRES_USER: cap
+          POSTGRES_PASSWORD: cap
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CAP_TEST_DATABASE_URL: postgresql://cap:cap@127.0.0.1:5432/postgres
+      CAP_REQUIRE_PG: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install (same command as the launchers)
+        run: uv sync --locked --all-extras
+      - name: Lint
+        run: uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
+      - name: Types
+        run: uv run mypy
+      - name: Layer contracts
+        run: uv run lint-imports
+      - name: Tests
+        run: uv run pytest --cov=cap --cov-report=term-missing
+      - name: Prompts match the registry
+        run: uv run cap prompts check
+      - name: Design tokens are current (design/proof/tokens.json -> tokens.css)
+        run: uv run cap tokens check
+      - name: Schema is current
+        run: |
+          uv run cap schema export
+          git diff --exit-code -- src/cap/schema/post_record.schema.json
+      - name: Secret scan (no key-shaped strings in the tree)
+        run: |
+          ! grep -rEn "sk-ant-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}" --include=*.py --include=*.yaml --include=*.json --include=*.md .
+      - name: Smoke (the laptop loop through the real app, from the launcher)
+        run: ./run.sh --smoke
+      - name: Check (the real-service seams that can run without a key)
+        run: uv run cap check --offline
+      - name: Fetch real pages over the network (gzip, redirects, Wikipedia)
+        # the offline check skips this; 22 Oct every real page failed on the laptop
+        run: uv run python -c "from cap.check import _fetch; print(_fetch())"
+
+  windows:
+    # The laptop path Hemant actually uses: install.bat (the downloaded bootstrap) fetches
+    # the commit under test, hands over to tools\start.bat, which runs the whole loop.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Tests on Windows
+        shell: pwsh
+        env:
+          # the runner's own PostgreSQL service (user postgres, password root)
+          CAP_TEST_DATABASE_URL: postgresql://postgres:root@127.0.0.1:5432/postgres
+          CAP_REQUIRE_PG: "1"
+        run: |
+          $svc = Get-Service -Name "postgresql*" | Select-Object -First 1
+          Set-Service -Name $svc.Name -StartupType Manual
+          Start-Service -Name $svc.Name
+          uv sync --locked --all-extras
+          uv run pytest -q -x --tb=short 2>&1 | Tee-Object -FilePath pytest.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run cap check --offline 2>&1 | Tee-Object -Append -FilePath pytest.txt
+          exit $LASTEXITCODE
+      - name: Surface the failure as an annotation (log API is not always readable)
+        if: failure()
+        shell: pwsh
+        run: |
+          $tail = (Get-Content pytest.txt | Select-Object -Last 60) -join "%0A"
+          Write-Output "::error title=pytest on Windows::$tail"
+      - name: install.bat is CRLF bytes as GitHub serves it raw
+        # Hemant downloads install.bat raw (no git yet to convert it): the blob is the file
+        shell: pwsh
+        run: |
+          cmd /c "git show HEAD:install.bat > %RUNNER_TEMP%\install.bat"
+          $b = [IO.File]::ReadAllBytes("$env:RUNNER_TEMP\install.bat")
+          $lf = ($b | Where-Object { $_ -eq 10 }).Count
+          $crlf = ([regex]::Matches([Text.Encoding]::ASCII.GetString($b), "`r`n")).Count
+          if ($lf -eq 0 -or $lf -ne $crlf) { Write-Output "::error::install.bat has bare LF ($lf LF, $crlf CRLF)"; exit 1 }
+          "ok: $crlf CRLF lines"
+      - name: install.bat end to end (the raw download, first install)
+        shell: cmd
+        env:
+          CAP_BRANCH: ${{ github.head_ref || github.ref_name }}
+          CAP_DIR: ${{ github.workspace }}\laptop
+          CAP_SMOKE: "1"
+        run: |
+          git config --global url."https://x-access-token:${{ github.token }}@github.com/".insteadOf "https://github.com/"
+          call "%RUNNER_TEMP%\install.bat" > install.txt 2>&1
+          set rc=%errorlevel%
+          type install.txt
+          exit /b %rc%
+      - name: Second run from inside the folder, with his own changes and a stale index.lock
+        # The update must back up what is in the way, clear the lock, rewrite install.bat
+        # while the in-folder copy is the one running, and still start (H7).
+        shell: pwsh
+        env:
+          CAP_DIR: ${{ github.workspace }}\laptop
+        run: |
+          $d = $env:CAP_DIR
+          Add-Content "$d\install.bat" "rem an older install.bat"
+          Add-Content "$d\youtube-test.bat" "rem an older youtube-test.bat"
+          git -C $d -c user.name=ci -c user.email=ci@example.com commit -q -am "older build on the laptop"
+          Add-Content "$d\youtube-test.bat" "rem his own edit"
+          New-Item "$d\.git\index.lock" -ItemType File -Force | Out-Null
+          (Get-Item "$d\.git\index.lock").LastWriteTime = (Get-Date).AddMinutes(-30)
+      - name: install.bat second run
+        shell: cmd
+        env:
+          CAP_BRANCH: ${{ github.head_ref || github.ref_name }}
+          CAP_DIR: ${{ github.workspace }}\laptop
+          CAP_SMOKE: "1"
+        run: |
+          call "%CAP_DIR%\install.bat" > install2.txt 2>&1
+          set rc=%errorlevel%
+          type install2.txt
+          if not "%rc%"=="0" exit /b %rc%
+          findstr /c:"stale .git/index.lock" install2.txt || exit /b 1
+          findstr /c:"youtube-test.bat" install2.txt || exit /b 1
+          if exist "%CAP_DIR%\.git\index.lock" exit /b 1
+          dir /s /b "%CAP_DIR%\cap-data\update-backups\youtube-test.bat" || exit /b 1
+          git -C "%CAP_DIR%" diff --exit-code HEAD "origin/%CAP_BRANCH%" || exit /b 1
+      - name: install.bat with GitHub unreachable still starts the code on disk
+        shell: cmd
+        env:
+          CAP_BRANCH: ${{ github.head_ref || github.ref_name }}
+          CAP_DIR: ${{ github.workspace }}\laptop
+          CAP_SMOKE: "1"
+        run: |
+          git -C "%CAP_DIR%" remote set-url origin https://127.0.0.1:9/nothing.git
+          call "%CAP_DIR%\install.bat" > install3.txt 2>&1
+          set rc=%errorlevel%
+          type install3.txt
+          if not "%rc%"=="0" exit /b %rc%
+          findstr /c:"WARNING: could not reach GitHub" install3.txt || exit /b 1
+      - name: Surface install.bat output as an annotation
+        if: failure()
+        shell: pwsh
+        run: |
+          foreach ($f in "install.txt", "install2.txt", "install3.txt") { if (Test-Path $f) { $tail = (Get-Content $f | Select-Object -Last 60) -join "%0A"; Write-Output "::error title=$f on Windows::$tail" } }
+      - name: run.ps1 parses
+        shell: pwsh
+        run: $null = [scriptblock]::Create((Get-Content -Raw run.ps1)); "ok"

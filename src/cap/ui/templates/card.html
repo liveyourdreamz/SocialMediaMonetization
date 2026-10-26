@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}{{ card.title }} · Content Agent Portfolio{% endblock %}
+{% set blind = record.approval.pre_reveal_decision is none %}
+{% set closed = record.status.value in ('approved', 'rejected', 'parked', 'discarded', 'published') %}
+{% block body %}
+<main class="screen no-tabs">
+  <div class="row" style="font-size: 14px">
+    <a href="/queue" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 500"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Queue</a>
+    <span class="muted">{{ reading }}{% if blind and not closed %} · on the card <span class="tabular" data-clock="{{ on_card }}">{{ on_card_text }}</span>{% endif %}</span>
+  </div>
+
+  {% set flow = workflow(record, record.post_id in stuck) %}
+  {% set flow_compact = true %}
+  <div class="row" style="justify-content: flex-start; gap: 10px"><span class="eyebrow">Step {{ flow.number }} of {{ flow.total }} · {{ flow.headline }}</span>{% include "_flow.html" %}</div>
+  {% set flow_compact = false %}
+
+  {% if error %}<div class="error" role="alert"><strong>Not recorded.</strong> {{ error }}</div>{% endif %}
+
+  {% if not blind %}
+  <div class="banner verdict">
+    <span class="eyebrow">Your verdict, recorded</span>
+    <span class="head">{{ verdict_text }}{% if reason_text %}: {{ reason_text | lower }}{% endif %}</span>
+    <span class="facts">{{ record.approval.time_on_card_s | minutes }} on the card{% if record.approval.too_fast %} · faster than the card's reading time, flagged{% endif %}{% if record.human_contribution.text %} · opening line saved{% endif %}{% if record.approval.spot_check and record.approval.spot_check.reviewer_said_supported is not none %} · spot check: you said {{ 'supported' if record.approval.spot_check.reviewer_said_supported else 'not supported' }}{% endif %}</span>
+    {% if closed %}<span class="facts">Final: {{ record.status.value | replace('_', ' ') }}{% if record.approval.revised_after_reveal %} · changed after the reveal{% endif %}{% if record.status.value == 'published' %} · token verified against the release manifest by the publisher{% elif record.status.value == 'approved' %} · {{ 'token issued' if record.approval.token else ('preparing the final video' if record.release.status.value == 'preparing' else 'final video not made yet') }} · <a href="/posts/{{ card.post_id }}/preview" style="color: inherit">in the outbox: see what goes out and publish</a>{% endif %}</span>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if not blind %}
+  <div class="stack-sm">
+    <h2 style="font-size: 22px; line-height: 28px; font-weight: 600">Now, what the machines thought</h2>
+    <p class="muted" style="font-size: 14px; line-height: 20px">Hidden until now so they could not lead you. Your first verdict is kept either way.</p>
+  </div>
+  <section class="stack-sm reveal">
+    {% for g in gates %}
+    <div class="card tight gate">
+      <span class="disc {{ g.state }}" aria-hidden="true">{% if g.state == 'pass' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% elif g.state == 'near' %}!{% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>{% endif %}</span>
+      <div><span class="name">{{ g.name }}</span><span class="line">{{ g.line }}</span></div>
+    </div>
+    {% endfor %}
+    <div class="card tight gate">
+      <span class="disc {{ 'pass' if 'first time' in critic else 'near' }}" aria-hidden="true">{% if 'first time' in critic %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% else %}!{% endif %}</span>
+      <div><span class="name">Critic</span><span class="line">{{ critic }}</span></div>
+    </div>
+    {% if cost %}
+    <div class="card tight gate">
+      <span class="disc {{ 'near' if cost.over else 'pass' }}" aria-hidden="true">$</span>
+      <div><span class="name">Model cost (estimate)</span><span class="line">{{ cost.line }}</span></div>
+    </div>
+    {% endif %}
+    {% if planted and closed %}
+    <div class="card tight stack-sm" style="border-color: var(--signal)">
+      <span class="eyebrow" style="color: var(--signal)">This was a canary</span>
+      <span>Planted fault: <strong>{{ planted.type }}</strong> at "{{ planted.span }}". {{ planted.why_catchable }}</span>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% include "_content.html" %}
+
+  {% if not blind and record.flags.needs_decision %}
+  <section class="banner" role="note" style="border-left: 4px solid var(--color-signal, #b45309)">
+    <span class="eyebrow">You decide · {{ record.flags.needs_decision | length }} finding{{ 's' if record.flags.needs_decision | length != 1 }}</span>
+    <span class="head">What the checks found. They advise; nothing is stopped. It is your call.</span>
+    {% for q in record.flags.needs_decision %}<span class="facts">· {{ q }}</span>{% endfor %}
+    {% if record.approval.decisions_acknowledged %}<span class="facts">Reviewed and accepted by {{ record.approval.reviewer }}.</span>{% endif %}
+  </section>
+  {% endif %}
+
+  {% if not blind and not closed %}
+  <section class="stack">
+    <h2 style="font-size: 16px; font-weight: 600">Does any of that change your mind?</h2>
+    <p class="muted" style="font-size: 14px; line-height: 20px">One change allowed, by you only. Both verdicts are stored, so the digest can show whether the reveal is steering you.{% if record.flags.canary %} A canary is scored on the blind verdict; a change here is recorded but does not alter the score.{% endif %}</p>
+    {% if record.approval.pre_reveal_decision.value == 'approve' %}
+    <div style="display: flex; gap: 10px">
+      <form method="post" action="/posts/{{ card.post_id }}/finalise" style="flex: 1; display: flex; flex-direction: column; gap: 8px"><input type="hidden" name="csrf" value="{{ csrf }}">{% if record.flags.needs_decision %}<label style="display: flex; gap: 10px; align-items: flex-start; min-height: 44px; font-size: 15px; line-height: 22px"><input type="checkbox" name="acknowledged" value="yes" required style="width: 20px; height: 20px; margin-top: 1px"><span>I reviewed the question{{ 's' if record.flags.needs_decision | length != 1 }} above and approve</span></label>{% endif %}<button class="btn primary grow" type="submit">Keep approve</button></form>
+      <button class="btn secondary grow" type="button" data-open-sheet="reject">Change to reject</button>
+    </div>
+    <p class="meta" style="text-align: center">Keep approve renders the final video with your opening line, signs the token bound to that release and puts the post in the outbox. Nothing leaves until Publish is pressed there.</p>
+    {% else %}
+    <div style="display: flex; gap: 10px">
+      <form method="post" action="/posts/{{ card.post_id }}/finalise" style="flex: 1; display: flex"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary grow" type="submit">Keep {{ record.approval.pre_reveal_decision.value }}</button></form>
+      <a class="btn secondary grow" href="/posts/{{ card.post_id }}/approve">Change to approve</a>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if blind and not closed and needs_stage_one %}
+  <p class="meta" style="text-align: center">Approve waits for the Arabic reviewer's stage-one pass (D19). Reject and escalate are open.</p>
+  {% endif %}
+  {% if blind and not closed %}
+  <div class="bar">
+    <button class="btn secondary grow" type="button" data-open-sheet="reject">Reject</button>
+    <button class="btn quiet" type="button" data-open-sheet="escalate">Escalate</button>
+    {% if needs_stage_one %}
+    <button class="btn primary grow" type="button" disabled>Approve…</button>
+    {% else %}
+    <a class="btn primary grow" href="/posts/{{ card.post_id }}/approve">Approve…</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if not closed %}
+  <div class="sheet" id="reject-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <form class="panel" method="post" action="/posts/{{ card.post_id }}/{{ 'finalise' if not blind else 'verdict' }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="{{ 'revised_decision' if not blind else 'decision' }}" value="reject">
+      <div class="row">
+        <h2 id="sheet-title" data-sheet-title style="font-size: 20px; font-weight: 600">Why reject?</h2>
+        <button type="button" class="iconbtn" aria-label="Back to the card" data-close-sheet><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <p class="muted" style="font-size: 14px; line-height: 20px">One tap finishes it. Pick the thing you saw first{% if blind %}; a note for the drafter is optional{% endif %}.</p>
+      <div class="chips" role="radiogroup" aria-label="Reason">
+        {% for code, text in chips %}
+        <label class="chip{% if code.value == 'other' %} other{% endif %}"><input type="radio" name="reason_code" value="{{ code.value }}" data-text="{{ text }}" required><span>{{ text }}</span></label>
+        {% endfor %}
+      </div>
+      {% if blind %}
+      <div class="field"><label for="note">Note for the drafter (optional)</label><input class="input" id="note" name="note" placeholder="e.g. the 12-second figure is not in the log"></div>
+      {% endif %}
+      <button class="btn primary" type="submit" data-sheet-submit>Reject with this reason</button>
+      <p class="meta" style="text-align: center">Nothing is lost; the drafter gets the reason.</p>
+    </form>
+  </div>
+  {% endif %}
+</main>
+{% endblock %}

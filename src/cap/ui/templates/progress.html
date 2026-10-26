@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ record.brief.topic or 'Post' }} · Content Agent Portfolio{% endblock %}
+{% block body %}
+{% if running %}<meta http-equiv="refresh" content="6">{% endif %}
+<main class="screen no-tabs">
+  <div class="row" style="font-size: 14px">
+    <a href="/operator" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 500"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Operator</a>
+    <span class="muted">{{ channel_label }}</span>
+  </div>
+
+  <header class="stack-sm">
+    <h1 class="read" style="font-size: 26px; line-height: 1.2; font-weight: 600; text-wrap: balance; margin: 0">{{ record.draft.title or record.brief.topic }}</h1>
+    <span class="meta">{{ channel_label }} · filed {{ record.created_at | day(True, True) }}</span>
+  </header>
+
+  {% set flow = workflow(record, record.post_id in stuck) %}
+  {% include "_flow.html" %}
+  {% if waiting %}<p class="card tight" style="margin: 0; font-size: 14px">{{ waiting }}</p>{% endif %}
+
+  <details class="card tight" {% if flow.stopped %}open{% endif %}>
+    <summary style="cursor: pointer; font-weight: 500; min-height: 44px; display: flex; align-items: center">The log · {{ lines | length }} {{ "entry" if lines | length == 1 else "entries" }}</summary>
+    <div class="stack-sm" style="font-size: 14px; line-height: 20px; margin-top: 8px">
+      {% for when, what in lines %}
+      <div class="row" style="align-items: flex-start; gap: 12px"><span class="muted" style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap">{{ when }}</span><span style="word-break: break-word">{{ what }}</span></div>
+      {% else %}<span class="muted">Nothing logged yet.</span>{% endfor %}
+    </div>
+  </details>
+</main>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ 'قائمة المراجعة' if rtl else 'Queue' }} · Content Agent Portfolio{% endblock %}
+{% block body %}
+<main class="screen{% if not reviewer.is_approver %} no-tabs{% endif %}">
+  <header class="stack-sm">
+    <div class="row">
+      <span class="eyebrow" dir="ltr">Content Agent Portfolio</span>
+      <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="pill" type="submit" style="cursor: pointer; min-height: 44px" aria-label="{{ 'تسجيل الخروج' if rtl else 'Sign out' }} ({{ reviewer.name }})">{{ reviewer.name }} · {{ 'خروج' if rtl else 'sign out' }}</button></form>
+    </div>
+    <h1 style="font-size: 28px; line-height: 32px; font-weight: 600">{{ 'قائمة المراجعة، القناة C' if rtl else 'Approval queue' }}</h1>
+    <p class="muted" style="font-size: 15px">
+      {% if items %}<strong style="color: var(--ink)">{{ items | length }} {{ 'بانتظارك' if rtl else 'waiting' }}</strong>{% if not rtl %} · oldest first{% endif %}{% else %}{{ 'لا شيء بانتظارك.' if rtl else 'Nothing waiting. New drafts pause while a post waits over ' ~ settings.queue_idle_pause_hours ~ ' hours.' }}{% endif %}
+    </p>
+  </header>
+
+  <div class="stack">
+    {% for it in items %}
+    <a class="card link stack-sm" href="/posts/{{ it.post_id }}" style="gap: 10px">
+      <div class="row">
+        <span class="tag">{{ it.channel_label.replace(' · عربي', '') }}{% if it.rtl %} · <span class="ar" lang="ar">عربي</span>{% endif %}</span>
+        <span class="meta" style="font-size: 12px">{{ it.format }} · {{ it.reading }}</span>
+      </div>
+      <span class="read{% if it.rtl %} read-ar title-sm{% endif %}" {% if it.rtl %}lang="ar" dir="rtl"{% endif %} style="display: block; font-size: 19px; line-height: 24px;{% if it.rtl %} font-size: 22px; line-height: 34px; text-align: right;{% endif %}">{{ it.title }}</span>
+      <div style="display: flex; gap: 14px; font-size: 13px; color: var(--muted); align-items: center; flex-wrap: wrap">
+        <span>{{ it.claims }} {{ L.claims_n }}</span><span>{{ it.clips }} {{ L.clips_n }}</span><span>{{ it.sponsor }}</span>
+        {% if it.stage_one %}
+        <span class="{{ 'word-pass' if it.stage_one_done else 'muted' }}" style="display: inline-flex; align-items: center; gap: 6px">
+          {% if it.stage_one_done %}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% endif %}{{ it.stage_one }}
+        </span>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</main>
+{% endblock %}
