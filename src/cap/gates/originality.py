@@ -38,16 +38,35 @@ def cosine_similarity(a: str, b: str) -> float:
     return dot / (na * nb) if na and nb else 0.0
 
 
-def skeleton_share(script: str, history: list[str]) -> float:
-    """Share of the script's sentences whose opening three words also open a sentence in
-    the history: a cheap proxy for a reused template skeleton (R-13 'templated output')."""
+# Openers made only of these say nothing about a template ("and that is the", "it is
+# one of"); counting them failed ordinary scripts as the history grew.
+_FILLER = frozenset(
+    "a an the and but or so it its it's is was are were this that these those there "
+    "here what which who how why when where of in on at to from by for with as be has "
+    "have had not no you your we our they their i my he she his her if then than "
+    "one all some more most just can will do does did about into up out only also very "
+    "في من على إلى عن هذا هذه ذلك تلك ما ماذا لماذا كيف و أن إن هو هي هم كان كانت".split()
+)
+OPENER_WORDS = 4
+
+
+def skeleton_share(script: str, history: list[str], exclude: tuple[str, ...] = ()) -> float:
+    """Share of the script's sentences whose opening words also open a sentence in the
+    history: a cheap proxy for a reused template skeleton (R-13 'templated output').
+    The character's signature line (`exclude`) is the same in every post on purpose and
+    is not counted (26 Oct: "From orbit, here's what I see." and two common openers
+    failed a Falak post at 0.41 similarity)."""
+    skip = {tuple(_tokens(e)) for e in exclude if _tokens(e)}
 
     def openers(text: str) -> set[tuple[str, ...]]:
         out = set()
-        for sent in re.split(r"(?<=[.!?])\s+", text):
+        for sent in re.split(r"(?<=[.!?؟])\s+", text):
             t = _tokens(sent)
-            if len(t) >= 3:
-                out.add(tuple(t[:3]))
+            if tuple(t) in skip or len(t) < OPENER_WORDS:
+                continue
+            head = tuple(t[:OPENER_WORDS])
+            if not set(head) <= _FILLER:
+                out.add(head)
         return out
 
     mine = openers(script)
@@ -84,7 +103,10 @@ def check_originality(
         sim = cosine_similarity(text, script)
         if sim > best:
             best, nearest = sim, pid
-    share = skeleton_share(record.draft.script, [s for _, s in past])
+    from cap.characters import OPENERS
+
+    signature = (OPENERS.get(record.channel_id.value, ""),)
+    share = skeleton_share(record.draft.script, [s for _, s in past], signature)
     lowered = _plain(text)
     anchor_present = bool(anchor_elements) and any(
         re.search(r"\b" + re.escape(_plain(a)) + r"\b", lowered) for a in anchor_elements

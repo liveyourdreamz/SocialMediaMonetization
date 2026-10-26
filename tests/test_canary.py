@@ -56,7 +56,7 @@ def test_the_gap_is_random_around_the_rate_never_zero():
 def test_every_fault_type_comes_round_and_gate_blind_ones_sooner():
     seen, past = [], []
     for _ in range(len(FaultType)):
-        f = next_fault(past)
+        f = next_fault(past, sponsored=True)
         seen.append(f)
         past.append(PastCanary(f, gate_blind=False))
     assert sorted(seen) == sorted(FaultType)  # none skipped, none retired
@@ -64,6 +64,17 @@ def test_every_fault_type_comes_round_and_gate_blind_ones_sooner():
     past = [PastCanary(a, gate_blind=True), PastCanary(b, gate_blind=False)]
     past += [PastCanary(f, False) for f in FaultType if f not in (a, b)]
     assert next_fault(past) == a  # oldest, and the gates missed it
+
+
+def test_an_unsponsored_post_never_draws_a_sponsor_fault():
+    """26 Oct: P14 refuses those (it would need a second fault, a sponsor)."""
+    from cap.domain.canary import NEEDS_SPONSOR, PLACEMENT
+
+    past: list[PastCanary] = []
+    for _ in range(3 * len(FaultType)):
+        f = next_fault(past)
+        assert f not in NEEDS_SPONSOR and PLACEMENT[f]
+        past.append(PastCanary(f, gate_blind=False))
 
 
 def close_cards(store, n):

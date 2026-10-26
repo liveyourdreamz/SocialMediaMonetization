@@ -102,4 +102,4 @@ def test_a_fault_the_gates_missed_comes_round_sooner():
     oldest, blind, rest = faults[0], faults[1], faults[2:]
     past = [PastCanary(oldest, gate_blind=False), PastCanary(blind, gate_blind=True)]
     past += [PastCanary(f, gate_blind=False) for f in rest]
-    assert next_fault(past) == blind
+    assert next_fault(past, sponsored=True) == blind  # every type is open to it

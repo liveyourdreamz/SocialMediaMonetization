@@ -80,16 +80,21 @@ def confirmed_sources(record: PostRecord) -> list[str]:
     )
 
 
+def _originality_reason(g: Gates) -> str:
+    o, why = g.originality, []
+    if o.skeleton_share:
+        why.append(f"{o.skeleton_share:.0%} of sentences open like earlier posts")
+    if o.nearest_post_id:
+        why.append(f"similarity {o.max_similarity:.2f} to {o.nearest_post_id}")
+    if not o.anchor_present:
+        why.append("character anchor missing")
+    return "originality: " + (", ".join(why) or "R-13")
+
+
 def _reasons(g: Gates) -> tuple[str, ...]:
     out: list[str] = []
-    o = g.originality
-    if not o.passed:
-        why = []
-        if o.nearest_post_id:
-            why.append(f"similarity {o.max_similarity:.2f} to {o.nearest_post_id}")
-        if not o.anchor_present:
-            why.append("character anchor missing")
-        out.append("originality: " + (", ".join(why) or "R-13"))
+    if not g.originality.passed:
+        out.append(_originality_reason(g))
     if g.ethics.verdict == Verdict.FAIL:
         rules = ", ".join(g.ethics.rule_ids) or "a judge failed it"
         out.append(f"ethics: {rules}")

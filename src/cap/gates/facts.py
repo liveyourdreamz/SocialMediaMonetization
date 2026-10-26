@@ -27,8 +27,10 @@ sources reach the model only through the client's nonce-keyed wrapper.
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
 from collections.abc import Callable
+from urllib.parse import urlparse
 
 from cap.agents.outputs import P10CallAOutput, P10VerifyOutput
 from cap.models import ModelClient, SourceDoc
@@ -44,24 +46,50 @@ def testlog_source(record: PostRecord, test_log: str) -> SourceDoc:
     return SourceDoc(url=f"{TESTLOG_SCHEME}{record.post_id}", body=test_log, fetched_at="pipeline")
 
 
+_SAME = (("“", '"'), ("”", '"'), ("„", '"'), ("‘", "'"), ("’", "'"), ("–", "-"), ("—", "-"),
+         ("‑", "-"), ("−", "-"), ("\u00ad", ""), ("…", "..."))  # fmt: skip
+_GAP = re.compile(r"\s*(?:\[\.\.\.\]|\.\.\.)\s*")
+MIN_QUOTED = 20  # characters of the page a quote must actually match
+
+
 def _normalise(text: str) -> str:
+    """Typography the page and the checker's copy may differ in: curly quotes, dashes,
+    soft hyphens, spacing, case."""
     text = unicodedata.normalize("NFC", text)
-    for a, b in (("“", '"'), ("”", '"'), ("‘", "'"), ("’", "'")):
+    for a, b in _SAME:
         text = text.replace(a, b)
-    return " ".join(text.split())
+    return " ".join(text.split()).casefold()
+
+
+def _in_order(parts: list[str], body: str) -> bool:
+    at = 0
+    for part in parts:
+        k = body.find(part, at)
+        if k < 0:
+            return False
+        at = k + len(part)
+    return sum(len(p) for p in parts) >= min(MIN_QUOTED, len(body))
 
 
 def quote_in_source(quote: str, body: str) -> bool:
+    """The quote is in the page: word for word apart from typography, and where the
+    checker shortened it with "..." each piece is there, in order (26 Oct: claims the
+    checker found supported were thrown out over a dash or an ellipsis)."""
     if not quote:
         return False
     nb = _normalise(body)
-    if _normalise(quote) in nb:
-        return True
+    candidates = [quote]
     try:  # the model saw a JSON-encoded body; it may copy the escapes
         decoded = json.loads(f'"{quote}"')
+        if isinstance(decoded, str):
+            candidates.append(decoded)
     except json.JSONDecodeError:
-        return False
-    return isinstance(decoded, str) and _normalise(decoded) in nb
+        pass
+    for q in candidates:
+        parts = [p for p in _GAP.split(_normalise(q)) if p.strip(" .")]
+        if parts and _in_order(parts, nb):
+            return True
+    return False
 
 
 def discover_claims(
@@ -149,8 +177,8 @@ def _verify(
     source: SourceDoc,
     test_log: str,
     fast_moving: bool,
-) -> tuple[ClaimStatus, str, bool, bool]:
-    """Returns (status, quote, quote_in_source, injection_suspected)."""
+) -> tuple[ClaimStatus, str, bool, bool, str]:
+    """Returns (status, quote, quote_in_source, injection_suspected, what it said)."""
 
     def tail(nonce: str) -> str:
         return (
@@ -166,16 +194,26 @@ def _verify(
         sources=[source],
         user_tail=tail,
     )
+    where = urlparse(source.url).hostname or source.url[:40]
     if res.output is None:
-        return "unsupported", "", False, False
+        return (
+            "unsupported",
+            "",
+            False,
+            False,
+            f"{where}: no answer from the checker ({res.reason})",
+        )
     if res.output.status == "blocked":
-        return "unsupported", "", False, res.output.injection_suspected
+        why = res.output.blocked_reason or "declined"
+        return "unsupported", "", False, res.output.injection_suspected, f"{where}: {why}"
     quote = res.output.supporting_quote
     in_source = quote_in_source(quote, source.body)
     status: ClaimStatus = res.output.claim_status
+    note = f"{where}: {res.output.note}" if res.output.note else where
     if status == "supported" and not in_source:
         status = "unsupported"  # a quote that is not in the source is no support
-    return status, quote, in_source, res.output.injection_suspected
+        note = f"{where}: the checker's quote is not in the page"
+    return status, quote, in_source, res.output.injection_suspected, note
 
 
 def _candidates(claim: Claim, sources: list[SourceDoc]) -> tuple[list[SourceDoc], str]:
@@ -224,14 +262,15 @@ def check_claim(
     injection = False
     seen: list[ClaimStatus] = []
     for src in candidates:
-        cc.status_b, quote_b, cc.quote_in_source, inj_b = _verify(
+        cc.status_b, quote_b, cc.quote_in_source, inj_b, said = _verify(
             client, "B", claim, src, test_log, fast_moving
         )
+        cc.note = said
         injection = injection or inj_b
         seen.append(cc.status_b)
         if cc.status_b != "supported":
             continue
-        cc.status_c, _quote_c, _in_c, inj_c = _verify(
+        cc.status_c, _quote_c, _in_c, inj_c, _said_c = _verify(
             client, "C", claim, src, test_log, fast_moving
         )
         injection = injection or inj_c
@@ -271,7 +310,8 @@ def check_facts(
             claim.source_quote = None
             claim.source_url = None
         gate.claim_checks.append(cc)
-        say(f"claim {n} of {len(claims)}: {cc.final.replace('_', ' ')}")
+        how = f" · {cc.note[:180]}" if cc.final != "supported" and cc.note else ""
+        say(f"claim {n} of {len(claims)}: {cc.final.replace('_', ' ')}{how}")
     record.draft.claims = claims
     gate.checked = len(claims)
     gate.unsupported_claims = [cc.claim_text for cc in gate.claim_checks if cc.final != "supported"]

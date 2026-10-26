@@ -69,10 +69,29 @@ def cards_since_last_canary(cards: Sequence[ClosedCard]) -> int:
     return len(cards)
 
 
-def next_fault(past: Sequence[PastCanary]) -> FaultType:
-    """The least recently used fault type; gate-blind types count double."""
+# Where P14 plants each fault (the Pack requires one; 26 Oct: none was sent, so every
+# canary was refused with "placement is empty").
+PLACEMENT: dict[FaultType, str] = {
+    FaultType.UNSOURCED_NUMBER: "mid-script",
+    FaultType.MISSING_AD_PREFIX: "caption",
+    FaultType.OUT_GROUP_TITLE: "title",
+    FaultType.FIRST_PERSON_HUMAN_CLAIM: "mid-script",
+    FaultType.SPONSOR_VERDICT: "mid-script",
+    FaultType.KIDS_STYLED_VISUAL: "on-screen text",
+    FaultType.REUSED_COLD_OPEN: "mid-script",
+}
+# A fault about the sponsor can only be planted in a sponsored post: in any other, P14
+# would have to add a sponsor too, a second fault, and it refuses (its own example).
+NEEDS_SPONSOR = frozenset({FaultType.MISSING_AD_PREFIX, FaultType.SPONSOR_VERDICT})
+
+
+def next_fault(past: Sequence[PastCanary], sponsored: bool = False) -> FaultType:
+    """The least recently used fault type that this post can carry; gate-blind types
+    count double."""
     best, best_score = None, -1.0
     for fault in FaultType:  # enum order breaks ties: deterministic
+        if fault in NEEDS_SPONSOR and not sponsored:
+            continue
         uses = [k for k, p in enumerate(past) if p.fault == fault]
         if not uses:
             return fault  # never used: first

@@ -37,9 +37,20 @@ def _unreachable(e: Exception) -> bool:
     return isinstance(e, transient)
 
 
+def _out_of_credit(e: Exception) -> bool:
+    """Anthropic answers 400 'Your credit balance is too low' when the account's API
+    credit is used up (25 Oct, 23:02: every post parked with that buried in a 400)."""
+    return "credit balance is too low" in str(e).lower()
+
+
 def _failed(e: Exception, prompt_id: str) -> str:
     detail = f"{type(e).__name__}: {str(e)[:200]}"
     log.error("anthropic call failed for %s: %s", prompt_id, detail)
+    if _out_of_credit(e):
+        raise ModelUnreachableError(
+            "the Anthropic API credit is used up: add credit at console.anthropic.com "
+            "(Billing), then press Restart on the stopped step"
+        ) from e
     if _unreachable(e):
         raise ModelUnreachableError(
             f"{prompt_id}: the model could not be reached ({detail})"

@@ -26,6 +26,7 @@ from typing import Any
 from cap import pipeline
 from cap.config import get_settings
 from cap.domain.canary import (
+    PLACEMENT,
     ClosedCard,
     PastCanary,
     cards_since_last_canary,
@@ -90,7 +91,9 @@ def file_brief(
             store.file(record, JobKind.BRIEF, payload)
             return JobKind.BRIEF
         record.flags.canary = True  # set by code, never by a model (D23)
-        record.flags.canary_fault_type = next_fault(past_canaries(store))
+        record.flags.canary_fault_type = next_fault(
+            past_canaries(store), sponsored=record.sponsor is not None
+        )
         record.flags.canary_refile = CanaryRefile(
             urls=[str(u) for u in payload.get("urls", [])],
             test_log=str(payload.get("test_log", "")),
@@ -141,11 +144,26 @@ def _gates_caught(record: PostRecord) -> list[str]:
     return [name for name in GATE_NAMES if failed[name]]
 
 
+def _as_clean_post(store: PostStore, record: PostRecord, deps: Any, docs: Any, why: str) -> None:
+    """The check post could not be made: the post Hemant filed carries on as an ordinary
+    post from the draft already written, rather than failing and being redrafted (26
+    Oct: "Solar eclipse" retried its whole draft three times on a refusal that could
+    not change). It never was a canary, so it does not count as one."""
+    record.flags.canary, record.flags.canary_fault_type = False, None
+    record.flags.canary_refile = None
+    record.log(f"the check post could not be made ({why[:160]}); carrying on as a normal post")
+    store.audit.append("canary not made", post_id=record.post_id, detail={"why": why[:300]})
+    record = pipeline.checks(record, docs, deps)
+    if not pipeline.stopped(record):
+        record = pipeline.render(record, deps)
+    store.put(record)
+
+
 def run_canary_job(store: PostStore, job: Job) -> None:
     """The worker's handler for a CANARY job: draft from what Hemant filed, plant one
     fault, gate, render, queue. The worker charges P14 and the second adapter call to
     the post (D44); the pipeline steps charge their own."""
-    from cap.agents import adapt, write_canary
+    from cap.agents import AgentBlockedError, adapt, write_canary
     from cap.demo.seed import _setup
 
     record = store.get(job.post_id)
@@ -158,8 +176,13 @@ def run_canary_job(store: PostStore, job: Job) -> None:
     base = record.draft.model_dump(include={"title", "script", "caption", "on_screen_text",
                                             "thumbnail_text", "shot_list"})  # fmt: skip
     fault = record.flags.canary_fault_type or FaultType.UNSOURCED_NUMBER
-    record = write_canary(record, deps.client, fault, base,
-                          deps.character_blocks.get(record.channel_id.value, ""))  # fmt: skip
+    try:
+        record = write_canary(record, deps.client, fault, base,
+                              deps.character_blocks.get(record.channel_id.value, ""),
+                              placement=PLACEMENT[fault])  # fmt: skip
+    except AgentBlockedError as e:
+        _as_clean_post(store, record, deps, docs, str(e))
+        return
     # the platform cuts are made again from the canary's own script, as for any post
     record = adapt(record, deps.client, [Platform.YOUTUBE_LONG, Platform.YOUTUBE_SHORT])
     record = pipeline.checks(record, docs, deps)
